@@ -1,0 +1,44 @@
+{
+  "name": "wbs-mcp",
+  "displayName": "WBS MCP",
+  "description": "MCP-enabled VS Code extension for Work Breakdown Structure management",
+  "version": "0.1.0",
+  "publisher": "nojaja",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:mcpWbs.start"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "mcpWbs.start",
+        "title": "MCP WBS: Start Local Server"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node ./out/test/runTest.js",
+    "start-server-dev": "node ./out/server/index.js",
+    "start-extension-dev": "code --extensionDevelopmentPath=."
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@types/express": "^4.17.21",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.2.2",
+    "uuid": "^9.0.1"
+  }
+}
