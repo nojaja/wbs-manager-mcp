@@ -1,5 +1,8 @@
 import express from 'express';
 import { Request, Response } from 'express';
+import './db'; // Initialize database
+import apiRouter from './api';
+import { addClient, removeClient } from './stream';
 
 const app = express();
 const PORT = 8000;
@@ -7,8 +10,8 @@ const PORT = 8000;
 // Middleware
 app.use(express.json());
 
-// Store for SSE clients
-const sseClients: Map<string, Response[]> = new Map();
+// API routes
+app.use('/api', apiRouter);
 
 // MCP Discovery endpoint
 app.get('/mcp/discover', (req: Request, res: Response) => {
@@ -139,29 +142,14 @@ app.get('/mcp/stream', (req: Request, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
     
     // Add client to list
-    if (!sseClients.has(projectId)) {
-        sseClients.set(projectId, []);
-    }
-    sseClients.get(projectId)!.push(res);
-    
-    console.log(`SSE client connected for project: ${projectId}`);
+    addClient(projectId, res);
     
     // Send initial connection message
     res.write(`data: ${JSON.stringify({ type: 'connected', projectId })}\n\n`);
     
     // Handle client disconnect
     req.on('close', () => {
-        const clients = sseClients.get(projectId);
-        if (clients) {
-            const index = clients.indexOf(res);
-            if (index > -1) {
-                clients.splice(index, 1);
-            }
-            if (clients.length === 0) {
-                sseClients.delete(projectId);
-            }
-        }
-        console.log(`SSE client disconnected for project: ${projectId}`);
+        removeClient(projectId, res);
     });
 });
 
@@ -170,24 +158,10 @@ app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Helper function to emit SSE events
-export function emitEvent(projectId: string, event: any) {
-    const clients = sseClients.get(projectId);
-    if (clients && clients.length > 0) {
-        const eventData = JSON.stringify(event);
-        clients.forEach(client => {
-            try {
-                client.write(`data: ${eventData}\n\n`);
-            } catch (error) {
-                console.error('Error writing to SSE client:', error);
-            }
-        });
-    }
-}
-
 // Start server
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`MCP server started on http://127.0.0.1:${PORT}`);
     console.log(`Discovery endpoint: http://127.0.0.1:${PORT}/mcp/discover`);
     console.log(`Stream endpoint: http://127.0.0.1:${PORT}/mcp/stream`);
+    console.log(`API endpoints: http://127.0.0.1:${PORT}/api/wbs/*`);
 });
