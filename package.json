@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:mcpWbs.start"
+    "onCommand:mcpWbs.start",
+    "onView:wbsTree"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -19,8 +20,41 @@
       {
         "command": "mcpWbs.start",
         "title": "MCP WBS: Start Local Server"
+      },
+      {
+        "command": "wbsTree.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "wbsTree.openTask",
+        "title": "Open Task Details"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "wbsTree",
+          "name": "WBS Projects"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "wbsTree.refresh",
+          "when": "view == wbsTree",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "wbsTree.openTask",
+          "when": "view == wbsTree && viewItem == task",
+          "group": "inline"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

@@ -2,20 +2,46 @@ import * as vscode from 'vscode';
 import * as child_process from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { WBSTreeProvider } from './views/wbsTree';
+import { TaskDetailPanel } from './panels/taskDetailPanel';
 
 let serverProcess: child_process.ChildProcess | null = null;
 let outputChannel: vscode.OutputChannel;
+let treeProvider: WBSTreeProvider;
 
 export function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('MCP-WBS');
     outputChannel.appendLine('MCP WBS Extension activated');
 
+    // Initialize tree provider
+    treeProvider = new WBSTreeProvider();
+    const treeView = vscode.window.createTreeView('wbsTree', {
+        treeDataProvider: treeProvider,
+        showCollapseAll: true
+    });
+
+    // Register commands
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         await startLocalServer(context);
     });
 
-    context.subscriptions.push(startServerCommand);
-    context.subscriptions.push(outputChannel);
+    const refreshTreeCommand = vscode.commands.registerCommand('wbsTree.refresh', () => {
+        treeProvider.refresh();
+    });
+
+    const openTaskCommand = vscode.commands.registerCommand('wbsTree.openTask', (item) => {
+        if (item && item.contextValue === 'task') {
+            TaskDetailPanel.createOrShow(context.extensionUri, item.itemId);
+        }
+    });
+
+    context.subscriptions.push(
+        startServerCommand,
+        refreshTreeCommand,
+        openTaskCommand,
+        treeView,
+        outputChannel
+    );
 }
 
 export function deactivate() {

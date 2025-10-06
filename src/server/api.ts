@@ -58,6 +58,23 @@ router.get('/wbs/getProject/:projectId', (req: Request, res: Response) => {
     }
 });
 
+// Get single task
+router.get('/wbs/getTask/:taskId', (req: Request, res: Response) => {
+    try {
+        const { taskId } = req.params;
+        const task = repository.getTask(taskId);
+        
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+        
+        res.json(task);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
 // Create task
 router.post('/wbs/createTask', (req: Request, res: Response) => {
     try {
