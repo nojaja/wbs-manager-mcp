@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import * as repository from './repository';
+import * as sessionManager from './session';
 import { emitEvent } from './stream';
 
 const router = Router();
@@ -261,6 +262,147 @@ router.get('/wbs/dependencies/:taskId', (req: Request, res: Response) => {
         const { taskId } = req.params;
         const dependencies = repository.listDependencies(taskId);
         res.json(dependencies);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
+// Session management endpoints
+
+// Start a new session
+router.post('/wbs/startSession', (req: Request, res: Response) => {
+    try {
+        const { projectId, userId } = req.body;
+        
+        if (!projectId || !userId) {
+            return res.status(400).json({ error: 'projectId and userId are required' });
+        }
+        
+        // Check if project exists
+        const project = repository.getProject(projectId);
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        
+        const session = sessionManager.createSession(projectId);
+        
+        // Add creator as first member
+        sessionManager.joinSession(session.id, userId);
+        
+        // Emit event
+        emitEvent(projectId, {
+            eventType: 'sessionStarted',
+            payload: sessionManager.getSessionWithMembers(session.id),
+            eventId: `evt-${Date.now()}`,
+            timestamp: new Date().toISOString()
+        });
+        
+        res.status(201).json(sessionManager.getSessionWithMembers(session.id));
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
+// Join a session
+router.post('/wbs/joinSession', (req: Request, res: Response) => {
+    try {
+        const { sessionId, userId } = req.body;
+        
+        if (!sessionId || !userId) {
+            return res.status(400).json({ error: 'sessionId and userId are required' });
+        }
+        
+        const member = sessionManager.joinSession(sessionId, userId);
+        
+        if (!member) {
+            return res.status(404).json({ error: 'Session not found or could not join' });
+        }
+        
+        const session = sessionManager.getSession(sessionId);
+        
+        // Emit event
+        if (session) {
+            emitEvent(session.project_id, {
+                eventType: 'userJoined',
+                payload: { sessionId, userId, member },
+                eventId: `evt-${Date.now()}`,
+                timestamp: new Date().toISOString()
+            });
+        }
+        
+        res.json(sessionManager.getSessionWithMembers(sessionId));
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
+// Leave a session
+router.post('/wbs/leaveSession', (req: Request, res: Response) => {
+    try {
+        const { sessionId, userId } = req.body;
+        
+        if (!sessionId || !userId) {
+            return res.status(400).json({ error: 'sessionId and userId are required' });
+        }
+        
+        const session = sessionManager.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        const success = sessionManager.leaveSession(sessionId, userId);
+        
+        if (success) {
+            // Emit event
+            emitEvent(session.project_id, {
+                eventType: 'userLeft',
+                payload: { sessionId, userId },
+                eventId: `evt-${Date.now()}`,
+                timestamp: new Date().toISOString()
+            });
+            
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ error: 'User not in session' });
+        }
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
+// List sessions
+router.get('/wbs/listSessions', (req: Request, res: Response) => {
+    try {
+        const projectId = req.query.projectId as string | undefined;
+        const sessions = sessionManager.listSessions(projectId);
+        
+        // Get members for each session
+        const sessionsWithMembers = sessions.map(session => 
+            sessionManager.getSessionWithMembers(session.id)
+        );
+        
+        res.json(sessionsWithMembers);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({ error: errorMessage });
+    }
+});
+
+// Get session details
+router.get('/wbs/getSession/:sessionId', (req: Request, res: Response) => {
+    try {
+        const { sessionId } = req.params;
+        const session = sessionManager.getSessionWithMembers(sessionId);
+        
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        res.json(session);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         res.status(500).json({ error: errorMessage });
