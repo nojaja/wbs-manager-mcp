@@ -4,6 +4,24 @@
   "description": "MCP-enabled VS Code extension for Work Breakdown Structure management",
   "version": "0.1.0",
   "publisher": "nojaja",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nojaja/wbs-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nojaja/wbs-mcp/issues"
+  },
+  "homepage": "https://github.com/nojaja/wbs-mcp#readme",
+  "keywords": [
+    "wbs",
+    "work breakdown structure",
+    "project management",
+    "mcp",
+    "model context protocol",
+    "copilot",
+    "collaboration"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
