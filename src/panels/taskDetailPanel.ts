@@ -122,7 +122,7 @@ export class TaskDetailPanel {
 
     private async fetchTask(taskId: string): Promise<Task | null> {
         return new Promise((resolve, reject) => {
-            http.get(`${this.serverUrl}/api/wbs/getTask/${taskId}`, (res) => {
+            http.get(`${this.serverUrl}/api/tasks/${taskId}`, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
@@ -142,15 +142,20 @@ export class TaskDetailPanel {
 
     private async updateTask_API(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
         return new Promise((resolve) => {
-            const data = JSON.stringify({ taskId, ...updates });
+            const data = JSON.stringify(updates);
+            const dataBuffer = Buffer.from(data, 'utf8');
+            
+            console.log('TaskDetailPanel: Sending data:', data);
+            console.log('TaskDetailPanel: Data length:', data.length, 'Buffer length:', dataBuffer.length);
+            
             const options = {
                 hostname: '127.0.0.1',
                 port: 8000,
-                path: '/api/wbs/updateTask',
-                method: 'POST',
+                path: `/api/tasks/${taskId}`,
+                method: 'PUT',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': data.length
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Content-Length': dataBuffer.length
                 }
             };
 
@@ -158,6 +163,7 @@ export class TaskDetailPanel {
                 let responseData = '';
                 res.on('data', chunk => responseData += chunk);
                 res.on('end', () => {
+                    console.log('TaskDetailPanel: Response status:', res.statusCode, 'Data:', responseData);
                     if (res.statusCode === 200) {
                         resolve({ success: true });
                     } else if (res.statusCode === 409) {
@@ -174,10 +180,11 @@ export class TaskDetailPanel {
             });
 
             req.on('error', (error) => {
+                console.error('TaskDetailPanel: Request error:', error);
                 resolve({ success: false, error: error.message });
             });
 
-            req.write(data);
+            req.write(dataBuffer);
             req.end();
         });
     }
@@ -229,6 +236,15 @@ export class TaskDetailPanel {
         .readonly {
             opacity: 0.7;
         }
+        kbd {
+            background: var(--vscode-keybindingLabel-background);
+            color: var(--vscode-keybindingLabel-foreground);
+            border: 1px solid var(--vscode-keybindingLabel-border);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
     </style>
 </head>
 <body>
@@ -236,22 +252,22 @@ export class TaskDetailPanel {
     <form id="taskForm">
         <div class="form-group">
             <label for="title">Title *</label>
-            <input type="text" id="title" name="title" value="${this.escapeHtml(task.title)}" required>
+            <input type="text" id="title" name="title" required>
         </div>
 
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description">${this.escapeHtml(task.description || '')}</textarea>
+            <textarea id="description" name="description"></textarea>
         </div>
 
         <div class="form-group">
             <label for="goal">Goal</label>
-            <textarea id="goal" name="goal">${this.escapeHtml(task.goal || '')}</textarea>
+            <textarea id="goal" name="goal"></textarea>
         </div>
 
         <div class="form-group">
             <label for="assignee">Assignee</label>
-            <input type="text" id="assignee" name="assignee" value="${this.escapeHtml(task.assignee || '')}">
+            <input type="text" id="assignee" name="assignee">
         </div>
 
         <div class="form-group">
@@ -266,7 +282,7 @@ export class TaskDetailPanel {
 
         <div class="form-group">
             <label for="estimate">Estimate</label>
-            <input type="text" id="estimate" name="estimate" value="${this.escapeHtml(task.estimate || '')}" placeholder="e.g., 3d, 5h">
+            <input type="text" id="estimate" name="estimate" placeholder="e.g., 3d, 5h">
         </div>
 
         <div class="form-group readonly">
@@ -279,15 +295,30 @@ export class TaskDetailPanel {
             <input type="text" value="${task.version}" readonly>
         </div>
 
-        <button type="submit">Save</button>
-        <button type="button" id="cancelBtn">Cancel</button>
+        <button type="submit" title="Save (Ctrl+S)">Save</button>
+        <p style="margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em;">
+            💡 Tip: Press <kbd>Ctrl+S</kbd> to save quickly
+        </p>
     </form>
 
     <script>
         const vscode = acquireVsCodeApi();
 
-        document.getElementById('taskForm').addEventListener('submit', (e) => {
-            e.preventDefault();
+        // Task data from server (safely passed as JSON)
+        const taskData = ${JSON.stringify(task)};
+
+        // Initialize form fields with task data
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('title').value = taskData.title || '';
+            document.getElementById('description').value = taskData.description || '';
+            document.getElementById('goal').value = taskData.goal || '';
+            document.getElementById('assignee').value = taskData.assignee || '';
+            document.getElementById('status').value = taskData.status || 'pending';
+            document.getElementById('estimate').value = taskData.estimate || '';
+        });
+
+        // Save function
+        function saveTask() {
             const formData = {
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
@@ -296,15 +327,26 @@ export class TaskDetailPanel {
                 status: document.getElementById('status').value,
                 estimate: document.getElementById('estimate').value
             };
+            
+            console.log('Sending form data:', formData);
             vscode.postMessage({
                 command: 'save',
                 data: formData
             });
+        }
+
+        // Form submit event
+        document.getElementById('taskForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            saveTask();
         });
 
-        document.getElementById('cancelBtn').addEventListener('click', () => {
-            // Close panel or reload
-            location.reload();
+        // Ctrl+S keyboard shortcut
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault(); // Prevent default browser save dialog
+                saveTask();
+            }
         });
     </script>
 </body>

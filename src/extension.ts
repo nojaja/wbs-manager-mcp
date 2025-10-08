@@ -20,6 +20,9 @@ export function activate(context: vscode.ExtensionContext) {
         showCollapseAll: true
     });
 
+    // Auto-start server on activation
+    startLocalServer(context);
+
     // Register commands
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         await startLocalServer(context);
@@ -75,15 +78,23 @@ async function startLocalServer(context: vscode.ExtensionContext) {
         });
 
         serverProcess.stdout?.on('data', (data) => {
-            outputChannel.appendLine(`[Server] ${data.toString().trim()}`);
+            const output = data.toString().trim();
+            outputChannel.appendLine(`[Server] ${output}`);
+            outputChannel.show(); // Show output panel automatically
         });
 
         serverProcess.stderr?.on('data', (data) => {
-            outputChannel.appendLine(`[Server Error] ${data.toString().trim()}`);
+            const error = data.toString().trim();
+            outputChannel.appendLine(`[Server Error] ${error}`);
+            outputChannel.show(); // Show output panel automatically
+            console.error('Server Error:', error);
         });
 
-        serverProcess.on('exit', (code) => {
-            outputChannel.appendLine(`Server process exited with code ${code}`);
+        serverProcess.on('exit', (code, signal) => {
+            outputChannel.appendLine(`Server process exited with code ${code}, signal: ${signal}`);
+            if (code !== 0) {
+                vscode.window.showErrorMessage(`MCP server exited unexpectedly with code ${code}`);
+            }
             serverProcess = null;
         });
 
@@ -93,8 +104,27 @@ async function startLocalServer(context: vscode.ExtensionContext) {
             serverProcess = null;
         });
 
-        // Wait a bit for server to start
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Wait for server to start and test connectivity
+        outputChannel.appendLine('Waiting for server to start...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Test if server is responding
+        try {
+            const http = require('http');
+            const testReq = http.get('http://127.0.0.1:8000/health', (res: any) => {
+                let data = '';
+                res.on('data', (chunk: any) => data += chunk);
+                res.on('end', () => {
+                    outputChannel.appendLine(`Server health check OK: ${res.statusCode} - ${data}`);
+                });
+            });
+            testReq.on('error', (err: any) => {
+                outputChannel.appendLine(`Server health check failed: ${err.message}`);
+            });
+            testReq.setTimeout(3000);
+        } catch (error) {
+            outputChannel.appendLine(`Server connectivity test failed: ${error}`);
+        }
 
         // Create or update .vscode/mcp.json
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -109,14 +139,16 @@ async function startLocalServer(context: vscode.ExtensionContext) {
             }
 
             const mcpConfig = {
-                servers: [
-                    {
-                        id: 'local-wbs',
-                        name: 'Local WBS (MCP)',
-                        type: 'http',
-                        url: 'http://127.0.0.1:8000/mcp'
+                servers: {
+                    "wbs-mcp": {
+                        "command": "node",
+                        "args": [
+                            "d:\\devs\\workspace202111\\wbs-mcp\\out\\server\\index.js"
+                        ],
+                        "type": "http",
+                        "url": "http://127.0.0.1:8000/mcp"
                     }
-                ]
+                }
             };
 
             fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));

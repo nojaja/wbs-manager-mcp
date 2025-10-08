@@ -108,7 +108,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async fetchProjects(): Promise<Project[]> {
         return new Promise((resolve, reject) => {
-            http.get(`${this.serverUrl}/api/wbs/listProjects`, (res) => {
+            http.get(`${this.serverUrl}/api/projects`, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
@@ -124,12 +124,35 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async fetchProjectTree(projectId: string): Promise<Project | null> {
         return new Promise((resolve, reject) => {
-            http.get(`${this.serverUrl}/api/wbs/getProject/${projectId}`, (res) => {
+            // First fetch project info
+            http.get(`${this.serverUrl}/api/projects`, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
                 res.on('end', () => {
                     try {
-                        resolve(JSON.parse(data));
+                        const projects = JSON.parse(data);
+                        const project = projects.find((p: Project) => p.id === projectId);
+                        if (!project) {
+                            resolve(null);
+                            return;
+                        }
+                        
+                        // Then fetch tasks for this project
+                        http.get(`${this.serverUrl}/api/projects/${projectId}/tasks`, (taskRes) => {
+                            let taskData = '';
+                            taskRes.on('data', chunk => taskData += chunk);
+                            taskRes.on('end', () => {
+                                try {
+                                    const tasks = JSON.parse(taskData);
+                                    resolve({
+                                        ...project,
+                                        tasks: tasks
+                                    });
+                                } catch (error) {
+                                    reject(error);
+                                }
+                            });
+                        }).on('error', reject);
                     } catch (error) {
                         reject(error);
                     }
