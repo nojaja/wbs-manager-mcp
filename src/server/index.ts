@@ -1,54 +1,100 @@
-import express from 'express';
-import { Request, Response } from 'express';
-import { initializeDatabase, WBSRepository } from './db-simple'; // Use simple in-memory database
 
-// Initialize database
-initializeDatabase();
+import { initializeDatabase, WBSRepository } from './db-simple';
 
-// For now, skip API router and stream functionality to focus on MCP
-// import apiRouter from './api';
-// import { addClient, removeClient } from './stream';
+interface JsonRpcRequest {
+    jsonrpc: string;
+    id?: number | string;
+    method: string;
+    params?: any;
+}
 
-console.log('All imports successful, starting server setup...');
+interface JsonRpcResponse {
+    jsonrpc: string;
+    id?: number | string;
+    result?: any;
+    error?: {
+        code: number;
+        message: string;
+    };
+}
 
-const app = express();
-const PORT = 8000;
+interface JsonRpcNotification {
+    jsonrpc: string;
+    method: string;
+    params?: any;
+}
 
-console.log('Express app created, setting up middleware...');
+class StdioMCPServer {
+    private repo: WBSRepository;
 
-// Middleware
-app.use(express.json({ limit: '10mb' }));
-console.log('JSON middleware added');
-
-// CORS for MCP clients
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') {
-        res.sendStatus(200);
-        return;
+    constructor() {
+        this.repo = new WBSRepository();
+        this.setupStdioHandlers();
     }
-    next();
-});
 
-// API routes (temporarily disabled)
-// console.log('Setting up API routes...');
-// app.use('/api', apiRouter);
-// console.log('API routes configured');
+    private setupStdioHandlers() {
+        process.stdin.setEncoding('utf8');
+        let buffer = '';
 
-console.log('Setting up MCP endpoint...');
+        process.stdin.on('data', (chunk) => {
+            buffer += chunk;
+            let lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
-// MCP JSON-RPC endpoint
-app.post('/mcp', async (req: Request, res: Response) => {
-    try {
-        const { method, params, id } = req.body;
-        
-        console.log(`MCP Request: ${method}`, params);
-        
+            for (const line of lines) {
+                if (line.trim()) {
+                    try {
+                        const message = JSON.parse(line.trim());
+                        this.handleMessage(message);
+                    } catch (error) {
+                        console.error('[MCP Server] Failed to parse message:', error);
+                    }
+                }
+            }
+        });
+
+        process.stdin.on('end', () => {
+            process.exit(0);
+        });
+
+        // Handle process termination
+        process.on('SIGINT', () => process.exit(0));
+        process.on('SIGTERM', () => process.exit(0));
+    }
+
+    private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
+        try {
+            console.error(`[MCP Server] Received: ${message.method}`, message.params);
+
+            if ('id' in message) {
+                // Request - needs response
+                const response = await this.handleRequest(message as JsonRpcRequest);
+                this.sendResponse(response);
+            } else {
+                // Notification - no response needed
+                await this.handleNotification(message as JsonRpcNotification);
+            }
+        } catch (error) {
+            console.error('[MCP Server] Error handling message:', error);
+            if ('id' in message) {
+                this.sendResponse({
+                    jsonrpc: '2.0',
+                    id: message.id,
+                    error: {
+                        code: -32603,
+                        message: error instanceof Error ? error.message : String(error)
+                    }
+                });
+            }
+        }
+    }
+
+    private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
+        const { method, params, id } = request;
+
         switch (method) {
             case 'initialize':
-                res.json({
+                return {
                     jsonrpc: '2.0',
                     id,
                     result: {
@@ -61,11 +107,10 @@ app.post('/mcp', async (req: Request, res: Response) => {
                             version: '0.1.0'
                         }
                     }
-                });
-                break;
-                
+                };
+
             case 'tools/list':
-                res.json({
+                return {
                     jsonrpc: '2.0',
                     id,
                     result: {
@@ -104,355 +149,285 @@ app.post('/mcp', async (req: Request, res: Response) => {
                                     },
                                     required: ['projectId', 'title']
                                 }
+                            },
+                            {
+                                name: 'wbs.getTask',
+                                description: 'Get task details by ID',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        taskId: { type: 'string', description: 'Task ID' }
+                                    },
+                                    required: ['taskId']
+                                }
+                            },
+                            {
+                                name: 'wbs.updateTask',
+                                description: 'Update a task',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        taskId: { type: 'string', description: 'Task ID' },
+                                        title: { type: 'string', description: 'Task title' },
+                                        description: { type: 'string', description: 'Task description' },
+                                        assignee: { type: 'string', description: 'Assignee name' },
+                                        status: { type: 'string', description: 'Task status' },
+                                        estimate: { type: 'string', description: 'Time estimate' },
+                                        ifVersion: { type: 'number', description: 'Expected version for optimistic locking' }
+                                    },
+                                    required: ['taskId']
+                                }
+                            },
+                            {
+                                name: 'wbs.listTasks',
+                                description: 'List tasks for a project',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        projectId: { type: 'string', description: 'Project ID' }
+                                    },
+                                    required: ['projectId']
+                                }
                             }
                         ]
                     }
-                });
-                break;
-                
+                };
+
             case 'tools/call':
-                const toolResult = await handleToolCall(params);
-                res.json({
+                const toolResult = await this.handleToolCall(params);
+                return {
                     jsonrpc: '2.0',
                     id,
                     result: toolResult
-                });
-                break;
-                
-            case 'notifications/initialized':
-                // This is a notification, no response needed
-                console.log('Client initialized successfully');
-                res.status(200).end();
-                break;
-                
+                };
+
             case 'ping':
-                res.json({
+                return {
                     jsonrpc: '2.0',
                     id,
                     result: {}
-                });
-                break;
-                
+                };
+
             case 'resources/list':
-                res.json({
+                return {
                     jsonrpc: '2.0',
                     id,
                     result: {
                         resources: []
                     }
-                });
-                break;
-                
+                };
+
             case 'prompts/list':
-                res.json({
+                return {
                     jsonrpc: '2.0',
                     id,
                     result: {
                         prompts: []
                     }
-                });
-                break;
-                
+                };
+
             default:
-                res.status(400).json({
+                return {
                     jsonrpc: '2.0',
                     id,
                     error: {
                         code: -32601,
                         message: `Method not found: ${method}`
                     }
-                });
+                };
         }
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.error('MCP Error:', errorMessage);
-        res.status(500).json({
-            jsonrpc: '2.0',
-            id: req.body?.id,
-            error: {
-                code: -32603,
-                message: errorMessage
-            }
-        });
     }
-});
 
-async function handleToolCall(params: any) {
-    const { name, arguments: args } = params;
-    
-    console.log(`Tool call: ${name}`, args);
-    
-    const repo = new WBSRepository();
-    
-    switch (name) {
-        case 'wbs.createProject':
-            try {
-                const project = repo.createProject(args.title, args.description || '');
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `✅ Project created successfully!\n\nTitle: ${project.title}\nID: ${project.id}\nDescription: ${project.description || 'None'}\nCreated: ${project.created_at}`
-                    }]
-                };
-            } catch (error) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Failed to create project: ${error instanceof Error ? error.message : String(error)}`
-                    }]
-                };
-            }
-            
-        case 'wbs.listProjects':
-            try {
-                const projects = repo.listProjects();
-                if (projects.length === 0) {
+    private async handleNotification(notification: JsonRpcNotification) {
+        const { method } = notification;
+
+        switch (method) {
+            case 'notifications/initialized':
+                console.error('[MCP Server] Client initialized successfully');
+                break;
+            default:
+                console.error(`[MCP Server] Unknown notification: ${method}`);
+                break;
+        }
+    }
+
+    private async handleToolCall(params: any) {
+        const { name, arguments: args = {} } = params ?? {};
+
+        console.error(`[MCP Server] Tool call: ${name}`, args);
+
+        switch (name) {
+            case 'wbs.createProject':
+                try {
+                    const project = await this.repo.createProject(args.title, args.description || '');
                     return {
                         content: [{
                             type: 'text',
-                            text: '📝 No projects found. Create a project first using wbs.createProject.'
+                            text: `✅ Project created successfully!\n\nTitle: ${project.title}\nID: ${project.id}\nDescription: ${project.description || 'None'}\nCreated: ${project.created_at}`
+                        }]
+                    };
+                } catch (error) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `❌ Failed to create project: ${error instanceof Error ? error.message : String(error)}`
                         }]
                     };
                 }
-                
-                const projectList = projects.map(p => 
-                    `• **${p.title}** (ID: ${p.id})\n  ${p.description || 'No description'}\n  Created: ${new Date(p.created_at).toLocaleDateString()}`
-                ).join('\n\n');
-                
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `📁 Found ${projects.length} project(s):\n\n${projectList}`
-                    }]
-                };
-            } catch (error) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Failed to list projects: ${error instanceof Error ? error.message : String(error)}`
-                    }]
-                };
-            }
-            
-        case 'wbs.createTask':
-            try {
-                const task = repo.createTask(
-                    args.projectId,
-                    args.title,
-                    args.description || '',
-                    args.parentId || null,
-                    args.assignee || null,
-                    args.estimate || null
-                );
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `✅ Task created successfully!\n\nTitle: ${task.title}\nID: ${task.id}\nProject: ${task.project_id}\nAssignee: ${task.assignee || 'Unassigned'}\nEstimate: ${task.estimate || 'Not set'}\nCreated: ${task.created_at}`
-                    }]
-                };
-            } catch (error) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}`
-                    }]
-                };
-            }
-            
-        default:
-            throw new Error(`Unknown tool: ${name}`);
+
+            case 'wbs.listProjects':
+                try {
+                    const projects = await this.repo.listProjects();
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify(projects, null, 2)
+                        }]
+                    };
+                } catch (error) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `❌ Failed to list projects: ${error instanceof Error ? error.message : String(error)}`
+                        }]
+                    };
+                }
+
+            case 'wbs.createTask':
+                try {
+                    const task = await this.repo.createTask(
+                        args.projectId,
+                        args.title,
+                        args.description || '',
+                        args.parentId || null,
+                        args.assignee || null,
+                        args.estimate || null
+                    );
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `✅ Task created successfully!\n\nTitle: ${task.title}\nID: ${task.id}\nProject: ${task.project_id}\nAssignee: ${task.assignee || 'Unassigned'}\nEstimate: ${task.estimate || 'Not set'}\nCreated: ${task.created_at}`
+                        }]
+                    };
+                } catch (error) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}`
+                        }]
+                    };
+                }
+
+            case 'wbs.getTask':
+                try {
+                    const task = await this.repo.getTask(args.taskId);
+                    if (!task) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: `❌ Task not found: ${args.taskId}`
+                            }]
+                        };
+                    }
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify(task, null, 2)
+                        }]
+                    };
+                } catch (error) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}`
+                        }]
+                    };
+                }
+
+            case 'wbs.updateTask':
+                try {
+                    const currentTask = await this.repo.getTask(args.taskId);
+                    if (!currentTask) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: `❌ Task not found: ${args.taskId}`
+                            }]
+                        };
+                    }
+
+                    // Version check for optimistic locking
+                    if (args.ifVersion !== undefined && currentTask.version !== args.ifVersion) {
+                        return {
+                            content: [{
+                                type: 'text',
+                                text: `❌ Task has been modified by another user. Expected version ${args.ifVersion}, but current version is ${currentTask.version}`
+                            }]
+                        };
+                    }
+
+                    const updatedTask = await this.repo.updateTask(args.taskId, {
+                        title: args.title !== undefined ? args.title : currentTask.title,
+                        description: args.description !== undefined ? args.description : currentTask.description,
+                        assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
+                        status: args.status !== undefined ? args.status : currentTask.status,
+                        estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,
+                        ifVersion: args.ifVersion
+                    });
+
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `✅ Task updated successfully!\n\n${JSON.stringify(updatedTask, null, 2)}`
+                        }]
+                    };
+                } catch (error) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `❌ Failed to update task: ${error instanceof Error ? error.message : String(error)}`
+                        }]
+                    };
+                }
+
+            case 'wbs.listTasks':
+                try {
+                    const tasks = await this.repo.listTasks(args.projectId);
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: JSON.stringify(tasks, null, 2)
+                        }]
+                    };
+                } catch (error) {
+                    return {
+                        content: [{
+                            type: 'text',
+                            text: `❌ Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`
+                        }]
+                    };
+                }
+
+            default:
+                throw new Error(`Unknown tool: ${name}`);
+        }
+    }
+
+    private sendResponse(response: JsonRpcResponse) {
+        const responseStr = JSON.stringify(response);
+        console.error(`[MCP Server] Sending: ${responseStr}`);
+        process.stdout.write(responseStr + '\n');
     }
 }
 
-// MCP Discovery endpoint (for HTTP clients)
-app.get('/mcp/discover', (req: Request, res: Response) => {
-    res.json({
-        tools: [
-            {
-                name: 'wbs.createProject',
-                description: 'Create a new WBS project'
-            },
-            {
-                name: 'wbs.listProjects',
-                description: 'List all WBS projects'
-            },
-            {
-                name: 'wbs.createTask',
-                description: 'Create a new task'
-            }
-        ]
-    });
-});
-
-// SSE endpoint for real-time updates (temporarily disabled)
-/*
-app.get('/mcp/stream', (req: Request, res: Response) => {
-    const projectId = req.query.projectId as string || 'default';
-    
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    
-    addClient(projectId, res);
-    
-    res.write(`data: ${JSON.stringify({ type: 'connected', projectId })}\n\n`);
-    
-    req.on('close', () => {
-        removeClient(projectId, res);
-    });
-});
-*/
-
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// REST API endpoints for VS Code TreeView
-app.get('/api/projects', (req: Request, res: Response) => {
+// Start the MCP server once the database is ready
+(async () => {
+    console.error('[MCP Server] Starting stdio MCP server...');
     try {
-        const repo = new WBSRepository();
-        const projects = repo.listProjects();
-        console.log(`[Server] REST API: GET /api/projects - returning ${projects.length} projects`);
-        res.json(projects);
+        await initializeDatabase();
+        new StdioMCPServer();
     } catch (error) {
-        console.error('[Server] Error in GET /api/projects:', error);
-        res.status(500).json({ error: 'Failed to fetch projects' });
+        console.error('[MCP Server] Failed to start server:', error);
+        process.exit(1);
     }
-});
-
-app.get('/api/projects/:projectId/tasks', (req: Request, res: Response) => {
-    try {
-        const { projectId } = req.params;
-        const repo = new WBSRepository();
-        const tasks = repo.listTasks(projectId);
-        console.log(`[Server] REST API: GET /api/projects/${projectId}/tasks - returning ${tasks.length} tasks`);
-        res.json(tasks);
-    } catch (error) {
-        console.error(`[Server] Error in GET /api/projects/${req.params.projectId}/tasks:`, error);
-        res.status(500).json({ error: 'Failed to fetch tasks' });
-    }
-});
-
-app.post('/api/projects', (req: Request, res: Response) => {
-    try {
-        const { title, description } = req.body;
-        if (!title) {
-            return res.status(400).json({ error: 'Title is required' });
-        }
-        const repo = new WBSRepository();
-        const project = repo.createProject(title, description);
-        console.log(`[Server] REST API: POST /api/projects - created project ${project.id}`);
-        res.status(201).json(project);
-    } catch (error) {
-        console.error('[Server] Error in POST /api/projects:', error);
-        res.status(500).json({ error: 'Failed to create project' });
-    }
-});
-
-app.post('/api/projects/:projectId/tasks', (req: Request, res: Response) => {
-    try {
-        const { projectId } = req.params;
-        const { title, description, priority } = req.body;
-        if (!title) {
-            return res.status(400).json({ error: 'Title is required' });
-        }
-        const repo = new WBSRepository();
-        const task = repo.createTask(
-            projectId,
-            title,
-            description || '',
-            null, // parentId
-            null, // assignee
-            null  // estimate
-        );
-        console.log(`[Server] REST API: POST /api/projects/${projectId}/tasks - created task ${task.id}`);
-        res.status(201).json(task);
-    } catch (error) {
-        console.error(`[Server] Error in POST /api/projects/${req.params.projectId}/tasks:`, error);
-        res.status(500).json({ error: 'Failed to create task' });
-    }
-});
-
-// Task detail endpoints
-app.get('/api/tasks/:taskId', (req: Request, res: Response) => {
-    try {
-        const { taskId } = req.params;
-        const repo = new WBSRepository();
-        const task = repo.getTask(taskId);
-        if (!task) {
-            return res.status(404).json({ error: 'Task not found' });
-        }
-        console.log(`[Server] REST API: GET /api/tasks/${taskId} - returning task details`);
-        res.json(task);
-    } catch (error) {
-        console.error(`[Server] Error in GET /api/tasks/${req.params.taskId}:`, error);
-        res.status(500).json({ error: 'Failed to fetch task' });
-    }
-});
-
-app.put('/api/tasks/:taskId', (req: Request, res: Response) => {
-    try {
-        const { taskId } = req.params;
-        console.log(`[Server] REST API: PUT /api/tasks/${taskId} - received data:`, req.body);
-        
-        const { title, description, assignee, status, estimate, ifVersion } = req.body;
-        const repo = new WBSRepository();
-        
-        const currentTask = repo.getTask(taskId);
-        if (!currentTask) {
-            return res.status(404).json({ error: 'Task not found' });
-        }
-        
-        // Version check for optimistic locking
-        if (ifVersion && currentTask.version !== ifVersion) {
-            return res.status(409).json({ error: 'Task has been modified by another user' });
-        }
-        
-        const updatedTask = repo.updateTask(taskId, {
-            title: title !== undefined ? title : currentTask.title,
-            description: description !== undefined ? description : currentTask.description,
-            assignee: assignee !== undefined ? assignee : currentTask.assignee,
-            status: status !== undefined ? status : currentTask.status,
-            estimate: estimate !== undefined ? estimate : currentTask.estimate
-        });
-        
-        console.log(`[Server] REST API: PUT /api/tasks/${taskId} - task updated successfully`);
-        res.json(updatedTask);
-    } catch (error) {
-        console.error(`[Server] Error in PUT /api/tasks/${req.params.taskId}:`, error);
-        res.status(500).json({ error: 'Failed to update task' });
-    }
-});
-
-// Error handling for server startup
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    process.exit(1);
-});
-
-// Start server
-const server = app.listen(PORT, '127.0.0.1', () => {
-    console.log(`MCP server started on http://127.0.0.1:${PORT}`);
-    console.log(`Discovery endpoint: http://127.0.0.1:${PORT}/mcp/discover`);
-    console.log(`MCP endpoint: http://127.0.0.1:${PORT}/mcp`);
-    console.log(`Health endpoint: http://127.0.0.1:${PORT}/health`);
-    console.log(`REST API endpoints:`);
-    console.log(`  GET    http://127.0.0.1:${PORT}/api/projects`);
-    console.log(`  POST   http://127.0.0.1:${PORT}/api/projects`);
-    console.log(`  GET    http://127.0.0.1:${PORT}/api/projects/:projectId/tasks`);
-    console.log(`  POST   http://127.0.0.1:${PORT}/api/projects/:projectId/tasks`);
-    console.log(`  GET    http://127.0.0.1:${PORT}/api/tasks/:taskId`);
-    console.log(`  PUT    http://127.0.0.1:${PORT}/api/tasks/:taskId`);
-    console.log(`Server process ID: ${process.pid}`);
-});
-
-server.on('error', (error) => {
-    console.error('Server error:', error);
-    process.exit(1);
-});
+})();

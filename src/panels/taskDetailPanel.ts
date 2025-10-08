@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
-import * as https from 'https';
-import * as http from 'http';
+import { MCPClient } from '../mcpClient';
 
 interface Task {
     id: string;
@@ -21,9 +20,9 @@ export class TaskDetailPanel {
     private _disposables: vscode.Disposable[] = [];
     private _taskId: string;
     private _task: Task | null = null;
-    private serverUrl = 'http://127.0.0.1:8000';
+    private mcpClient: MCPClient;
 
-    public static createOrShow(extensionUri: vscode.Uri, taskId: string) {
+    public static createOrShow(extensionUri: vscode.Uri, taskId: string, mcpClient: MCPClient) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -44,12 +43,13 @@ export class TaskDetailPanel {
             }
         );
 
-        TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId);
+        TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, mcpClient);
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, mcpClient: MCPClient) {
         this._panel = panel;
         this._taskId = taskId;
+        this.mcpClient = mcpClient;
 
         this.loadTask();
 
@@ -75,7 +75,7 @@ export class TaskDetailPanel {
 
     private async loadTask() {
         try {
-            this._task = await this.fetchTask(this._taskId);
+            this._task = await this.mcpClient.getTask(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
                 this._panel.webview.html = this.getHtmlForWebview(this._task);
@@ -96,7 +96,7 @@ export class TaskDetailPanel {
             if (data.estimate !== undefined) updates.estimate = data.estimate;
             updates.ifVersion = this._task?.version;
 
-            const result = await this.updateTask_API(this._taskId, updates);
+            const result = await this.mcpClient.updateTask(this._taskId, updates);
             
             if (result.success) {
                 vscode.window.showInformationMessage('Task updated successfully');
@@ -120,74 +120,7 @@ export class TaskDetailPanel {
         }
     }
 
-    private async fetchTask(taskId: string): Promise<Task | null> {
-        return new Promise((resolve, reject) => {
-            http.get(`${this.serverUrl}/api/tasks/${taskId}`, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    try {
-                        if (res.statusCode === 200) {
-                            resolve(JSON.parse(data));
-                        } else {
-                            resolve(null);
-                        }
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            }).on('error', reject);
-        });
-    }
 
-    private async updateTask_API(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
-        return new Promise((resolve) => {
-            const data = JSON.stringify(updates);
-            const dataBuffer = Buffer.from(data, 'utf8');
-            
-            console.log('TaskDetailPanel: Sending data:', data);
-            console.log('TaskDetailPanel: Data length:', data.length, 'Buffer length:', dataBuffer.length);
-            
-            const options = {
-                hostname: '127.0.0.1',
-                port: 8000,
-                path: `/api/tasks/${taskId}`,
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json; charset=utf-8',
-                    'Content-Length': dataBuffer.length
-                }
-            };
-
-            const req = http.request(options, (res) => {
-                let responseData = '';
-                res.on('data', chunk => responseData += chunk);
-                res.on('end', () => {
-                    console.log('TaskDetailPanel: Response status:', res.statusCode, 'Data:', responseData);
-                    if (res.statusCode === 200) {
-                        resolve({ success: true });
-                    } else if (res.statusCode === 409) {
-                        resolve({ success: false, conflict: true });
-                    } else {
-                        try {
-                            const error = JSON.parse(responseData);
-                            resolve({ success: false, error: error.error || 'Unknown error' });
-                        } catch {
-                            resolve({ success: false, error: 'Request failed' });
-                        }
-                    }
-                });
-            });
-
-            req.on('error', (error) => {
-                console.error('TaskDetailPanel: Request error:', error);
-                resolve({ success: false, error: error.message });
-            });
-
-            req.write(dataBuffer);
-            req.end();
-        });
-    }
 
     private getHtmlForWebview(task: Task): string {
         return `<!DOCTYPE html>

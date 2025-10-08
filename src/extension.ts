@@ -4,37 +4,48 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { WBSTreeProvider } from './views/wbsTree';
 import { TaskDetailPanel } from './panels/taskDetailPanel';
+import { MCPClient } from './mcpClient';
 
 let serverProcess: child_process.ChildProcess | null = null;
 let outputChannel: vscode.OutputChannel;
 let treeProvider: WBSTreeProvider;
+let mcpClient: MCPClient;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('MCP-WBS');
     outputChannel.appendLine('MCP WBS Extension activated');
 
-    // Initialize tree provider
-    treeProvider = new WBSTreeProvider();
+    // Initialize MCP client
+    mcpClient = new MCPClient(outputChannel);
+
+    // Auto-start server and MCP client connection
+    await startLocalServer(context);
+
+    // Initialize tree provider with MCP client (after MCP接続完了)
+    treeProvider = new WBSTreeProvider(mcpClient);
     const treeView = vscode.window.createTreeView('wbsTree', {
         treeDataProvider: treeProvider,
         showCollapseAll: true
     });
 
-    // Auto-start server on activation
-    startLocalServer(context);
-
     // Register commands
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         await startLocalServer(context);
+        treeProvider.refresh();
     });
 
-    const refreshTreeCommand = vscode.commands.registerCommand('wbsTree.refresh', () => {
+    const refreshTreeCommand = vscode.commands.registerCommand('wbsTree.refresh', async () => {
+        // MCPClientが未接続なら再接続を試みる
+        if (!mcpClient) {
+            mcpClient = new MCPClient(outputChannel);
+            await startLocalServer(context);
+        }
         treeProvider.refresh();
     });
 
     const openTaskCommand = vscode.commands.registerCommand('wbsTree.openTask', (item) => {
         if (item && item.contextValue === 'task') {
-            TaskDetailPanel.createOrShow(context.extensionUri, item.itemId);
+            TaskDetailPanel.createOrShow(context.extensionUri, item.itemId, mcpClient);
         }
     });
 
@@ -48,6 +59,9 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+    if (mcpClient) {
+        mcpClient.stop();
+    }
     if (serverProcess) {
         outputChannel.appendLine('Stopping MCP server...');
         serverProcess.kill();
@@ -62,6 +76,10 @@ async function startLocalServer(context: vscode.ExtensionContext) {
     }
 
     const serverPath = path.join(context.extensionPath, 'out', 'server', 'index.js');
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspaceRoot = workspaceFolders && workspaceFolders.length > 0
+        ? workspaceFolders[0].uri.fsPath
+        : context.extensionPath;
     
     if (!fs.existsSync(serverPath)) {
         vscode.window.showErrorMessage(`Server file not found: ${serverPath}`);
@@ -71,10 +89,16 @@ async function startLocalServer(context: vscode.ExtensionContext) {
 
     try {
         outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
+
+        const serverEnv = {
+            ...process.env,
+            WBS_MCP_DATA_DIR: workspaceRoot
+        };
         
         serverProcess = child_process.spawn(process.execPath, [serverPath], {
-            cwd: context.extensionPath,
-            env: { ...process.env }
+            cwd: workspaceRoot,
+            env: serverEnv,
+            stdio: ['pipe', 'pipe', 'pipe']
         });
 
         serverProcess.stdout?.on('data', (data) => {
@@ -104,32 +128,16 @@ async function startLocalServer(context: vscode.ExtensionContext) {
             serverProcess = null;
         });
 
-        // Wait for server to start and test connectivity
-        outputChannel.appendLine('Waiting for server to start...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Test if server is responding
-        try {
-            const http = require('http');
-            const testReq = http.get('http://127.0.0.1:8000/health', (res: any) => {
-                let data = '';
-                res.on('data', (chunk: any) => data += chunk);
-                res.on('end', () => {
-                    outputChannel.appendLine(`Server health check OK: ${res.statusCode} - ${data}`);
-                });
-            });
-            testReq.on('error', (err: any) => {
-                outputChannel.appendLine(`Server health check failed: ${err.message}`);
-            });
-            testReq.setTimeout(3000);
-        } catch (error) {
-            outputChannel.appendLine(`Server connectivity test failed: ${error}`);
-        }
+        // Start MCP client connection
+        outputChannel.appendLine('Starting MCP client connection...');
+        await mcpClient.start(serverPath, {
+            cwd: workspaceRoot,
+            env: serverEnv
+        });
+        outputChannel.appendLine('MCP client connected successfully');
 
         // Create or update .vscode/mcp.json
-        const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders && workspaceFolders.length > 0) {
-            const workspaceRoot = workspaceFolders[0].uri.fsPath;
             const vscodeDir = path.join(workspaceRoot, '.vscode');
             const mcpConfigPath = path.join(vscodeDir, 'mcp.json');
 
@@ -141,12 +149,14 @@ async function startLocalServer(context: vscode.ExtensionContext) {
             const mcpConfig = {
                 servers: {
                     "wbs-mcp": {
-                        "command": "node",
+                        "command": process.execPath,
                         "args": [
-                            "d:\\devs\\workspace202111\\wbs-mcp\\out\\server\\index.js"
+                            serverPath
                         ],
-                        "type": "http",
-                        "url": "http://127.0.0.1:8000/mcp"
+                        "type": "stdio",
+                        "env": {
+                            "WBS_MCP_DATA_DIR": workspaceRoot
+                        }
                     }
                 }
             };

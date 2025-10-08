@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import * as http from 'http';
+import { MCPClient } from '../mcpClient';
 
 interface Task {
     id: string;
@@ -26,9 +26,11 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
-    private serverUrl = 'http://127.0.0.1:8000';
+    private mcpClient: MCPClient;
 
-    constructor() {}
+    constructor(mcpClient: MCPClient) {
+        this.mcpClient = mcpClient;
+    }
 
     refresh(): void {
         this._onDidChangeTreeData.fire();
@@ -64,7 +66,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async getProjects(): Promise<TreeItem[]> {
         try {
-            const projects = await this.fetchProjects();
+            const projects = await this.mcpClient.listProjects();
             return projects.map(project => new TreeItem(
                 project.title,
                 project.id,
@@ -80,18 +82,15 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private async getTasksForProject(projectId: string): Promise<TreeItem[]> {
         try {
-            const project = await this.fetchProjectTree(projectId);
-            if (project && project.tasks) {
-                return project.tasks.map(task => new TreeItem(
-                    task.title,
-                    task.id,
-                    'task',
-                    task.children && task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
-                    this.getTaskDescription(task),
-                    task
-                ));
-            }
-            return [];
+            const tasks = await this.mcpClient.listTasks(projectId);
+            return tasks.map(task => new TreeItem(
+                task.title,
+                task.id,
+                'task',
+                task.children && task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+                this.getTaskDescription(task),
+                task
+            ));
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to fetch tasks: ${error}`);
             return [];
@@ -106,60 +105,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         return parts.join(' ');
     }
 
-    private async fetchProjects(): Promise<Project[]> {
-        return new Promise((resolve, reject) => {
-            http.get(`${this.serverUrl}/api/projects`, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    try {
-                        resolve(JSON.parse(data));
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            }).on('error', reject);
-        });
-    }
 
-    private async fetchProjectTree(projectId: string): Promise<Project | null> {
-        return new Promise((resolve, reject) => {
-            // First fetch project info
-            http.get(`${this.serverUrl}/api/projects`, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                    try {
-                        const projects = JSON.parse(data);
-                        const project = projects.find((p: Project) => p.id === projectId);
-                        if (!project) {
-                            resolve(null);
-                            return;
-                        }
-                        
-                        // Then fetch tasks for this project
-                        http.get(`${this.serverUrl}/api/projects/${projectId}/tasks`, (taskRes) => {
-                            let taskData = '';
-                            taskRes.on('data', chunk => taskData += chunk);
-                            taskRes.on('end', () => {
-                                try {
-                                    const tasks = JSON.parse(taskData);
-                                    resolve({
-                                        ...project,
-                                        tasks: tasks
-                                    });
-                                } catch (error) {
-                                    reject(error);
-                                }
-                            });
-                        }).on('error', reject);
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            }).on('error', reject);
-        });
-    }
 }
 
 class TreeItem extends vscode.TreeItem {
