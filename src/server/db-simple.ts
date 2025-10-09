@@ -161,145 +161,13 @@ async function seedInitialData(db: Database): Promise<void> {
         return;
     }
 
-    const now = new Date().toISOString();
-
-    const projectAlphaId = uuidv4();
-    const projectBetaId = uuidv4();
-
-    await db.run(
-        `INSERT INTO projects (id, title, description, created_at, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, 1)`,
-        projectAlphaId,
-        'Alpha Release Plan',
-        'Milestones and tasks leading up to the alpha release.',
-        now,
-        now
-    );
-
-    await db.run(
-        `INSERT INTO projects (id, title, description, created_at, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, 1)`,
-        projectBetaId,
-        'Beta Feedback Sprint',
-        'Collect and triage beta feedback items for resolution.',
-        now,
-        now
-    );
-
-    const planningTaskId = uuidv4();
-    const backendTaskId = uuidv4();
-    const uiTaskId = uuidv4();
-    const qaTaskId = uuidv4();
-    const feedbackRootId = uuidv4();
-    const feedbackBugfixId = uuidv4();
-
-    await db.run(
-        `INSERT INTO tasks (
-            id, project_id, parent_id, title, description, goal, assignee,
-            status, estimate, created_at, updated_at, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        planningTaskId,
-        projectAlphaId,
-        null,
-        'Project kickoff & planning',
-        'Define scope, success metrics, and resource allocation for alpha.',
-        'Shared understanding of scope and priorities',
-        'Yuki Tanaka',
-        'completed',
-        '2d',
-        now,
-        now
-    );
-
-    await db.run(
-        `INSERT INTO tasks (
-            id, project_id, parent_id, title, description, goal, assignee,
-            status, estimate, created_at, updated_at, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        backendTaskId,
-        projectAlphaId,
-        planningTaskId,
-        'Finalize API contract',
-        'Lock down the REST/JSON contract for core features.',
-        'Approved API spec shared with frontend',
-        'Akira Sato',
-        'in-progress',
-        '3d',
-        now,
-        now
-    );
-
-    await db.run(
-        `INSERT INTO tasks (
-            id, project_id, parent_id, title, description, goal, assignee,
-            status, estimate, created_at, updated_at, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        uiTaskId,
-        projectAlphaId,
-        planningTaskId,
-        'Implement dashboard UI',
-        'Build the main dashboard experience aligning with the new spec.',
-        'Dashboard usable for stakeholder review',
-        'Mina Kato',
-        'pending',
-        '5d',
-        now,
-        now
-    );
-
-    await db.run(
-        `INSERT INTO tasks (
-            id, project_id, parent_id, title, description, goal, assignee,
-            status, estimate, created_at, updated_at, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        qaTaskId,
-        projectAlphaId,
-        null,
-        'Alpha regression sweep',
-        'Verify critical paths before releasing to early adopters.',
-        'Green test matrix covering P0 flows',
-        'Leo Nakamura',
-        'pending',
-        '3d',
-        now,
-        now
-    );
-
-    await db.run(
-        `INSERT INTO tasks (
-            id, project_id, parent_id, title, description, goal, assignee,
-            status, estimate, created_at, updated_at, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        feedbackRootId,
-        projectBetaId,
-        null,
-        'Feedback triage',
-        'Categorize and prioritize incoming beta feedback.',
-        'Clear prioritization backlog for beta findings',
-        'Sara Ito',
-        'in-progress',
-        '1d',
-        now,
-        now
-    );
-
-    await db.run(
-        `INSERT INTO tasks (
-            id, project_id, parent_id, title, description, goal, assignee,
-            status, estimate, created_at, updated_at, version
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-        feedbackBugfixId,
-        projectBetaId,
-        feedbackRootId,
-        'Patch top blocker bug',
-        'Fix the crash reported by multiple beta testers in the editor view.',
-        'Crash no longer reproducible on latest build',
-        'Hiroko Yamamoto',
-        'pending',
-        '2d',
-        now,
-        now
-    );
+    // 初期サンプルデータの自動投入は無効化されています。
+    // 理由: 特定のサンプルプロジェクト（'Alpha Release Plan' と 'Beta Feedback Sprint'）は
+    // ユーザーの要求により登録しないようにします。
+    // ワークスペース専用のプロジェクトは必要に応じて WBSRepository.getWorkspaceProject()
+    // により自動生成されます。
+    console.log('初期サンプルデータ登録は無効化されています。');
+    return;
 }
 
 /**
@@ -698,5 +566,22 @@ export class WBSRepository {
      * @param projectId プロジェクトID
      * @returns 削除が行われたかどうか
      */
-    // プロジェクト削除は不可のため削除
+    async deleteProject(projectId: string): Promise<boolean> {
+        const db = await this.db();
+        const existing = await db.get<{ id: string }>(
+            `SELECT id FROM projects WHERE id = ?`,
+            projectId
+        );
+
+        if (!existing) {
+            return false;
+        }
+
+        const result = await db.run(
+            `DELETE FROM projects WHERE id = ?`,
+            projectId
+        );
+
+        return (result.changes ?? 0) > 0;
+    }
 }

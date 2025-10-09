@@ -443,6 +443,45 @@ class StdioMCPServer {
     }
 
     /**
+     * タスク作成処理 (ツール呼び出しから)
+     * @param args 引数 (projectId, title, description, parentId, assignee, estimate, goal)
+     * @returns ツールレスポンス（作成されたタスクのJSONを含む）
+     */
+    private async handleCreateTask(args: any) {
+        try {
+            const task = await this.repo.createTask(
+                args.projectId,
+                args.title,
+                args.description ?? '',
+                args.parentId ?? null,
+                args.assignee ?? null,
+                args.estimate ?? null,
+                args.goal ?? null
+            );
+            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}` }] };
+        }
+    }
+
+    /**
+     * タスク取得処理 (ツール呼び出しから)
+     * @param args 引数 (taskId)
+     * @returns ツールレスポンス（取得したタスクのJSON、未検出時はエラーメッセージ）
+     */
+    private async handleGetTask(args: any) {
+        try {
+            const task = await this.repo.getTask(args.taskId);
+            if (!task) {
+                return { content: [{ type: 'text', text: `❌ Task not found: ${args.taskId}` }] };
+            }
+            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
+        } catch (error) {
+            return { content: [{ type: 'text', text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}` }] };
+        }
+    }
+
+    /**
      * タスク削除処理
      * 指定IDのタスクと子タスクを削除し、結果メッセージを返す
      * なぜ必要か: クライアントからの削除要求をDB操作に接続するため
