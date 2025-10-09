@@ -480,7 +480,38 @@ export class WBSRepository {
              WHERE id = ?`,
             taskId
         );
-        return task ?? null;
+        if (!task) {
+            return null;
+        }
+
+        const rows = await db.all<Task[]>(
+            `SELECT id, project_id, parent_id, title, description, goal, assignee, status,
+                    estimate, created_at, updated_at, version
+             FROM tasks
+             WHERE project_id = ?
+             ORDER BY created_at ASC`,
+            task.project_id
+        );
+
+        const taskMap = new Map<string, Task>();
+
+        rows.forEach((row) => {
+            taskMap.set(row.id, { ...row, children: [] });
+        });
+
+        rows.forEach((row) => {
+            if (row.parent_id && taskMap.has(row.parent_id)) {
+                const parent = taskMap.get(row.parent_id)!;
+                parent.children!.push(taskMap.get(row.id)!);
+            }
+        });
+
+        const target = taskMap.get(taskId);
+        if (!target) {
+            return { ...task, children: [] };
+        }
+
+        return target;
     }
 
     /**

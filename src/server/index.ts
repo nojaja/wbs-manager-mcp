@@ -182,7 +182,9 @@ class StdioMCPServer {
                                         title: { type: 'string', description: 'Task title' },
                                         description: { type: 'string', description: 'Task description' },
                                         assignee: { type: 'string', description: 'Assignee name' },
-                                        estimate: { type: 'string', description: 'Time estimate' }
+                                        estimate: { type: 'string', description: 'Time estimate' },
+                                        goal: { type: 'string', description: 'Task goal' },
+                                        parentId: { type: 'string', description: 'Parent task ID' }
                                     },
                                     required: ['projectId', 'title']
                                 }
@@ -364,7 +366,8 @@ class StdioMCPServer {
                 args.description || '',
                 args.parentId || null,
                 args.assignee || null,
-                args.estimate || null
+                args.estimate || null,
+                args.goal || null
             );
             return {
                 content: [{
