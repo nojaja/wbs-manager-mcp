@@ -2,7 +2,7 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import { MCPClient, TaskArtifactAssignment, TaskCompletionCondition } from '../mcpClient';
+import { MCPClient, TaskArtifactAssignment, TaskCompletionCondition, ProjectArtifact } from '../mcpClient';
 
 interface Task {
     id: string;
@@ -122,7 +122,14 @@ export class TaskDetailPanel {
             this._task = await this.mcpClient.getTask(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
-                this._panel.webview.html = this.getHtmlForWebview(this._task);
+                // Fetch project artifacts for suggestion list (minimal change)
+                let artifacts: ProjectArtifact[] = [];
+                try {
+                    artifacts = await this.mcpClient.listProjectArtifacts(this._task.project_id);
+                } catch (e) {
+                    // ignore and continue without suggestions
+                }
+                    this._panel.webview.html = this.getHtmlForWebview(this._task, artifacts);
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load task: ${error}`);
@@ -277,9 +284,10 @@ export class TaskDetailPanel {
      * タスク情報をもとに詳細画面のHTMLを生成する
      * なぜ必要か: WebviewでリッチなUIを動的に生成するため
      * @param task タスク情報
+     * @param artifacts プロジェクトの成果物一覧（サジェストに利用される）
      * @returns HTML文字列
      */
-    private getHtmlForWebview(task: Task): string {
+    private getHtmlForWebview(task: Task, artifacts: ProjectArtifact[] = []): string {
         const deliverablesText = this.formatArtifactAssignments(task.deliverables);
         const prerequisitesText = this.formatArtifactAssignments(task.prerequisites);
         const completionText = this.formatCompletionConditions(task.completionConditions);
@@ -295,6 +303,12 @@ export class TaskDetailPanel {
         const safeCompletionText = this.escapeHtml(completionText);
         const safeTaskId = this.escapeHtml(task.id);
         const safeVersion = this.escapeHtml(String(task.version));
+
+        // build datalist markup from artifacts so suggestions are available in static HTML
+        const datalistHtml = (artifacts || [])
+            .map(a => `<option value="${this.escapeHtml(a.title || '')}">${this.escapeHtml(a.id || '')}</option>`)
+            .join('');
+        const datalistMarkup = `<datalist id="artifactList">${datalistHtml}</datalist>`;
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -365,6 +379,7 @@ export class TaskDetailPanel {
     </style>
 </head>
 <body>
+    ${datalistMarkup}
     <h2>Task Details</h2>
     <form id="taskForm">
         <div class="form-group">
@@ -406,6 +421,10 @@ export class TaskDetailPanel {
             <label for="deliverables">成果物 (artifactId[:CRUD])</label>
             <textarea id="deliverables" name="deliverables" placeholder="artifact-id:CUD">${safeDeliverablesText}</textarea>
             <p class="hint">CRUDは任意です（例: spec-doc:UD）。省略すると参照のみの扱いになります。</p>
+            <div style="margin-top:6px; display:flex; gap:6px;">
+                <input list="artifactList" id="deliverableSuggest" placeholder="suggest artifact by title or id" style="flex:1" />
+                <button type="button" id="addDeliverable">Add</button>
+            </div>
             <ul id="deliverablesSummary" class="artifact-list"></ul>
         </div>
 
@@ -413,6 +432,10 @@ export class TaskDetailPanel {
             <label for="prerequisites">前提条件 (artifactId[:CRUD])</label>
             <textarea id="prerequisites" name="prerequisites" placeholder="artifact-id">${safePrerequisitesText}</textarea>
             <p class="hint">このタスクの実行前に必要な成果物を1行ずつ列挙してください。</p>
+            <div style="margin-top:6px; display:flex; gap:6px;">
+                <input list="artifactList" id="prerequisiteSuggest" placeholder="suggest artifact by title or id" style="flex:1" />
+                <button type="button" id="addPrerequisite">Add</button>
+            </div>
             <ul id="prerequisitesSummary" class="artifact-list"></ul>
         </div>
 
@@ -480,6 +503,34 @@ export class TaskDetailPanel {
 
             renderSummary('deliverablesSummary', deliverablesSummary, '成果物はまだ登録されていません。');
             renderSummary('prerequisitesSummary', prerequisitesSummary, '前提条件はまだ登録されていません。');
+            // wire add buttons for suggestions
+            const addDeliverableBtn = document.getElementById('addDeliverable');
+            const deliverableSuggest = document.getElementById('deliverableSuggest');
+            if (addDeliverableBtn && deliverableSuggest) {
+                addDeliverableBtn.addEventListener('click', () => {
+                    const val = (deliverableSuggest.value || '').trim();
+                    if (!val) return;
+                    const textarea = document.getElementById('deliverables');
+                    if (textarea) {
+                        textarea.value = (textarea.value ? textarea.value + '\n' : '') + val;
+                        (deliverableSuggest as any).value = '';
+                    }
+                });
+            }
+
+            const addPrereqBtn = document.getElementById('addPrerequisite');
+            const prereqSuggest = document.getElementById('prerequisiteSuggest');
+            if (addPrereqBtn && prereqSuggest) {
+                addPrereqBtn.addEventListener('click', () => {
+                    const val = (prereqSuggest.value || '').trim();
+                    if (!val) return;
+                    const textarea = document.getElementById('prerequisites');
+                    if (textarea) {
+                        textarea.value = (textarea.value ? textarea.value + '\n' : '') + val;
+                        (prereqSuggest as any).value = '';
+                    }
+                });
+            }
         });
 
         function renderSummary(elementId, lines, emptyMessage) {
@@ -607,3 +658,4 @@ export class TaskDetailPanel {
         }
     }
 }
+
