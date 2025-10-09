@@ -2,164 +2,148 @@
 
 MCP対応のVS Code拡張のWBS作成ツール
 
-A VS Code extension for Work Breakdown Structure (WBS) management with Model Context Protocol (MCP) support.
+## 概要
+
+この拡張は、VS CodeからWBS（Work Breakdown Structure）を作成・編集・共有するためのツールです。
+主な特徴として、拡張ホストから起動されるローカルサーバ（サーバプロセスとはstdio経由のJSON-RPCで通信）、TreeViewによるプロジェクト/タスクの可視化、タスク詳細用のWebviewパネル、依存関係管理などを提供します。
+
+## 主な変更点（最近のコミットより）
+
+- WBSツリーで子タスクをドラッグ&ドロップによる移動（親の付け替え）に対応しました（2025-10-09）。
+- タスクのコンテキストメニューに「開く」「削除」「子タスク追加」を実装しました（2025-10-09）。
+- エクスプローラに「新しいタスク」ボタンを追加しました（2025-10-09）。
+- プロジェクト削除機能を実装しました（2025-10-09）。
+- WBSツリーのタスクノードをクリックするとタスク詳細が開くようになりました（2025-10-09）。
+- サーバ実装を Express/HTTP ベースから、拡張ホストが子プロセスとして起動する stdio 経由の JSON-RPC に移行しました（2025-10-09）。これにより拡張とサーバ間の通信方式が変更されています。
 
 ## Features
 
-- **Local MCP Server**: Automatically spawns a local HTTP server that provides MCP tool discovery
-- **Project Management**: Create and manage multiple WBS projects
-- **Task Hierarchy**: Create tasks with parent-child relationships
-- **Real-time Updates**: Server-Sent Events (SSE) for live collaboration
-- **Version Control**: Optimistic locking to prevent concurrent update conflicts
-- **Dependency Management**: Define task dependencies with cycle detection
-- **TreeView UI**: Visual project and task explorer in VS Code
-- **Task Details**: Webview panel for editing task details
+- ローカル MCP サーバ（拡張が子プロセスとして起動し、stdio 上で JSON-RPC により通信）
+- プロジェクト管理（複数プロジェクトの作成・削除）
+- タスク階層（親子関係）の作成・編集・ドラッグ&ドロップでの親付け替え
+- リアルタイム更新（開発用に SSE 等を使う実装箇所あり）
+- 楽観的ロックによるバージョン管理（競合防止）
+- 依存関係管理（サイクル検出等）
+- TreeView UI（Explorer サイドバーに `WBS Projects`）
+- Webview によるタスク詳細編集パネル
 
-## Installation & Setup
+## インストール & セットアップ
 
-### Prerequisites
+### 前提
 
-- Node.js 20.x or later
-- VS Code 1.85.0 or later
+- Node.js 18.x 以上（開発時は Node.js v18.20.7 を想定しています）
+- VS Code 1.85.0 以上
 
-### Building from Source
+### ソースからのビルド
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/nojaja/wbs-mcp.git
-   cd wbs-mcp
-   ```
+1. リポジトリをクローン:
+  ```powershell
+  git clone https://github.com/nojaja/wbs-mcp.git ; cd wbs-mcp
+  ```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+2. 依存関係をインストール:
+  ```powershell
+  npm install
+  ```
 
-3. Build the extension:
-   ```bash
-   npm run build
-   ```
+3. ビルド:
+  ```powershell
+  npm run build
+  ```
 
-4. Open in VS Code for development:
-   ```bash
-   code .
-   ```
+4. 開発用に VS Code で開く:
+  ```powershell
+  code .
+  ```
 
-5. Press `F5` to launch the Extension Development Host
+5. F5 で Extension Development Host を起動
 
-## Usage
+## 使い方（概要）
 
-### Starting the MCP Server
+### ローカル MCP サーバの起動
 
-1. Open the Command Palette (`Ctrl+Shift+P` or `Cmd+Shift+P`)
-2. Run: `MCP WBS: Start Local Server`
-3. The server will start on `http://127.0.0.1:8000`
-4. A `.vscode/mcp.json` file will be created in your workspace
+- 通常は拡張内のコマンド `MCP WBS: Start Local Server` を使うと、拡張がサーバプロセスを子プロセスとして起動し、stdio を使って JSON-RPC ベースで通信します（HTTP ポートで待ち受けない構成になっているため、従来の HTTP ベースの `/mcp/discover` 等のエンドポイントは内部実装として移行しています）。
+- 開発やデバッグ目的で HTTP モードのサーバを手動で起動できる場合があります（`npm run start-server-dev` が利用可能で、`out/server/index.js` を直接起動します）。
 
-### Using the TreeView
+### TreeView の利用
 
-- The **WBS Projects** view appears in the Explorer sidebar
-- Click the refresh icon to reload projects and tasks
-- Click on a task to open its details in a webview panel
+- サイドバーに `WBS Projects` ビューが表示されます。
+- リフレッシュアイコンでプロジェクト・タスクを再読み込みできます。
+- タスクノードのクリックやコンテキストメニュー（「開く」「削除」「子タスク追加」）で操作できます。
+- エクスプローラのタイトル部分には「新しいタスク」ボタンが追加されています。
 
-### API Endpoints
+### 注意: API / MCP 発見
 
-The local server provides these endpoints:
-
-- `GET /mcp/discover` - MCP tool discovery
-- `GET /mcp/stream?projectId=<id>` - SSE stream for real-time updates
-- `POST /api/wbs/createProject` - Create a new project
-- `GET /api/wbs/listProjects` - List all projects
-- `GET /api/wbs/getProject/:projectId` - Get project with task tree
-- `POST /api/wbs/createTask` - Create a new task
-- `POST /api/wbs/updateTask` - Update a task (with version check)
-- `DELETE /api/wbs/deleteTask/:taskId` - Delete a task
-- `POST /api/wbs/addDependency` - Add a task dependency
-- `DELETE /api/wbs/removeDependency/:dependencyId` - Remove a dependency
-
-### Example: Creating a Project via API
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/wbs/createProject \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My Project","description":"Project description"}'
-```
-
-### Example: Creating a Task
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/wbs/createTask \
-  -H "Content-Type: application/json" \
-  -d '{
-    "projectId":"<project-id>",
-    "title":"Implement login",
-    "assignee":"taro",
-    "estimate":"3d"
-  }'
-```
+- 以前はローカルサーバが HTTP で MCP 発見（/mcp/discover）を提供していましたが、2025-10-09 の変更により拡張は子プロセスと stdio/JSON-RPC で直接通信するようになっています。外部 MCP クライアントからの HTTP 発見が必要な場合は、開発用の HTTP モード（`npm run start-server-dev`）を利用してください。
 
 ## MCP Integration
 
-The extension creates an MCP configuration at `.vscode/mcp.json` that enables Copilot and other MCP clients to discover available tools:
+本拡張は標準モードとして、拡張ホストからサーバープロセスを子プロセスとして起動し、stdio 上で JSON-RPC による双方向通信を行います。
 
-```json
-{
-  "servers": [
-    {
-      "id": "local-wbs",
-      "name": "Local WBS (MCP)",
-      "type": "http",
-      "url": "http://127.0.0.1:8000/mcp"
-    }
-  ]
-}
-```
+- 標準モードの特徴:
+  - 拡張（VS Code 側）がサーバープロセスを管理・起動します。
+  - 拡張とサーバーは標準入出力（stdin/stdout）を使って JSON-RPC メッセージをやり取りします。
+  - この構成では拡張内部の機能は VS Code の UI（コマンド、TreeView、Webview）経由で利用されます。
+  - 外部からの HTTP ベースの自動発見（/mcp/discover）や直接 HTTP リクエストによる呼び出しは、標準モードの運用下では想定されていません。
 
-### Available MCP Tools
+この章では標準モードの利用を前提とした説明を行っています。外部ツールとの連携方法や別の起動モードが必要な場合は、別途運用ガイドを参照してください。
 
-- `wbs.createProject` - Create a new WBS project
-- `wbs.listProjects` - List all projects
-- `wbs.getProject` - Get project with full task tree
-- `wbs.createTask` - Create a task with parent, assignee, estimate
-- `wbs.updateTask` - Update task fields with version control
+## Available MCP Tools
 
-## Data Storage
+以下は本プロジェクトが提供する MCP ツール（代表的なもの）です。ツール名・入力/出力は実装やサーバの起動モードによって変わる可能性があります。
 
-- SQLite database stored in `./data/wbs.db`
-- Includes tables for: projects, tasks, dependencies, sessions, task_history
-- Automatic schema initialization on first run
+- `wbs.createProject` — 新しいプロジェクトを作成します。入力: { title, description }。出力: 作成された project オブジェクト。
+- `wbs.listProjects` — 既存プロジェクトの一覧を返します。出力: project[]。
+- `wbs.getProject` — プロジェクトIDを指定して、タスクツリーを含むプロジェクト情報を取得します。入力: { projectId }。出力: project (with tasks)。
+- `wbs.createTask` — タスクを作成します。入力: { projectId, parentId?, title, assignee?, estimate? }。出力: 作成された task オブジェクト。
+- `wbs.updateTask` — タスクを更新します（バージョンチェック/楽観ロック対応）。入力: { taskId, updates, version }。
+- `wbs.deleteTask` — タスクを削除します。入力: { taskId }。
+- `wbs.addDependency` — タスク間の依存を追加します。入力: { fromTaskId, toTaskId }。
+- `wbs.removeDependency` — 依存関係を削除します。入力: { dependencyId }。
+- `wbs.deleteProject` — プロジェクトごと削除します（注意: データ損失）。入力: { projectId }。
+- `wbs.openTask` — 指定したタスクを拡張内で開き、詳細パネルを表示します（主に拡張内操作用）。入力: { taskId }。
 
-## Development
+ツールは、拡張の起動モード（stdio/JSON-RPC か HTTP）やバージョンによって追加・変更されることがあります。外部から自動発見する場合は、HTTP モードでサーバを起動し、`.vscode/mcp.json` を用意してください。
 
-### Scripts
+## データ保存
 
-- `npm run build` - Compile TypeScript
-- `npm run watch` - Watch mode for development
-- `npm run start-server-dev` - Run server independently
-- `npm test` - Run tests (to be implemented)
+- SQLite データベースを `./data/wbs.db` に格納します。
+- テーブル: projects, tasks, dependencies, sessions, task_history 等
+- 初回起動時にスキーマは自動初期化されます。
 
-### Architecture
+## 開発
+
+### 利用可能なスクリプト（package.json より）
+
+- `npm run build` - TypeScript をコンパイル（テスト・lint を含む）
+- `npm run watch` - 開発用のウォッチビルド（tsc -w）
+- `npm run start-server-dev` - サーバを独立起動（開発・デバッグ用：`out/server/index.js` を直接起動）
+- `npm run start-extension-dev` - 拡張の開発用起動補助（VS Code の拡張開発ディレクトリ指定コマンド）
+- `npm test` - lint と jest によるテスト実行（カバレッジ出力あり）
+
+### アーキテクチャ（概略）
 
 ```
 src/
 ├── extension.ts          # VS Code extension entry point
+├── mcpClient.ts          # 拡張側の MCP/JSON-RPC クライアント実装
 ├── views/
-│   └── wbsTree.ts       # TreeView data provider
+│   └── wbsTree.ts       # TreeView データプロバイダ
 ├── panels/
 │   └── taskDetailPanel.ts  # Webview for task editing
 └── server/
-    ├── index.ts         # Express server & MCP discovery
-    ├── db.ts            # SQLite database initialization
-    ├── repository.ts    # Data access layer
-    ├── api.ts           # REST API routes
-    └── stream.ts        # SSE event streaming
+   ├── index.ts         # サーバ本体（開発用 HTTP モードや stdio JSON-RPC 実装を含む）
+   ├── db-simple.ts     # SQLite 初期化等
+   ├── repository.ts    # データアクセス層
+   ├── api.ts           # REST/HTTP API（開発用に残存する場合あり）
+   └── stream.ts        # SSE などイベント配信の実装（開発用）
 ```
 
-## Contributing
+## 貢献
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+貢献歓迎です。Issue や Pull Request を送ってください。
 
-## License
+## ライセンス
 
-MIT License - see LICENSE file for details
+MIT License - `LICENSE` を参照
 
