@@ -22,6 +22,11 @@ interface Task {
     children?: Task[]; // 子タスク
 }
 
+type DropDecision =
+    | { kind: 'parent'; parentId: string | null }
+    | { kind: 'warning'; message: string }
+    | { kind: 'noop' };
+
 
 /**
  * プロジェクト情報を表現するインターフェース
@@ -304,6 +309,136 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     /**
+     * タスクドロップ処理
+     * ドラッグ&ドロップで指定されたタスクの親子関係を更新する
+     * なぜ必要か: ツリー上でのタスク移動をMCPサーバへ反映するため
+     * @param taskId 移動対象タスクID
+     * @param target ドロップ先ツリーアイテム
+     */
+    async handleTaskDrop(taskId: string, target: TreeItem): Promise<void> {
+        if (!target) {
+            return;
+        }
+
+        try {
+            const draggedTask = await this.mcpClient.getTask(taskId);
+            if (!draggedTask) {
+                vscode.window.showErrorMessage('移動対象のタスクを取得できませんでした。');
+                return;
+            }
+
+            const decision = this.evaluateDropTarget(draggedTask, target);
+
+            if (decision.kind === 'warning') {
+                vscode.window.showWarningMessage(decision.message);
+                return;
+            }
+
+            if (decision.kind === 'noop') {
+                return;
+            }
+
+            const result = await this.mcpClient.moveTask(taskId, decision.parentId);
+            if (result.success) {
+                this.refresh();
+                vscode.window.showInformationMessage('タスクを移動しました。');
+                return;
+            }
+
+            if (result.error) {
+                vscode.window.showErrorMessage(`タスクの移動に失敗しました: ${result.error}`);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`タスクの移動中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+
+    /**
+     * タスク木探索処理
+     * 指定タスク配下に対象IDが含まれるかを判定する
+     * なぜ必要か: ドラッグ対象の子孫に移動しようとした場合に循環を防ぐため
+     * @param task タスク
+     * @param searchId 探索対象ID
+     * @returns 子孫に含まれていればtrue
+     */
+    private containsTask(task: Task, searchId: string): boolean {
+        if (!task.children || task.children.length === 0) {
+            return false;
+        }
+        for (const child of task.children) {
+            if (child.id === searchId || this.containsTask(child, searchId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * ドロップ先評価処理
+     * ターゲットに応じて移動の可否と新しい親タスクIDを判定する
+     * @param draggedTask ドラッグ中のタスク
+     * @param target ドロップ先ツリーアイテム
+     * @returns 判定結果
+     */
+    private evaluateDropTarget(draggedTask: Task, target: TreeItem): DropDecision {
+        if (target.contextValue === 'project') {
+            return this.evaluateProjectDrop(draggedTask, target);
+        }
+
+        if (target.contextValue === 'task' && target.task) {
+            return this.evaluateTaskDrop(draggedTask, target.task);
+        }
+
+        return { kind: 'noop' };
+    }
+
+    /**
+     * プロジェクトノードへのドロップ評価
+     * @param draggedTask ドラッグ中のタスク
+     * @param target プロジェクトノード
+     * @returns 判定結果
+     */
+    private evaluateProjectDrop(draggedTask: Task, target: TreeItem): DropDecision {
+        if (draggedTask.project_id !== target.itemId) {
+            return { kind: 'warning', message: '別プロジェクトへのタスク移動はサポートされていません。' };
+        }
+
+        const currentParentId = draggedTask.parent_id ?? null;
+        if (currentParentId === null) {
+            return { kind: 'noop' };
+        }
+
+        return { kind: 'parent', parentId: null };
+    }
+
+    /**
+     * タスクノードへのドロップ評価
+     * @param draggedTask ドラッグ中のタスク
+     * @param targetTask ドロップ先タスク
+     * @returns 判定結果
+     */
+    private evaluateTaskDrop(draggedTask: Task, targetTask: Task): DropDecision {
+        if (draggedTask.project_id !== targetTask.project_id) {
+            return { kind: 'warning', message: '別プロジェクトへのタスク移動はサポートされていません。' };
+        }
+
+        if (draggedTask.id === targetTask.id || draggedTask.parent_id === targetTask.id) {
+            return { kind: 'noop' };
+        }
+
+        if (this.containsTask(draggedTask, targetTask.id)) {
+            return { kind: 'warning', message: '子孫タスクの下への移動はできません。' };
+        }
+
+        const currentParentId = draggedTask.parent_id ?? null;
+        if (currentParentId === targetTask.id) {
+            return { kind: 'noop' };
+        }
+
+        return { kind: 'parent', parentId: targetTask.id };
+    }
+
+    /**
      * タスク説明生成処理
      * タスクの状態・担当・見積もりを文字列化して返す
      * なぜ必要か: ツリー上でタスクの概要を簡潔に表示するため
@@ -386,5 +521,75 @@ class TreeItem extends vscode.TreeItem {
                 arguments: [this]
             };
         }
+    }
+}
+
+/**
+ * WBSツリードラッグ&ドロップコントローラ
+ * ツリー内のタスク移動操作をハンドリングし、WBSTreeProviderへ委譲する
+ */
+export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropController<TreeItem> {
+    readonly dragMimeTypes = ['application/vnd.code.tree.wbsTree'];
+    readonly dropMimeTypes = ['application/vnd.code.tree.wbsTree'];
+
+    /**
+     * コンストラクタ
+     * @param provider ドロップ処理を委譲するWBSツリープロバイダ
+     */
+    constructor(private readonly provider: WBSTreeProvider) {}
+
+    /**
+     * ドラッグ開始処理
+     * データ転送にタスクID一覧を格納する
+     * @param source ドラッグされたツリーアイテム
+     * @param dataTransfer データ転送オブジェクト
+     */
+    async handleDrag(source: readonly TreeItem[], dataTransfer: vscode.DataTransfer): Promise<void> {
+        const taskIds = source
+            .filter(item => item.contextValue === 'task')
+            .map(item => item.itemId);
+
+        if (taskIds.length === 0) {
+            return;
+        }
+
+        dataTransfer.set('application/vnd.code.tree.wbsTree', new vscode.DataTransferItem(JSON.stringify(taskIds)));
+    }
+
+    /**
+     * ドロップ処理
+     * データ転送からタスクIDを取得し、プロバイダへ処理を委譲する
+     * @param target ドロップ先ツリーアイテム
+     * @param dataTransfer データ転送オブジェクト
+     */
+    async handleDrop(target: TreeItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+        const item = dataTransfer.get('application/vnd.code.tree.wbsTree');
+        if (!item) {
+            return;
+        }
+
+        let taskIds: string[] = [];
+        try {
+            const raw = item.value as string | undefined;
+            taskIds = raw ? JSON.parse(raw) : [];
+        } catch (error) {
+            console.error('[WBS Tree] Failed to parse drag data', error);
+            return;
+        }
+
+        const taskId = taskIds[0];
+        if (!taskId || !target) {
+            return;
+        }
+
+        await this.provider.handleTaskDrop(taskId, target);
+    }
+
+    /**
+     * リソース解放処理
+     * コントローラ破棄時に呼び出される
+     */
+    dispose(): void {
+        // no resources to dispose
     }
 }

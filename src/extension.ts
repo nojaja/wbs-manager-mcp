@@ -8,7 +8,7 @@ import * as path from 'path';
 // ファイルシステム操作ユーティリティ
 import * as fs from 'fs';
 // WBSツリープロバイダ（ツリー表示用）
-import { WBSTreeProvider } from './views/wbsTree';
+import { WBSTreeProvider, WBSTreeDragAndDropController } from './views/wbsTree';
 // タスク詳細パネル（WebView表示用）
 import { TaskDetailPanel } from './panels/taskDetailPanel';
 // MCPクライアント（API通信・管理用）
@@ -45,9 +45,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // MCPクライアントを使ってWBSツリープロバイダを初期化
     treeProvider = new WBSTreeProvider(mcpClient);
     // ツリービューを作成し、エクスプローラ部に表示
+    const dragAndDropController = new WBSTreeDragAndDropController(treeProvider);
     const treeView = vscode.window.createTreeView('wbsTree', {
         treeDataProvider: treeProvider,
-        showCollapseAll: true
+        showCollapseAll: true,
+        dragAndDropController
     });
 
     // コマンド登録: サーバ起動
@@ -113,6 +115,7 @@ export async function activate(context: vscode.ExtensionContext) {
         addChildTaskCommand,
         deleteTaskCommand,
         deleteProjectCommand,
+        dragAndDropController,
         treeView,
         outputChannel
     );

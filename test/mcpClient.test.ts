@@ -156,4 +156,22 @@ describe('MCPClient', () => {
     spy.mockRestore();
   });
 
+  test('moveTask handles success and error paths', async () => {
+    const spy = jest.spyOn(client as any, 'callTool');
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ moved' }] });
+    const ok = await client.moveTask('t1', 'p2');
+    expect(ok).toEqual({ success: true });
+    expect(spy).toHaveBeenCalledWith('wbs.moveTask', { taskId: 't1', newParentId: 'p2' });
+
+    spy.mockResolvedValueOnce({ content: [{ text: '❌ fail' }] });
+    const fail = await client.moveTask('t1', 'p2');
+    expect(fail).toEqual({ success: false, error: '❌ fail' });
+
+    spy.mockRejectedValueOnce(new Error('boom'));
+    const err = await client.moveTask('t1', null);
+    expect(err).toEqual({ success: false, error: 'boom' });
+
+    spy.mockRestore();
+  });
+
 });

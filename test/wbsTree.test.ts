@@ -6,7 +6,9 @@ const fakeClient: any = {
   listTasks: jest.fn(),
   createTask: jest.fn(),
   deleteTask: jest.fn(),
-  deleteProject: jest.fn()
+  deleteProject: jest.fn(),
+  getTask: jest.fn(),
+  moveTask: jest.fn()
 };
 
 describe('WBSTreeProvider', () => {
@@ -137,5 +139,79 @@ describe('WBSTreeProvider', () => {
     warningSpy.mockRestore();
     infoSpy.mockRestore();
     refreshSpy.mockRestore();
+  });
+
+  test('handleTaskDrop moves task when valid', async () => {
+    const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
+    const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
+    fakeClient.getTask.mockResolvedValue({
+      id: 't1',
+      project_id: 'p1',
+      parent_id: 'old',
+      children: []
+    });
+    fakeClient.moveTask.mockResolvedValue({ success: true });
+
+    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'parentB', project_id: 'p1' } } as any);
+
+    expect(fakeClient.moveTask).toHaveBeenCalledWith('t1', 'parentB');
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalled();
+    refreshSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  test('handleTaskDrop prevents moving under descendant', async () => {
+    const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    fakeClient.getTask.mockResolvedValue({
+      id: 't1',
+      project_id: 'p1',
+      parent_id: 'old',
+      children: [
+        { id: 'child', project_id: 'p1', children: [] }
+      ]
+    });
+
+    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'child', project_id: 'p1' } } as any);
+
+    expect(fakeClient.moveTask).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  test('handleTaskDrop moves task to project root', async () => {
+    const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
+    const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
+    fakeClient.getTask.mockResolvedValue({
+      id: 't1',
+      project_id: 'p1',
+      parent_id: 'parentA',
+      children: []
+    });
+    fakeClient.moveTask.mockResolvedValue({ success: true });
+
+    await provider.handleTaskDrop('t1', { contextValue: 'project', itemId: 'p1' } as any);
+
+    expect(fakeClient.moveTask).toHaveBeenCalledWith('t1', null);
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalled();
+    refreshSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  test('handleTaskDrop prevents moving task to different project root', async () => {
+    const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    fakeClient.getTask.mockResolvedValue({
+      id: 't1',
+      project_id: 'p1',
+      parent_id: 'parentA',
+      children: []
+    });
+
+    await provider.handleTaskDrop('t1', { contextValue: 'project', itemId: 'p2' } as any);
+
+    expect(fakeClient.moveTask).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

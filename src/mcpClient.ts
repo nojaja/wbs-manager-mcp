@@ -452,6 +452,27 @@ export class MCPClient {
     }
 
     /**
+     * タスク移動処理
+     * 指定したタスクの親タスクを変更する
+     * なぜ必要か: UIのドラッグ&ドロップ操作でサーバ側に親子関係変更を伝えるため
+     * @param taskId タスクID
+     * @param newParentId 新しい親タスクID（ルートへ移動する場合はnull）
+     * @returns 移動結果
+     */
+    async moveTask(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string }> {
+        try {
+            const result = await this.callTool('wbs.moveTask', { taskId, newParentId: newParentId ?? null });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('✅')) {
+                return { success: true };
+            }
+            return { success: false, error: content || 'Unknown error' };
+        } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+    }
+
+    /**
      * サーバプロセス停止処理
      * サーバプロセスを停止し、リクエスト管理をクリアする
      * なぜ必要か: プロセスリーク・リソース消費を防ぎ、拡張機能終了時に安全に停止するため

@@ -566,6 +566,124 @@ export class WBSRepository {
     }
 
     /**
+     * タスク移動処理
+     * 指定タスクの親タスクを変更し、更新後のタスクを返す
+     * なぜ必要か: ツリー上でのドラッグ&ドロップによる親子関係の付け替えに対応するため
+     * @param taskId 移動対象タスクID
+     * @param newParentId 新しい親タスクID（ルートへ移動する場合はnull）
+     * @returns Promise<Task>
+     */
+    async moveTask(taskId: string, newParentId: string | null): Promise<Task> {
+        const db = await this.db();
+        const task = await this.fetchTaskRow(db, taskId);
+
+        if (!task) {
+            throw new Error(`Task not found: ${taskId}`);
+        }
+
+        const normalizedParentId = newParentId ?? null;
+
+        await this.validateMoveTarget(db, task, normalizedParentId);
+
+        if ((task.parent_id ?? null) === normalizedParentId) {
+            return (await this.getTask(taskId))!;
+        }
+
+        const now = new Date().toISOString();
+        const newVersion = task.version + 1;
+
+        await db.run(
+            `UPDATE tasks
+             SET parent_id = ?,
+                 updated_at = ?,
+                 version = ?
+             WHERE id = ?`,
+            normalizedParentId,
+            now,
+            newVersion,
+            taskId
+        );
+
+        return (await this.getTask(taskId))!;
+    }
+
+    /**
+     * タスク移動先検証処理
+     * 親タスク変更時の制約を確認し、問題があれば例外を投げる
+     * なぜ必要か: 無効な親子関係の生成や循環参照の発生を防ぐため
+     * @param db Databaseインスタンス
+     * @param task 現在のタスク
+     * @param normalizedParentId 新しい親タスクID（null許容）
+     */
+    private async validateMoveTarget(db: Database, task: Task, normalizedParentId: string | null): Promise<void> {
+        if (!normalizedParentId) {
+            return;
+        }
+
+        if (normalizedParentId === task.id) {
+            throw new Error('Task cannot be its own parent');
+        }
+
+        const parent = await db.get<Task>(
+            `SELECT id, project_id, parent_id
+             FROM tasks
+             WHERE id = ?`,
+            normalizedParentId
+        );
+
+        if (!parent) {
+            throw new Error(`Parent task not found: ${normalizedParentId}`);
+        }
+
+        if (parent.project_id !== task.project_id) {
+            throw new Error('Cannot move task to a different project');
+        }
+
+        await this.ensureNotDescendant(db, task.id, parent.parent_id ?? null);
+    }
+
+    /**
+     * 循環参照防止処理
+     * 親チェーンを遡り、移動対象タスクが含まれていないことを確認する
+     * なぜ必要か: タスクを自身の子孫配下へ移動して循環を発生させるのを防ぐため
+     * @param db Databaseインスタンス
+     * @param taskId 移動対象タスクID
+     * @param startParentId 検査開始の親ID
+     */
+    private async ensureNotDescendant(db: Database, taskId: string, startParentId: string | null): Promise<void> {
+        let ancestorId = startParentId;
+        while (ancestorId) {
+            if (ancestorId === taskId) {
+                throw new Error('Cannot move task into its descendant');
+            }
+            const ancestor = await db.get<{ parent_id: string | null }>(
+                `SELECT parent_id FROM tasks WHERE id = ?`,
+                ancestorId
+            );
+            ancestorId = ancestor?.parent_id ?? null;
+        }
+    }
+
+    /**
+     * タスク行取得処理
+     * DBから単一タスク行を取得する
+     * なぜ必要か: 移動検証などのために最低限のタスク情報を取得するため
+     * @param db Databaseインスタンス
+     * @param taskId タスクID
+     * @returns タスク行またはnull
+     */
+    private async fetchTaskRow(db: Database, taskId: string): Promise<Task | null> {
+        const row = await db.get<Task>(
+            `SELECT id, project_id, parent_id, title, description, goal, assignee, status,
+                    estimate, created_at, updated_at, version
+             FROM tasks
+             WHERE id = ?`,
+            taskId
+        );
+        return row ?? null;
+    }
+
+    /**
      * タスク削除処理
      * 指定されたタスクとその子タスクをDBから削除する
      * なぜ必要か: UIやAPIからの削除要求を実データベースに反映するため
