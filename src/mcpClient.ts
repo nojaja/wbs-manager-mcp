@@ -19,16 +19,30 @@ interface JsonRpcResponse {
     };
 }
 
+/**
+ *
+ */
 export class MCPClient {
     private serverProcess: child_process.ChildProcess | null = null;
     private requestId = 0;
     private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: any) => void }> = new Map();
     private outputChannel: vscode.OutputChannel;
 
+    /**
+     *
+     * @param outputChannel
+     */
     constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
     }
 
+    /**
+     *
+     * @param serverPath
+     * @param options
+     * @param options.cwd
+     * @param options.env
+     */
     async start(serverPath: string, options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<void> {
         if (this.serverProcess) {
             return; // Already started
@@ -93,6 +107,9 @@ export class MCPClient {
         });
     }
 
+    /**
+     *
+     */
     private async initialize(): Promise<void> {
         const response = await this.sendRequest('initialize', {
             protocolVersion: '2024-11-05',
@@ -111,6 +128,12 @@ export class MCPClient {
         this.sendNotification('notifications/initialized', {});
     }
 
+    /**
+     *
+     * @param method
+     * @param params
+     * @returns Promise<JsonRpcResponse>
+     */
     private sendRequest(method: string, params?: any): Promise<JsonRpcResponse> {
         if (!this.serverProcess) {
             return Promise.reject(new Error('MCP server not started'));
@@ -147,6 +170,11 @@ export class MCPClient {
         });
     }
 
+    /**
+     *
+     * @param method
+     * @param params
+     */
     private sendNotification(method: string, params?: any): void {
         if (!this.serverProcess) {
             return;
@@ -162,6 +190,10 @@ export class MCPClient {
         this.serverProcess.stdin?.write(notificationStr);
     }
 
+    /**
+     *
+     * @param response
+     */
     private handleResponse(response: JsonRpcResponse): void {
         if (response.id !== undefined) {
             const pending = this.pendingRequests.get(response.id as number);
@@ -176,6 +208,12 @@ export class MCPClient {
         }
     }
 
+    /**
+     *
+     * @param toolName
+     * @param args
+     * @returns Promise<any>
+     */
     async callTool(toolName: string, args: any): Promise<any> {
         const response = await this.sendRequest('tools/call', {
             name: toolName,
@@ -189,6 +227,10 @@ export class MCPClient {
         return response.result;
     }
 
+    /**
+     *
+     * @returns Promise<any[]>
+     */
     async listProjects(): Promise<any[]> {
         try {
             const result = await this.callTool('wbs.listProjects', {});
@@ -203,6 +245,11 @@ export class MCPClient {
         }
     }
 
+    /**
+     *
+     * @param projectId
+     * @returns Promise<any[]>
+     */
     async listTasks(projectId: string): Promise<any[]> {
         try {
             const result = await this.callTool('wbs.listTasks', { projectId });
@@ -217,6 +264,11 @@ export class MCPClient {
         }
     }
 
+    /**
+     *
+     * @param taskId
+     * @returns Promise<any | null>
+     */
     async getTask(taskId: string): Promise<any | null> {
         try {
             const result = await this.callTool('wbs.getTask', { taskId });
@@ -231,6 +283,12 @@ export class MCPClient {
         }
     }
 
+    /**
+     *
+     * @param taskId
+     * @param updates
+     * @returns Promise<{ success: boolean; conflict?: boolean; error?: string }>
+     */
     async updateTask(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
         try {
             const result = await this.callTool('wbs.updateTask', { taskId, ...updates });
@@ -248,6 +306,9 @@ export class MCPClient {
         }
     }
 
+    /**
+     *
+     */
     stop(): void {
         if (this.serverProcess) {
             this.serverProcess.kill();

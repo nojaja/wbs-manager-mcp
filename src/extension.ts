@@ -11,6 +11,10 @@ let outputChannel: vscode.OutputChannel;
 let treeProvider: WBSTreeProvider;
 let mcpClient: MCPClient;
 
+/**
+ *
+ * @param context
+ */
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('MCP-WBS');
     outputChannel.appendLine('MCP WBS Extension activated');
@@ -58,6 +62,9 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 }
 
+/**
+ *
+ */
 export function deactivate() {
     if (mcpClient) {
         mcpClient.stop();
@@ -65,10 +72,144 @@ export function deactivate() {
     if (serverProcess) {
         outputChannel.appendLine('Stopping MCP server...');
         serverProcess.kill();
-        serverProcess = null;
+        (serverProcess as child_process.ChildProcess | null) = null;
     }
 }
 
+/**
+ * Creates the MCP config file
+ * @param workspaceRoot - The workspace root path
+ * @param serverPath - Path to the server executable
+ */
+function createMcpConfig(workspaceRoot: string, serverPath: string): void {
+    const vscodeDir = path.join(workspaceRoot, '.vscode');
+    const mcpConfigPath = path.join(vscodeDir, 'mcp.json');
+
+    if (!fs.existsSync(vscodeDir)) {
+        fs.mkdirSync(vscodeDir, { recursive: true });
+    }
+
+    const mcpConfig = {
+        servers: {
+            "wbs-mcp": {
+                "command": process.execPath,
+                "args": [
+                    serverPath
+                ],
+                "type": "stdio",
+                "env": {
+                    "WBS_MCP_DATA_DIR": workspaceRoot
+                }
+            }
+        }
+    };
+
+    fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+    outputChannel.appendLine(`Created MCP configuration at: ${mcpConfigPath}`);
+    vscode.window.showInformationMessage('MCP server started successfully');
+}
+
+/**
+ * Sets up server process event handlers
+ * @param serverProcess - The server process
+ */
+function setupServerProcessHandlers(serverProcess: child_process.ChildProcess): void {
+    serverProcess.stdout?.on('data', (data) => {
+        const output = data.toString().trim();
+        outputChannel.appendLine(`[Server] ${output}`);
+        outputChannel.show();
+    });
+
+    serverProcess.stderr?.on('data', (data) => {
+        const error = data.toString().trim();
+        outputChannel.appendLine(`[Server Error] ${error}`);
+        outputChannel.show();
+        console.error('Server Error:', error);
+    });
+
+    serverProcess.on('exit', (code, signal) => {
+        outputChannel.appendLine(`Server process exited with code ${code}, signal: ${signal}`);
+        if (code !== 0) {
+            vscode.window.showErrorMessage(`MCP server exited unexpectedly with code ${code}`);
+        }
+        (serverProcess as child_process.ChildProcess | null) = null;
+    });
+
+    serverProcess.on('error', (err) => {
+        outputChannel.appendLine(`Server process error: ${err.message}`);
+        vscode.window.showErrorMessage(`Failed to start MCP server: ${err.message}`);
+        (serverProcess as child_process.ChildProcess | null) = null;
+    });
+}
+
+/**
+ * Validates server path exists
+ * @param serverPath - Path to server executable
+ * @returns True if valid
+ */
+function validateServerPath(serverPath: string): boolean {
+    if (!fs.existsSync(serverPath)) {
+        vscode.window.showErrorMessage(`Server file not found: ${serverPath}`);
+        outputChannel.appendLine(`Error: Server file not found at ${serverPath}`);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Starts MCP client and connects to server
+ * @param serverPath - Path to server executable
+ * @param serverEnv - Environment variables
+ */
+async function startMcpClient(serverPath: string, serverEnv: any): Promise<void> {
+    outputChannel.appendLine('Starting MCP client connection...');
+    await mcpClient.start(serverPath, {
+        cwd: path.dirname(serverPath),
+        env: serverEnv
+    });
+    outputChannel.appendLine('MCP client connected successfully');
+}
+
+/**
+ * Spawns the server process
+ * @param serverPath - Path to server executable
+ * @param workspaceRoot - Workspace root path
+ * @returns Server environment
+ */
+function spawnServerProcess(serverPath: string, workspaceRoot: string) {
+    outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
+
+    const serverEnv = {
+        ...process.env,
+        WBS_MCP_DATA_DIR: workspaceRoot
+    };
+    
+    serverProcess = child_process.spawn(process.execPath, [serverPath], {
+        cwd: workspaceRoot,
+        env: serverEnv,
+        stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    return serverEnv;
+}
+
+/**
+ * Handles MCP config creation
+ * @param workspaceFolders - VS Code workspace folders
+ * @param workspaceRoot - Workspace root path
+ * @param serverPath - Path to server executable
+ */
+function handleMcpConfigCreation(workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined, workspaceRoot: string, serverPath: string): void {
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        createMcpConfig(workspaceRoot, serverPath);
+    } else {
+        vscode.window.showWarningMessage('No workspace folder found. MCP configuration not created.');
+    }
+}
+
+/**
+ * @param context - VS Code extension context
+ */
 async function startLocalServer(context: vscode.ExtensionContext) {
     if (serverProcess) {
         vscode.window.showInformationMessage('MCP server is already running');
@@ -81,97 +222,22 @@ async function startLocalServer(context: vscode.ExtensionContext) {
         ? workspaceFolders[0].uri.fsPath
         : context.extensionPath;
     
-    if (!fs.existsSync(serverPath)) {
-        vscode.window.showErrorMessage(`Server file not found: ${serverPath}`);
-        outputChannel.appendLine(`Error: Server file not found at ${serverPath}`);
+    if (!validateServerPath(serverPath)) {
         return;
     }
 
     try {
-        outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
-
-        const serverEnv = {
-            ...process.env,
-            WBS_MCP_DATA_DIR: workspaceRoot
-        };
-        
-        serverProcess = child_process.spawn(process.execPath, [serverPath], {
-            cwd: workspaceRoot,
-            env: serverEnv,
-            stdio: ['pipe', 'pipe', 'pipe']
-        });
-
-        serverProcess.stdout?.on('data', (data) => {
-            const output = data.toString().trim();
-            outputChannel.appendLine(`[Server] ${output}`);
-            outputChannel.show(); // Show output panel automatically
-        });
-
-        serverProcess.stderr?.on('data', (data) => {
-            const error = data.toString().trim();
-            outputChannel.appendLine(`[Server Error] ${error}`);
-            outputChannel.show(); // Show output panel automatically
-            console.error('Server Error:', error);
-        });
-
-        serverProcess.on('exit', (code, signal) => {
-            outputChannel.appendLine(`Server process exited with code ${code}, signal: ${signal}`);
-            if (code !== 0) {
-                vscode.window.showErrorMessage(`MCP server exited unexpectedly with code ${code}`);
-            }
-            serverProcess = null;
-        });
-
-        serverProcess.on('error', (err) => {
-            outputChannel.appendLine(`Server process error: ${err.message}`);
-            vscode.window.showErrorMessage(`Failed to start MCP server: ${err.message}`);
-            serverProcess = null;
-        });
-
-        // Start MCP client connection
-        outputChannel.appendLine('Starting MCP client connection...');
-        await mcpClient.start(serverPath, {
-            cwd: workspaceRoot,
-            env: serverEnv
-        });
-        outputChannel.appendLine('MCP client connected successfully');
-
-        // Create or update .vscode/mcp.json
-        if (workspaceFolders && workspaceFolders.length > 0) {
-            const vscodeDir = path.join(workspaceRoot, '.vscode');
-            const mcpConfigPath = path.join(vscodeDir, 'mcp.json');
-
-            // Create .vscode directory if it doesn't exist
-            if (!fs.existsSync(vscodeDir)) {
-                fs.mkdirSync(vscodeDir, { recursive: true });
-            }
-
-            const mcpConfig = {
-                servers: {
-                    "wbs-mcp": {
-                        "command": process.execPath,
-                        "args": [
-                            serverPath
-                        ],
-                        "type": "stdio",
-                        "env": {
-                            "WBS_MCP_DATA_DIR": workspaceRoot
-                        }
-                    }
-                }
-            };
-
-            fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-            outputChannel.appendLine(`Created MCP configuration at: ${mcpConfigPath}`);
-            vscode.window.showInformationMessage('MCP server started successfully');
-        } else {
-            vscode.window.showWarningMessage('No workspace folder found. MCP configuration not created.');
-        }
+        const serverEnv = spawnServerProcess(serverPath, workspaceRoot);
+        setupServerProcessHandlers(serverProcess!);
+        await startMcpClient(serverPath, serverEnv);
+        handleMcpConfigCreation(workspaceFolders, workspaceRoot, serverPath);
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         outputChannel.appendLine(`Failed to start server: ${errorMessage}`);
         vscode.window.showErrorMessage(`Failed to start MCP server: ${errorMessage}`);
-        serverProcess = null;
+        if (serverProcess) {
+            (serverProcess as child_process.ChildProcess | null) = null;
+        }
     }
 }

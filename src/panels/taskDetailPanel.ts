@@ -14,6 +14,9 @@ interface Task {
     version: number;
 }
 
+/**
+ *
+ */
 export class TaskDetailPanel {
     public static currentPanel: TaskDetailPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
@@ -22,6 +25,12 @@ export class TaskDetailPanel {
     private _task: Task | null = null;
     private mcpClient: MCPClient;
 
+    /**
+     *
+     * @param extensionUri
+     * @param taskId
+     * @param mcpClient
+     */
     public static createOrShow(extensionUri: vscode.Uri, taskId: string, mcpClient: MCPClient) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
@@ -46,6 +55,13 @@ export class TaskDetailPanel {
         TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, mcpClient);
     }
 
+    /**
+     *
+     * @param panel
+     * @param extensionUri
+     * @param taskId
+     * @param mcpClient
+     */
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, mcpClient: MCPClient) {
         this._panel = panel;
         this._taskId = taskId;
@@ -68,11 +84,18 @@ export class TaskDetailPanel {
         );
     }
 
+    /**
+     *
+     * @param taskId
+     */
     private async updateTask(taskId: string) {
         this._taskId = taskId;
         await this.loadTask();
     }
 
+    /**
+     *
+     */
     private async loadTask() {
         try {
             this._task = await this.mcpClient.getTask(this._taskId);
@@ -85,33 +108,58 @@ export class TaskDetailPanel {
         }
     }
 
+    /**
+     * Builds update object from form data
+     * @param data - Form data
+     * @returns Update object
+     */
+    private buildUpdateObject(data: any): any {
+        const updates: any = {};
+        if (data.title !== undefined) updates.title = data.title;
+        if (data.description !== undefined) updates.description = data.description;
+        if (data.goal !== undefined) updates.goal = data.goal;
+        if (data.assignee !== undefined) updates.assignee = data.assignee;
+        if (data.status !== undefined) updates.status = data.status;
+        if (data.estimate !== undefined) updates.estimate = data.estimate;
+        updates.ifVersion = this._task?.version;
+        return updates;
+    }
+
+    /**
+     * Handles successful task update
+     */
+    private handleUpdateSuccess(): void {
+        vscode.window.showInformationMessage('Task updated successfully');
+        this.loadTask();
+        vscode.commands.executeCommand('wbsTree.refresh');
+    }
+
+    /**
+     * Handles update conflict
+     */
+    private async handleUpdateConflict(): Promise<void> {
+        const choice = await vscode.window.showWarningMessage(
+            'Task has been modified by another user. Your version is outdated.',
+            'Reload',
+            'Cancel'
+        );
+        if (choice === 'Reload') {
+            this.loadTask();
+        }
+    }
+
+    /**
+     * @param data - Form data to save
+     */
     private async saveTask(data: any) {
         try {
-            const updates: any = {};
-            if (data.title !== undefined) updates.title = data.title;
-            if (data.description !== undefined) updates.description = data.description;
-            if (data.goal !== undefined) updates.goal = data.goal;
-            if (data.assignee !== undefined) updates.assignee = data.assignee;
-            if (data.status !== undefined) updates.status = data.status;
-            if (data.estimate !== undefined) updates.estimate = data.estimate;
-            updates.ifVersion = this._task?.version;
-
+            const updates = this.buildUpdateObject(data);
             const result = await this.mcpClient.updateTask(this._taskId, updates);
             
             if (result.success) {
-                vscode.window.showInformationMessage('Task updated successfully');
-                this.loadTask(); // Reload to get updated version
-                // Trigger tree refresh
-                vscode.commands.executeCommand('wbsTree.refresh');
+                this.handleUpdateSuccess();
             } else if (result.conflict) {
-                const choice = await vscode.window.showWarningMessage(
-                    'Task has been modified by another user. Your version is outdated.',
-                    'Reload',
-                    'Cancel'
-                );
-                if (choice === 'Reload') {
-                    this.loadTask();
-                }
+                await this.handleUpdateConflict();
             } else {
                 vscode.window.showErrorMessage(`Failed to update task: ${result.error}`);
             }
@@ -122,6 +170,11 @@ export class TaskDetailPanel {
 
 
 
+    /**
+     *
+     * @param task
+     * @returns string
+     */
     private getHtmlForWebview(task: Task): string {
         return `<!DOCTYPE html>
 <html lang="en">
@@ -286,6 +339,11 @@ export class TaskDetailPanel {
 </html>`;
     }
 
+    /**
+     *
+     * @param text
+     * @returns string
+     */
     private escapeHtml(text: string): string {
         return text
             .replace(/&/g, '&amp;')
@@ -295,6 +353,9 @@ export class TaskDetailPanel {
             .replace(/'/g, '&#039;');
     }
 
+    /**
+     *
+     */
     public dispose() {
         TaskDetailPanel.currentPanel = undefined;
         this._panel.dispose();

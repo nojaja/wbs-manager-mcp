@@ -24,14 +24,23 @@ interface JsonRpcNotification {
     params?: any;
 }
 
+/**
+ *
+ */
 class StdioMCPServer {
     private repo: WBSRepository;
 
+    /**
+     *
+     */
     constructor() {
         this.repo = new WBSRepository();
         this.setupStdioHandlers();
     }
 
+    /**
+     *
+     */
     private setupStdioHandlers() {
         process.stdin.setEncoding('utf8');
         let buffer = '';
@@ -62,6 +71,10 @@ class StdioMCPServer {
         process.on('SIGTERM', () => process.exit(0));
     }
 
+    /**
+     *
+     * @param message
+     */
     private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
         try {
             console.error(`[MCP Server] Received: ${message.method}`, message.params);
@@ -89,6 +102,11 @@ class StdioMCPServer {
         }
     }
 
+    /**
+     *
+     * @param request
+     * @returns Promise<JsonRpcResponse>
+     */
     private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
         const { method, params, id } = request;
 
@@ -238,6 +256,10 @@ class StdioMCPServer {
         }
     }
 
+    /**
+     *
+     * @param notification
+     */
     private async handleNotification(notification: JsonRpcNotification) {
         const { method } = notification;
 
@@ -251,6 +273,236 @@ class StdioMCPServer {
         }
     }
 
+    /**
+     * Handles project creation
+     * @param args - Project creation arguments
+     * @returns Tool response
+     */
+    private async handleCreateProject(args: any) {
+        try {
+            const project = await this.repo.createProject(args.title, args.description || '');
+            return {
+                content: [{
+                    type: 'text',
+                    text: `✅ Project created successfully!\n\nTitle: ${project.title}\nID: ${project.id}\nDescription: ${project.description || 'None'}\nCreated: ${project.created_at}`
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to create project: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * Handles project listing
+     * @returns Tool response
+     */
+    private async handleListProjects() {
+        try {
+            const projects = await this.repo.listProjects();
+            return {
+                content: [{
+                    type: 'text',
+                    text: JSON.stringify(projects, null, 2)
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to list projects: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * Handles task creation
+     * @param args - Task creation arguments
+     * @returns Tool response
+     */
+    private async handleCreateTask(args: any) {
+        try {
+            const task = await this.repo.createTask(
+                args.projectId,
+                args.title,
+                args.description || '',
+                args.parentId || null,
+                args.assignee || null,
+                args.estimate || null
+            );
+            return {
+                content: [{
+                    type: 'text',
+                    text: `✅ Task created successfully!\n\nTitle: ${task.title}\nID: ${task.id}\nProject: ${task.project_id}\nAssignee: ${task.assignee || 'Unassigned'}\nEstimate: ${task.estimate || 'Not set'}\nCreated: ${task.created_at}`
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * Handles task retrieval
+     * @param args - Task get arguments
+     * @returns Tool response
+     */
+    private async handleGetTask(args: any) {
+        try {
+            const task = await this.repo.getTask(args.taskId);
+            if (!task) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `❌ Task not found: ${args.taskId}`
+                    }]
+                };
+            }
+            return {
+                content: [{
+                    type: 'text',
+                    text: JSON.stringify(task, null, 2)
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * Checks if task exists and returns it
+     * @param taskId - Task ID
+     * @returns Task or null
+     */
+    private async getTaskForUpdate(taskId: string) {
+        const task = await this.repo.getTask(taskId);
+        if (!task) {
+            return {
+                error: {
+                    content: [{
+                        type: 'text',
+                        text: `❌ Task not found: ${taskId}`
+                    }]
+                }
+            };
+        }
+        return { task };
+    }
+
+    /**
+     * Validates version for optimistic locking
+     * @param args - Update arguments
+     * @param currentTask - Current task
+     * @returns Error response or null
+     */
+    private validateTaskVersion(args: any, currentTask: any) {
+        if (args.ifVersion !== undefined && currentTask.version !== args.ifVersion) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Task has been modified by another user. Expected version ${args.ifVersion}, but current version is ${currentTask.version}`
+                }]
+            };
+        }
+        return null;
+    }
+
+    /**
+     * Builds update object for task
+     * @param args - Update arguments
+     * @param currentTask - Current task
+     * @returns Update object
+     */
+    private buildTaskUpdate(args: any, currentTask: any) {
+        return {
+            title: args.title !== undefined ? args.title : currentTask.title,
+            description: args.description !== undefined ? args.description : currentTask.description,
+            assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
+            status: args.status !== undefined ? args.status : currentTask.status,
+            estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,
+            ifVersion: args.ifVersion
+        };
+    }
+
+    /**
+     * Handles task update
+     * @param args - Task update arguments
+     * @returns Tool response
+     */
+    private async handleUpdateTask(args: any) {
+        try {
+            const taskResult = await this.getTaskForUpdate(args.taskId);
+            if (taskResult.error) {
+                return taskResult.error;
+            }
+
+            const currentTask = taskResult.task;
+            const versionError = this.validateTaskVersion(args, currentTask);
+            if (versionError) {
+                return versionError;
+            }
+
+            const updateData = this.buildTaskUpdate(args, currentTask);
+            const updatedTask = await this.repo.updateTask(args.taskId, updateData);
+
+            return {
+                content: [{
+                    type: 'text',
+                    text: `✅ Task updated successfully!\n\n${JSON.stringify(updatedTask, null, 2)}`
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to update task: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * Handles task listing
+     * @param args - Task list arguments
+     * @returns Tool response
+     */
+    private async handleListTasks(args: any) {
+        try {
+            const tasks = await this.repo.listTasks(args.projectId);
+            return {
+                content: [{
+                    type: 'text',
+                    text: JSON.stringify(tasks, null, 2)
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * @param params - Tool call parameters
+     * @returns Promise<any>
+     */
     private async handleToolCall(params: any) {
         const { name, arguments: args = {} } = params ?? {};
 
@@ -258,161 +510,26 @@ class StdioMCPServer {
 
         switch (name) {
             case 'wbs.createProject':
-                try {
-                    const project = await this.repo.createProject(args.title, args.description || '');
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `✅ Project created successfully!\n\nTitle: ${project.title}\nID: ${project.id}\nDescription: ${project.description || 'None'}\nCreated: ${project.created_at}`
-                        }]
-                    };
-                } catch (error) {
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `❌ Failed to create project: ${error instanceof Error ? error.message : String(error)}`
-                        }]
-                    };
-                }
-
+                return this.handleCreateProject(args);
             case 'wbs.listProjects':
-                try {
-                    const projects = await this.repo.listProjects();
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: JSON.stringify(projects, null, 2)
-                        }]
-                    };
-                } catch (error) {
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `❌ Failed to list projects: ${error instanceof Error ? error.message : String(error)}`
-                        }]
-                    };
-                }
-
+                return this.handleListProjects();
             case 'wbs.createTask':
-                try {
-                    const task = await this.repo.createTask(
-                        args.projectId,
-                        args.title,
-                        args.description || '',
-                        args.parentId || null,
-                        args.assignee || null,
-                        args.estimate || null
-                    );
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `✅ Task created successfully!\n\nTitle: ${task.title}\nID: ${task.id}\nProject: ${task.project_id}\nAssignee: ${task.assignee || 'Unassigned'}\nEstimate: ${task.estimate || 'Not set'}\nCreated: ${task.created_at}`
-                        }]
-                    };
-                } catch (error) {
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}`
-                        }]
-                    };
-                }
-
+                return this.handleCreateTask(args);
             case 'wbs.getTask':
-                try {
-                    const task = await this.repo.getTask(args.taskId);
-                    if (!task) {
-                        return {
-                            content: [{
-                                type: 'text',
-                                text: `❌ Task not found: ${args.taskId}`
-                            }]
-                        };
-                    }
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: JSON.stringify(task, null, 2)
-                        }]
-                    };
-                } catch (error) {
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}`
-                        }]
-                    };
-                }
-
+                return this.handleGetTask(args);
             case 'wbs.updateTask':
-                try {
-                    const currentTask = await this.repo.getTask(args.taskId);
-                    if (!currentTask) {
-                        return {
-                            content: [{
-                                type: 'text',
-                                text: `❌ Task not found: ${args.taskId}`
-                            }]
-                        };
-                    }
-
-                    // Version check for optimistic locking
-                    if (args.ifVersion !== undefined && currentTask.version !== args.ifVersion) {
-                        return {
-                            content: [{
-                                type: 'text',
-                                text: `❌ Task has been modified by another user. Expected version ${args.ifVersion}, but current version is ${currentTask.version}`
-                            }]
-                        };
-                    }
-
-                    const updatedTask = await this.repo.updateTask(args.taskId, {
-                        title: args.title !== undefined ? args.title : currentTask.title,
-                        description: args.description !== undefined ? args.description : currentTask.description,
-                        assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
-                        status: args.status !== undefined ? args.status : currentTask.status,
-                        estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,
-                        ifVersion: args.ifVersion
-                    });
-
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `✅ Task updated successfully!\n\n${JSON.stringify(updatedTask, null, 2)}`
-                        }]
-                    };
-                } catch (error) {
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `❌ Failed to update task: ${error instanceof Error ? error.message : String(error)}`
-                        }]
-                    };
-                }
-
+                return this.handleUpdateTask(args);
             case 'wbs.listTasks':
-                try {
-                    const tasks = await this.repo.listTasks(args.projectId);
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: JSON.stringify(tasks, null, 2)
-                        }]
-                    };
-                } catch (error) {
-                    return {
-                        content: [{
-                            type: 'text',
-                            text: `❌ Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`
-                        }]
-                    };
-                }
-
+                return this.handleListTasks(args);
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
     }
 
+    /**
+     *
+     * @param response
+     */
     private sendResponse(response: JsonRpcResponse) {
         const responseStr = JSON.stringify(response);
         console.error(`[MCP Server] Sending: ${responseStr}`);

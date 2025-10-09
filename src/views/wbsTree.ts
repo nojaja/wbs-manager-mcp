@@ -22,24 +22,44 @@ interface Project {
     tasks?: Task[];
 }
 
+/**
+ *
+ */
 export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private mcpClient: MCPClient;
 
+    /**
+     *
+     * @param mcpClient
+     */
     constructor(mcpClient: MCPClient) {
         this.mcpClient = mcpClient;
     }
 
+    /**
+     *
+     */
     refresh(): void {
         this._onDidChangeTreeData.fire();
     }
 
+    /**
+     *
+     * @param element
+     * @returns vscode.TreeItem
+     */
     getTreeItem(element: TreeItem): vscode.TreeItem {
         return element;
     }
 
+    /**
+     *
+     * @param element
+     * @returns Promise<TreeItem[]>
+     */
     async getChildren(element?: TreeItem): Promise<TreeItem[]> {
         if (!element) {
             // Root level - show projects
@@ -64,6 +84,10 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         return [];
     }
 
+    /**
+     *
+     * @returns Promise<TreeItem[]>
+     */
     private async getProjects(): Promise<TreeItem[]> {
         try {
             const projects = await this.mcpClient.listProjects();
@@ -80,6 +104,11 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         }
     }
 
+    /**
+     *
+     * @param projectId
+     * @returns Promise<TreeItem[]>
+     */
     private async getTasksForProject(projectId: string): Promise<TreeItem[]> {
         try {
             const tasks = await this.mcpClient.listTasks(projectId);
@@ -97,6 +126,11 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         }
     }
 
+    /**
+     *
+     * @param task
+     * @returns string
+     */
     private getTaskDescription(task: Task): string {
         const parts: string[] = [];
         if (task.status) parts.push(`[${task.status}]`);
@@ -108,7 +142,19 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
 }
 
+/**
+ *
+ */
 class TreeItem extends vscode.TreeItem {
+    /**
+     *
+     * @param label
+     * @param itemId
+     * @param contextValue
+     * @param collapsibleState
+     * @param description
+     * @param task
+     */
     constructor(
         public readonly label: string,
         public readonly itemId: string,

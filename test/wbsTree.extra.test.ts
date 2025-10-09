@@ -1,0 +1,34 @@
+import { WBSTreeProvider } from '../src/views/wbsTree';
+
+describe('WBSTreeProvider extra tests', () => {
+  const fakeClient: any = { listProjects: jest.fn(), listTasks: jest.fn() };
+  let provider: WBSTreeProvider;
+
+  beforeEach(() => {
+    provider = new WBSTreeProvider(fakeClient);
+    jest.clearAllMocks();
+  });
+
+  test('getChildren root calls getProjects', async () => {
+    fakeClient.listProjects.mockResolvedValue([{ id: 'p1', title: 'P1' }]);
+    const children = await provider.getChildren();
+    expect(children.length).toBe(1);
+    expect(fakeClient.listProjects).toHaveBeenCalled();
+  });
+
+  test('getChildren for project returns tasks', async () => {
+    const projItem: any = { contextValue: 'project', itemId: 'p1' };
+    fakeClient.listTasks.mockResolvedValue([{ id: 't1', title: 'T1', status: 'pending' }]);
+    const children = await provider.getChildren(projItem);
+    expect(children.length).toBe(1);
+    expect(fakeClient.listTasks).toHaveBeenCalledWith('p1');
+  });
+
+  test('getChildren for task with children returns child nodes', async () => {
+    const task = { id: 't1', title: 'T1', status: 'pending', children: [{ id: 't1-1', title: 'Child', status: 'pending' }] };
+    const taskItem: any = { contextValue: 'task', task };
+    const children = await provider.getChildren(taskItem);
+    expect(children.length).toBe(1);
+    expect(children[0].label).toBe('Child');
+  });
+});

@@ -32,6 +32,10 @@ export interface Task {
 
 let dbPromise: Promise<Database> | null = null;
 
+/**
+ *
+ * @returns string
+ */
 function resolveDatabasePath(): string {
     const baseDir = process.env.WBS_MCP_DATA_DIR && process.env.WBS_MCP_DATA_DIR.trim().length > 0
         ? process.env.WBS_MCP_DATA_DIR
@@ -44,6 +48,10 @@ function resolveDatabasePath(): string {
 const DB_PATH = resolveDatabasePath();
 const DB_DIR = path.dirname(DB_PATH);
 
+/**
+ *
+ * @returns Promise<Database>
+ */
 async function getDatabase(): Promise<Database> {
     if (!dbPromise) {
         if (!fs.existsSync(DB_DIR)) {
@@ -61,6 +69,9 @@ async function getDatabase(): Promise<Database> {
     return dbPromise;
 }
 
+/**
+ *
+ */
 export async function initializeDatabase(): Promise<void> {
     const db = await getDatabase();
 
@@ -124,6 +135,10 @@ export async function initializeDatabase(): Promise<void> {
     await seedInitialData(db);
 }
 
+/**
+ *
+ * @param db
+ */
 async function seedInitialData(db: Database): Promise<void> {
     const existing = await db.get<{ count: number }>(
         'SELECT COUNT(*) as count FROM projects'
@@ -274,11 +289,24 @@ async function seedInitialData(db: Database): Promise<void> {
     );
 }
 
+/**
+ *
+ */
 export class WBSRepository {
+    /**
+     *
+     * @returns Promise<Database>
+     */
     private async db(): Promise<Database> {
         return getDatabase();
     }
 
+    /**
+     *
+     * @param title
+     * @param description
+     * @returns Promise<Project>
+     */
     async createProject(title: string, description: string = ''): Promise<Project> {
         const db = await this.db();
         const id = uuidv4();
@@ -297,6 +325,10 @@ export class WBSRepository {
         return this.getProject(id) as Promise<Project>;
     }
 
+    /**
+     *
+     * @returns Promise<Project[]>
+     */
     async listProjects(): Promise<Project[]> {
         const db = await this.db();
         const rows = await db.all<Project[]>(
@@ -307,6 +339,11 @@ export class WBSRepository {
         return rows;
     }
 
+    /**
+     *
+     * @param id
+     * @returns Promise<Project | null>
+     */
     async getProject(id: string): Promise<Project | null> {
         const db = await this.db();
         const project = await db.get<Project>(
@@ -318,6 +355,17 @@ export class WBSRepository {
         return project ?? null;
     }
 
+    /**
+     *
+     * @param projectId
+     * @param title
+     * @param description
+     * @param parentId
+     * @param assignee
+     * @param estimate
+     * @param goal
+     * @returns Promise<Task>
+     */
     async createTask(
         projectId: string,
         title: string,
@@ -351,6 +399,11 @@ export class WBSRepository {
         return (await this.getTask(id))!;
     }
 
+    /**
+     *
+     * @param projectId
+     * @returns Promise<Task[]>
+     */
     async listTasks(projectId: string): Promise<Task[]> {
         const db = await this.db();
         const rows = await db.all<Task[]>(
@@ -382,6 +435,11 @@ export class WBSRepository {
         return roots;
     }
 
+    /**
+     *
+     * @param taskId
+     * @returns Promise<Task | null>
+     */
     async getTask(taskId: string): Promise<Task | null> {
         const db = await this.db();
         const task = await db.get<Task>(
@@ -394,6 +452,12 @@ export class WBSRepository {
         return task ?? null;
     }
 
+    /**
+     *
+     * @param taskId
+     * @param updates
+     * @returns Promise<Task>
+     */
     async updateTask(taskId: string, updates: Partial<Task> & { ifVersion?: number }): Promise<Task> {
         const db = await this.db();
         const current = await this.getTask(taskId);
