@@ -227,6 +227,12 @@ class TreeItem extends vscode.TreeItem {
             } else {
                 this.iconPath = new vscode.ThemeIcon('circle-outline');
             }
+            // タスクノードクリック時に詳細パネルを開くコマンドを設定
+            this.command = {
+                title: 'Open Task Details',
+                command: 'wbsTree.openTask',
+                arguments: [this]
+            };
         }
     }
 }
