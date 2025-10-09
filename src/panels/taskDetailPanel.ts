@@ -2,7 +2,7 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import { MCPClient } from '../mcpClient';
+import { MCPClient, TaskArtifactAssignment, TaskCompletionCondition } from '../mcpClient';
 
 interface Task {
     id: string;
@@ -15,6 +15,9 @@ interface Task {
     status: string;
     estimate?: string;
     version: number;
+    deliverables?: TaskArtifactAssignment[];
+    prerequisites?: TaskArtifactAssignment[];
+    completionConditions?: TaskCompletionCondition[];
 }
 
 /**
@@ -143,6 +146,9 @@ export class TaskDetailPanel {
         if (data.assignee !== undefined) updates.assignee = data.assignee;
         if (data.status !== undefined) updates.status = data.status;
         if (data.estimate !== undefined) updates.estimate = data.estimate;
+        if (Array.isArray(data.deliverables)) updates.deliverables = data.deliverables;
+        if (Array.isArray(data.prerequisites)) updates.prerequisites = data.prerequisites;
+        if (Array.isArray(data.completionConditions)) updates.completionConditions = data.completionConditions;
         updates.ifVersion = this._task?.version;
         return updates;
     }
@@ -206,6 +212,67 @@ export class TaskDetailPanel {
 
 
     /**
+     * 成果物割当のテキスト整形
+     * @param assignments 成果物割当
+     * @returns 改行区切り文字列
+     */
+    private formatArtifactAssignments(assignments?: TaskArtifactAssignment[]): string {
+        if (!Array.isArray(assignments) || assignments.length === 0) {
+            return '';
+        }
+
+        return assignments
+            .slice()
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((assignment) => {
+                const artifactTitle = assignment.artifact?.title || assignment.artifact_id || assignment.artifact?.id || '';
+                const crud = assignment.crudOperations ? `:${assignment.crudOperations}` : '';
+                return `${artifactTitle}${crud}`;
+            })
+            .join('\n');
+    }
+
+    /**
+     * 成果物割当のサマリー生成
+     * @param assignments 成果物割当
+     * @returns 人が読みやすいサマリー
+     */
+    private summarizeArtifactAssignments(assignments?: TaskArtifactAssignment[]): string[] {
+        if (!Array.isArray(assignments) || assignments.length === 0) {
+            return [];
+        }
+
+        return assignments
+            .slice()
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((assignment) => {
+                const artifactId = assignment.artifact_id || assignment.artifact?.id || '';
+                const crud = assignment.crudOperations ? ` | CRUD: ${assignment.crudOperations}` : '';
+                const title = assignment.artifact?.title ? ` | ${assignment.artifact.title}` : '';
+                const uri = assignment.artifact?.uri ? ` | ${assignment.artifact.uri}` : '';
+                return `${artifactId}${crud}${title}${uri}`.trim();
+            });
+    }
+
+    /**
+     * 完了条件の整形
+     * @param conditions 完了条件
+     * @returns 改行区切り文字列
+     */
+    private formatCompletionConditions(conditions?: TaskCompletionCondition[]): string {
+        if (!Array.isArray(conditions) || conditions.length === 0) {
+            return '';
+        }
+
+        return conditions
+            .slice()
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((condition) => condition.description ?? '')
+            .filter((description) => description.length > 0)
+            .join('\n');
+    }
+
+    /**
      * Webview用HTML生成処理
      * タスク情報をもとに詳細画面のHTMLを生成する
      * なぜ必要か: WebviewでリッチなUIを動的に生成するため
@@ -213,6 +280,22 @@ export class TaskDetailPanel {
      * @returns HTML文字列
      */
     private getHtmlForWebview(task: Task): string {
+        const deliverablesText = this.formatArtifactAssignments(task.deliverables);
+        const prerequisitesText = this.formatArtifactAssignments(task.prerequisites);
+        const completionText = this.formatCompletionConditions(task.completionConditions);
+        const deliverablesSummary = this.summarizeArtifactAssignments(task.deliverables);
+        const prerequisitesSummary = this.summarizeArtifactAssignments(task.prerequisites);
+        const safeTitle = this.escapeHtml(task.title ?? '');
+        const safeDescription = this.escapeHtml(task.description ?? '');
+        const safeGoal = this.escapeHtml(task.goal ?? '');
+        const safeAssignee = this.escapeHtml(task.assignee ?? '');
+        const safeEstimate = this.escapeHtml(task.estimate ?? '');
+        const safeDeliverablesText = this.escapeHtml(deliverablesText);
+        const safePrerequisitesText = this.escapeHtml(prerequisitesText);
+        const safeCompletionText = this.escapeHtml(completionText);
+        const safeTaskId = this.escapeHtml(task.id);
+        const safeVersion = this.escapeHtml(String(task.version));
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -268,6 +351,17 @@ export class TaskDetailPanel {
             font-family: monospace;
             font-size: 0.85em;
         }
+        .hint {
+            margin-top: 4px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 0.85em;
+        }
+        .artifact-list {
+            margin: 8px 0 0;
+            padding-left: 18px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 0.85em;
+        }
     </style>
 </head>
 <body>
@@ -275,22 +369,22 @@ export class TaskDetailPanel {
     <form id="taskForm">
         <div class="form-group">
             <label for="title">Title *</label>
-            <input type="text" id="title" name="title" required>
+            <input type="text" id="title" name="title" required value="${safeTitle}">
         </div>
 
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description"></textarea>
+            <textarea id="description" name="description">${safeDescription}</textarea>
         </div>
 
         <div class="form-group">
             <label for="goal">Goal</label>
-            <textarea id="goal" name="goal"></textarea>
+            <textarea id="goal" name="goal">${safeGoal}</textarea>
         </div>
 
         <div class="form-group">
             <label for="assignee">Assignee</label>
-            <input type="text" id="assignee" name="assignee">
+            <input type="text" id="assignee" name="assignee" value="${safeAssignee}">
         </div>
 
         <div class="form-group">
@@ -305,17 +399,37 @@ export class TaskDetailPanel {
 
         <div class="form-group">
             <label for="estimate">Estimate</label>
-            <input type="text" id="estimate" name="estimate" placeholder="e.g., 3d, 5h">
+            <input type="text" id="estimate" name="estimate" placeholder="e.g., 3d, 5h" value="${safeEstimate}">
+        </div>
+
+        <div class="form-group">
+            <label for="deliverables">成果物 (artifactId[:CRUD])</label>
+            <textarea id="deliverables" name="deliverables" placeholder="artifact-id:CUD">${safeDeliverablesText}</textarea>
+            <p class="hint">CRUDは任意です（例: spec-doc:UD）。省略すると参照のみの扱いになります。</p>
+            <ul id="deliverablesSummary" class="artifact-list"></ul>
+        </div>
+
+        <div class="form-group">
+            <label for="prerequisites">前提条件 (artifactId[:CRUD])</label>
+            <textarea id="prerequisites" name="prerequisites" placeholder="artifact-id">${safePrerequisitesText}</textarea>
+            <p class="hint">このタスクの実行前に必要な成果物を1行ずつ列挙してください。</p>
+            <ul id="prerequisitesSummary" class="artifact-list"></ul>
+        </div>
+
+        <div class="form-group">
+            <label for="completionConditions">完了条件 (1行につき1条件)</label>
+            <textarea id="completionConditions" name="completionConditions" placeholder="例: 仕様書のレビュー承認">${safeCompletionText}</textarea>
+            <p class="hint">完了条件は記入順に評価されます。</p>
         </div>
 
         <div class="form-group readonly">
             <label>Task ID</label>
-            <input type="text" value="${task.id}" readonly>
+            <input type="text" value="${safeTaskId}" readonly>
         </div>
 
         <div class="form-group readonly">
             <label>Version</label>
-            <input type="text" value="${task.version}" readonly>
+            <input type="text" value="${safeVersion}" readonly>
         </div>
 
         <button type="submit" title="Save (Ctrl+S)">Save</button>
@@ -329,6 +443,28 @@ export class TaskDetailPanel {
 
         // Task data from server (safely passed as JSON)
         const taskData = ${JSON.stringify(task)};
+        const initialDeliverables = ${JSON.stringify(deliverablesText)};
+        const initialPrerequisites = ${JSON.stringify(prerequisitesText)};
+        const initialCompletionConditions = ${JSON.stringify(completionText)};
+        const deliverablesSummary = ${JSON.stringify(deliverablesSummary)};
+        const prerequisitesSummary = ${JSON.stringify(prerequisitesSummary)};
+        
+        // Create title -> id mapping for artifacts
+        const artifactTitleToId = new Map();
+        if (taskData.deliverables) {
+            taskData.deliverables.forEach(d => {
+                if (d.artifact && d.artifact.title && d.artifact.id) {
+                    artifactTitleToId.set(d.artifact.title, d.artifact.id);
+                }
+            });
+        }
+        if (taskData.prerequisites) {
+            taskData.prerequisites.forEach(p => {
+                if (p.artifact && p.artifact.title && p.artifact.id) {
+                    artifactTitleToId.set(p.artifact.title, p.artifact.id);
+                }
+            });
+        }
 
         // Initialize form fields with task data
         document.addEventListener('DOMContentLoaded', () => {
@@ -338,17 +474,78 @@ export class TaskDetailPanel {
             document.getElementById('assignee').value = taskData.assignee || '';
             document.getElementById('status').value = taskData.status || 'pending';
             document.getElementById('estimate').value = taskData.estimate || '';
+            document.getElementById('deliverables').value = initialDeliverables;
+            document.getElementById('prerequisites').value = initialPrerequisites;
+            document.getElementById('completionConditions').value = initialCompletionConditions;
+
+            renderSummary('deliverablesSummary', deliverablesSummary, '成果物はまだ登録されていません。');
+            renderSummary('prerequisitesSummary', prerequisitesSummary, '前提条件はまだ登録されていません。');
         });
+
+        function renderSummary(elementId, lines, emptyMessage) {
+            const container = document.getElementById(elementId);
+            if (!container) {
+                return;
+            }
+            container.innerHTML = '';
+            if (!Array.isArray(lines) || lines.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = emptyMessage;
+                container.appendChild(li);
+                return;
+            }
+            lines.forEach((line) => {
+                const li = document.createElement('li');
+                li.textContent = line;
+                container.appendChild(li);
+            });
+        }
+
+        function parseArtifactText(value) {
+            return value
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0)
+                .map((line) => {
+                    const parts = line.split(':');
+                    const artifactTitleOrId = parts.shift()?.trim() ?? '';
+                    const crud = parts.join(':').trim();
+                    
+                    // Try to convert title to ID, fallback to original value if not found
+                    const artifactId = artifactTitleToId.get(artifactTitleOrId) || artifactTitleOrId;
+                    
+                    return {
+                        artifactId,
+                        crudOperations: crud.length > 0 ? crud : undefined
+                    };
+                })
+                .filter((entry) => entry.artifactId.length > 0);
+        }
+
+        function parseConditionsText(value) {
+            return value
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0)
+                .map((line) => ({ description: line }));
+        }
 
         // Save function
         function saveTask() {
+            const deliverables = parseArtifactText(document.getElementById('deliverables').value);
+            const prerequisites = parseArtifactText(document.getElementById('prerequisites').value);
+            const completionConditions = parseConditionsText(document.getElementById('completionConditions').value);
+
             const formData = {
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
                 goal: document.getElementById('goal').value,
                 assignee: document.getElementById('assignee').value,
                 status: document.getElementById('status').value,
-                estimate: document.getElementById('estimate').value
+                estimate: document.getElementById('estimate').value,
+                deliverables,
+                prerequisites,
+                completionConditions
             };
             
             console.log('Sending form data:', formData);

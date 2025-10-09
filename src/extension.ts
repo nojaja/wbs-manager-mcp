@@ -9,8 +9,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 // WBSツリープロバイダ（ツリー表示用）
 import { WBSTreeProvider, WBSTreeDragAndDropController } from './views/wbsTree';
+import { ProjectArtifactTreeProvider, ProjectArtifactTreeItem } from './views/projectArtifactTree';
 // タスク詳細パネル（WebView表示用）
 import { TaskDetailPanel } from './panels/taskDetailPanel';
+// 成果物詳細パネル（WebView表示用）
+import { ArtifactDetailPanel } from './panels/artifactDetailPanel';
 // MCPクライアント（API通信・管理用）
 import { MCPClient } from './mcpClient';
 
@@ -21,6 +24,8 @@ let serverProcess: child_process.ChildProcess | null = null;
 let outputChannel: vscode.OutputChannel;
 // WBSツリープロバイダのインスタンス
 let treeProvider: WBSTreeProvider;
+// 成果物ツリープロバイダのインスタンス
+let artifactTreeProvider: ProjectArtifactTreeProvider;
 // MCPクライアントのインスタンス
 let mcpClient: MCPClient;
 
@@ -52,10 +57,18 @@ export async function activate(context: vscode.ExtensionContext) {
         dragAndDropController
     });
 
+    // 成果物ツリーの初期化
+    artifactTreeProvider = new ProjectArtifactTreeProvider(mcpClient);
+    const projectArtifactTreeView = vscode.window.createTreeView('projectArtifactTree', {
+        treeDataProvider: artifactTreeProvider,
+        showCollapseAll: false
+    });
+
     // コマンド登録: サーバ起動
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         await startLocalServer(context);
         treeProvider.refresh();
+        artifactTreeProvider.refresh({ resetProject: true });
     });
 
     // コマンド登録: ツリーリフレッシュ
@@ -68,6 +81,30 @@ export async function activate(context: vscode.ExtensionContext) {
             await startLocalServer(context);
         }
         treeProvider.refresh();
+    });
+
+    const refreshArtifactTreeCommand = vscode.commands.registerCommand('projectArtifactTree.refresh', async () => {
+        artifactTreeProvider.refresh();
+    });
+
+    const createArtifactCommand = vscode.commands.registerCommand('projectArtifactTree.createArtifact', async () => {
+        await artifactTreeProvider.createArtifact();
+    });
+
+    const editArtifactCommand = vscode.commands.registerCommand('projectArtifactTree.editArtifact', async (item?: ProjectArtifactTreeItem) => {
+        const target = item ?? (projectArtifactTreeView.selection && projectArtifactTreeView.selection.length > 0
+            ? projectArtifactTreeView.selection[0]
+            : undefined);
+        if (target) {
+            ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, mcpClient);
+        }
+    });
+
+    const deleteArtifactCommand = vscode.commands.registerCommand('projectArtifactTree.deleteArtifact', async (item?: ProjectArtifactTreeItem) => {
+        const target = item ?? (projectArtifactTreeView.selection && projectArtifactTreeView.selection.length > 0
+            ? projectArtifactTreeView.selection[0]
+            : undefined);
+        await artifactTreeProvider.deleteArtifact(target);
     });
 
     // コマンド登録: タスク詳細パネルを開く
@@ -111,8 +148,13 @@ export async function activate(context: vscode.ExtensionContext) {
         createTaskCommand,
         addChildTaskCommand,
         deleteTaskCommand,
+        refreshArtifactTreeCommand,
+        createArtifactCommand,
+        editArtifactCommand,
+        deleteArtifactCommand,
         dragAndDropController,
         treeView,
+        projectArtifactTreeView,
         outputChannel
     );
 }

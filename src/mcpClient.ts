@@ -23,6 +23,46 @@ interface JsonRpcResponse {
     };
 }
 
+export type TaskArtifactRole = 'deliverable' | 'prerequisite';
+
+export interface ProjectArtifact {
+    id: string;
+    project_id: string;
+    title: string;
+    uri?: string;
+    description?: string;
+    created_at?: string;
+    updated_at?: string;
+    version: number;
+}
+
+export interface TaskArtifactAssignment {
+    id: string;
+    artifact_id: string;
+    role: TaskArtifactRole;
+    crudOperations?: string;
+    order: number;
+    artifact: ProjectArtifact;
+}
+
+export interface TaskCompletionCondition {
+    id: string;
+    task_id: string;
+    description: string;
+    order: number;
+}
+
+export interface ArtifactReferenceInput {
+    artifactId: string;
+    crudOperations?: string | null;
+}
+
+export interface CompletionConditionInput {
+    description: string;
+}
+
+type SanitizedArtifactInput = { artifactId: string; crudOperations?: string | null };
+
 /**
  * MCPクライアントクラス
  * サーバプロセスの起動・通信・リクエスト管理を行う
@@ -341,12 +381,31 @@ export class MCPClient {
      * なぜ必要か: タスク編集・保存時にサーバDBへ反映するため
      * @param taskId タスクID
      * @param updates 更新内容
+     * @param updates.deliverables 成果物の割当一覧（任意）
+     * @param updates.prerequisites 前提条件の成果物割当一覧（任意）
+     * @param updates.completionConditions 完了条件の一覧（任意）
      * @returns 更新結果オブジェクト
      */
     async updateTask(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
         try {
+            const deliverables = this.sanitizeArtifactInputs(updates.deliverables);
+            const prerequisites = this.sanitizeArtifactInputs(updates.prerequisites);
+            const completionConditions = this.sanitizeCompletionInputs(updates.completionConditions);
+
+            const toolArguments: Record<string, unknown> = { taskId, ...updates };
+
+            if (deliverables !== undefined) {
+                toolArguments.deliverables = deliverables;
+            }
+            if (prerequisites !== undefined) {
+                toolArguments.prerequisites = prerequisites;
+            }
+            if (completionConditions !== undefined) {
+                toolArguments.completionConditions = completionConditions;
+            }
+
             // 理由: サーバAPI呼び出し・パース失敗時もエラー内容を返す
-            const result = await this.callTool('wbs.updateTask', { taskId, ...updates });
+            const result = await this.callTool('wbs.updateTask', toolArguments);
             const content = result.content?.[0]?.text;
             // 更新成功
             if (content?.includes('✅')) {
@@ -367,7 +426,7 @@ export class MCPClient {
      * タスク作成処理
      * 指定プロジェクトに新しいタスクを作成し、結果を返す
      * なぜ必要か: ツリー上からタスクを追加する機能を提供するため
-     * @param params 作成パラメータ
+    * @param params 作成パラメータ
     * @param params.projectId プロジェクトID
     * @param params.title タスクタイトル
     * @param params.description タスク説明
@@ -375,6 +434,9 @@ export class MCPClient {
     * @param params.assignee 担当者
     * @param params.estimate 見積もり
     * @param params.goal ゴール
+    * @param params.deliverables 成果物の割当一覧（任意）
+    * @param params.prerequisites 前提条件の成果物割当一覧（任意）
+    * @param params.completionConditions 完了条件の一覧（任意）
      * @returns 作成結果（成功時はタスクIDを含む）
      */
     async createTask(params: {
@@ -385,9 +447,16 @@ export class MCPClient {
         assignee?: string | null;
         estimate?: string | null;
         goal?: string | null;
+        deliverables?: ArtifactReferenceInput[];
+        prerequisites?: ArtifactReferenceInput[];
+        completionConditions?: CompletionConditionInput[];
     }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }> {
         try {
-            const result = await this.callTool('wbs.createTask', {
+            const deliverables = this.sanitizeArtifactInputs(params.deliverables);
+            const prerequisites = this.sanitizeArtifactInputs(params.prerequisites);
+            const completionConditions = this.sanitizeCompletionInputs(params.completionConditions);
+
+            const toolArguments: Record<string, unknown> = {
                 projectId: params.projectId,
                 title: params.title ?? 'New Task',
                 description: params.description ?? '',
@@ -395,7 +464,19 @@ export class MCPClient {
                 assignee: params.assignee ?? null,
                 estimate: params.estimate ?? null,
                 goal: params.goal ?? null
-            });
+            };
+
+            if (deliverables !== undefined) {
+                toolArguments.deliverables = deliverables;
+            }
+            if (prerequisites !== undefined) {
+                toolArguments.prerequisites = prerequisites;
+            }
+            if (completionConditions !== undefined) {
+                toolArguments.completionConditions = completionConditions;
+            }
+
+            const result = await this.callTool('wbs.createTask', toolArguments);
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 const idMatch = content.match(/ID:\s*(.+)/);
@@ -406,6 +487,146 @@ export class MCPClient {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return { success: false, error: message };
+        }
+    }
+
+    /**
+     * プロジェクト成果物一覧取得処理
+     * 指定プロジェクトの成果物一覧を取得する
+     * なぜ必要か: 成果物ツリービューに一覧を表示するため
+     * @param projectId プロジェクトID
+     * @returns 成果物配列
+     */
+    async listProjectArtifacts(projectId: string): Promise<ProjectArtifact[]> {
+        try {
+            const result = await this.callTool('artifacts.listProjectArtifacts', { projectId });
+            const content = result.content?.[0]?.text;
+            if (content) {
+                return JSON.parse(content) as ProjectArtifact[];
+            }
+            return [];
+        } catch (error) {
+            this.outputChannel.appendLine(`[MCP Client] Failed to list artifacts: ${error}`);
+            return [];
+        }
+    }
+
+    /**
+     * プロジェクト成果物作成処理
+     * 成果物を新規登録し、作成結果を返す
+     * なぜ必要か: 成果物管理機能から新規登録するため
+     * @param params 作成パラメータ
+     * @param params.projectId プロジェクトID
+     * @param params.title 成果物タイトル
+     * @param params.uri 関連URI（任意）
+     * @param params.description 説明（任意）
+     * @returns 作成結果
+     */
+    async createProjectArtifact(params: {
+        projectId: string;
+        title: string;
+        uri?: string | null;
+        description?: string | null;
+    }): Promise<{ success: boolean; artifact?: ProjectArtifact; error?: string }> {
+        try {
+            const result = await this.callTool('artifacts.createProjectArtifact', {
+                projectId: params.projectId,
+                title: params.title,
+                uri: params.uri ?? null,
+                description: params.description ?? null
+            });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('❌')) {
+                return { success: false, error: content };
+            }
+            const artifact = JSON.parse(content) as ProjectArtifact;
+            return { success: true, artifact };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return { success: false, error: message };
+        }
+    }
+
+    /**
+     * プロジェクト成果物更新処理
+     * 既存成果物を更新し、更新結果を返す
+     * なぜ必要か: 成果物情報の編集に対応するため
+     * @param params 更新パラメータ
+     * @param params.artifactId 成果物ID
+     * @param params.title 成果物タイトル（任意）
+     * @param params.uri 関連URI（任意）
+     * @param params.description 説明（任意）
+     * @param params.version 競合検出用バージョン（任意）
+     * @returns 更新結果
+     */
+    async updateProjectArtifact(params: {
+        artifactId: string;
+        title?: string;
+        uri?: string | null;
+        description?: string | null;
+        version?: number;
+    }): Promise<{ success: boolean; artifact?: ProjectArtifact; conflict?: boolean; error?: string }> {
+        try {
+            const result = await this.callTool('artifacts.updateProjectArtifact', {
+                artifactId: params.artifactId,
+                title: params.title,
+                uri: params.uri ?? null,
+                description: params.description ?? null,
+                ifVersion: params.version
+            });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('modified by another user')) {
+                return { success: false, conflict: true, error: content };
+            }
+            if (content.includes('❌')) {
+                return { success: false, error: content };
+            }
+            const artifact = JSON.parse(content) as ProjectArtifact;
+            return { success: true, artifact };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return { success: false, error: message };
+        }
+    }
+
+    /**
+     * プロジェクト成果物取得処理
+     * 指定IDの成果物を取得する
+     * なぜ必要か: 成果物詳細画面で最新情報を表示するため
+     * @param artifactId 成果物ID
+     * @returns 成果物またはnull
+     */
+    async getProjectArtifact(artifactId: string): Promise<ProjectArtifact | null> {
+        try {
+            const result = await this.callTool('artifacts.getProjectArtifact', { artifactId });
+            const content = result.content?.[0]?.text;
+            if (content && !content.includes('❌')) {
+                return JSON.parse(content);
+            }
+            return null;
+        } catch (error) {
+            this.outputChannel.appendLine(`[MCP Client] Failed to get artifact: ${error}`);
+            return null;
+        }
+    }
+
+    /**
+     * プロジェクト成果物削除処理
+     * 指定成果物を削除する
+     * なぜ必要か: 成果物管理から除去するため
+     * @param artifactId 成果物ID
+     * @returns 削除結果
+     */
+    async deleteProjectArtifact(artifactId: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const result = await this.callTool('artifacts.deleteProjectArtifact', { artifactId });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('✅')) {
+                return { success: true };
+            }
+            return { success: false, error: content || 'Unknown error' };
+        } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
     }
 
@@ -467,5 +688,78 @@ export class MCPClient {
         }
         // 保留中リクエストを全てクリア
         this.pendingRequests.clear();
+    }
+
+    /**
+     * 成果物入力サニタイズ処理
+     * 余分な空白や無効エントリを除去する
+     * なぜ必要か: サーバへ送信するデータを安全に整形するため
+     * @param inputs 入力配列
+     * @returns 正規化済み配列またはundefined
+     */
+    private sanitizeArtifactInputs(inputs?: ArtifactReferenceInput[]): SanitizedArtifactInput[] | undefined {
+        if (!Array.isArray(inputs)) {
+            return undefined;
+        }
+
+        const normalized: SanitizedArtifactInput[] = [];
+
+        for (const item of inputs) {
+            const sanitized = this.normalizeArtifactInput(item);
+            if (sanitized) {
+                normalized.push(sanitized);
+            }
+        }
+
+        return normalized;
+    }
+
+    /**
+     * 完了条件入力サニタイズ処理
+     * 余分な空白や空行を除去する
+     * なぜ必要か: サーバへ送信する完了条件を正規化するため
+     * @param inputs 入力配列
+     * @returns 正規化済み配列またはundefined
+     */
+    private sanitizeCompletionInputs(inputs?: CompletionConditionInput[]): Array<{ description: string }> | undefined {
+        if (!Array.isArray(inputs)) {
+            return undefined;
+        }
+
+        const normalized: Array<{ description: string }> = [];
+        for (const item of inputs) {
+            const description = typeof item?.description === 'string' ? item.description.trim() : '';
+            if (description.length > 0) {
+                normalized.push({ description });
+            }
+        }
+
+        return normalized;
+    }
+
+    /**
+     * 成果物流用入力正規化
+     * 与えられた入力を検証し、成果物IDとCRUDを整形して返す
+     * @param input 成果物参照入力
+     * @returns 正規化済み入力またはnull
+     */
+    private normalizeArtifactInput(input: ArtifactReferenceInput | undefined): SanitizedArtifactInput | null {
+        if (!input || typeof input.artifactId !== 'string') {
+            return null;
+        }
+
+        const artifactId = input.artifactId.trim();
+        if (artifactId.length === 0) {
+            return null;
+        }
+
+        if (typeof input.crudOperations === 'string') {
+            const crud = input.crudOperations.trim();
+            if (crud.length > 0) {
+                return { artifactId, crudOperations: crud };
+            }
+        }
+
+        return { artifactId };
     }
 }

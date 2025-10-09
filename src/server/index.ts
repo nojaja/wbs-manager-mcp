@@ -172,7 +172,42 @@ class StdioMCPServer {
                                         assignee: { type: 'string', description: 'Assignee name' },
                                         estimate: { type: 'string', description: 'Time estimate' },
                                         goal: { type: 'string', description: 'Task goal' },
-                                        parentId: { type: 'string', description: 'Parent task ID' }
+                                        parentId: { type: 'string', description: 'Parent task ID' },
+                                        deliverables: {
+                                            type: 'array',
+                                            description: 'Artifacts produced or modified by this task',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    artifactId: { type: 'string' },
+                                                    crudOperations: { type: 'string', description: 'C,R,U,D flags' }
+                                                },
+                                                required: ['artifactId']
+                                            }
+                                        },
+                                        prerequisites: {
+                                            type: 'array',
+                                            description: 'Artifacts required before executing this task',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    artifactId: { type: 'string' },
+                                                    crudOperations: { type: 'string', description: 'Access pattern' }
+                                                },
+                                                required: ['artifactId']
+                                            }
+                                        },
+                                        completionConditions: {
+                                            type: 'array',
+                                            description: 'Conditions that define task completion',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    description: { type: 'string' }
+                                                },
+                                                required: ['description']
+                                            }
+                                        }
                                     },
                                     required: ['projectId', 'title']
                                 }
@@ -200,6 +235,39 @@ class StdioMCPServer {
                                         assignee: { type: 'string', description: 'Assignee name' },
                                         status: { type: 'string', description: 'Task status' },
                                         estimate: { type: 'string', description: 'Time estimate' },
+                                        goal: { type: 'string', description: 'Task goal' },
+                                        deliverables: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    artifactId: { type: 'string' },
+                                                    crudOperations: { type: 'string' }
+                                                },
+                                                required: ['artifactId']
+                                            }
+                                        },
+                                        prerequisites: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    artifactId: { type: 'string' },
+                                                    crudOperations: { type: 'string' }
+                                                },
+                                                required: ['artifactId']
+                                            }
+                                        },
+                                        completionConditions: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    description: { type: 'string' }
+                                                },
+                                                required: ['description']
+                                            }
+                                        },
                                         ifVersion: { type: 'number', description: 'Expected version for optimistic locking' }
                                     },
                                     required: ['taskId']
@@ -258,9 +326,122 @@ class StdioMCPServer {
                                     type: 'object',
                                     properties: {
                                         projectId: { type: 'string', description: 'Project ID' },
-                                        tasks: { type: 'array', description: 'Array of task objects' }
+                                        tasks: {
+                                            type: 'array',
+                                            description: 'Array of task objects',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    title: { type: 'string', description: 'Task title (required)' },
+                                                    description: { type: 'string', description: 'Task description' },
+                                                    parentId: { type: 'string', description: 'Parent task ID (omit for root task)' },
+                                                    assignee: { type: 'string', description: 'Assignee user name' },
+                                                    estimate: { type: 'string', description: 'Estimated effort (text)' },
+                                                    goal: { type: 'string', description: 'Goal or intent for the task' },
+                                                    deliverables: {
+                                                        type: 'array',
+                                                        description: 'Deliverable artifact links',
+                                                        items: {
+                                                            type: 'object',
+                                                            properties: {
+                                                                artifactId: { type: 'string', description: 'Artifact identifier' },
+                                                                crudOperations: { type: 'string', description: 'CRUD operations allowed for the artifact' },
+                                                                crud: { type: 'string', description: 'Deprecated alias for crudOperations' }
+                                                            },
+                                                            required: ['artifactId']
+                                                        }
+                                                    },
+                                                    prerequisites: {
+                                                        type: 'array',
+                                                        description: 'Prerequisite artifact links',
+                                                        items: {
+                                                            type: 'object',
+                                                            properties: {
+                                                                artifactId: { type: 'string', description: 'Artifact identifier' },
+                                                                crudOperations: { type: 'string', description: 'CRUD operations allowed for the artifact' }
+                                                            },
+                                                            required: ['artifactId']
+                                                        }
+                                                    },
+                                                    completionConditions: {
+                                                        type: 'array',
+                                                        description: 'Completion condition descriptions',
+                                                        items: {
+                                                            type: 'object',
+                                                            properties: {
+                                                                description: { type: 'string', description: 'Condition detail' }
+                                                            },
+                                                            required: ['description']
+                                                        }
+                                                    }
+                                                },
+                                                required: ['title']
+                                            }
+                                        }
                                     },
                                     required: ['projectId', 'tasks']
+                                }
+                            },
+                            {
+                                name: 'artifacts.listProjectArtifacts',
+                                description: 'List project artifacts for the given project',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        projectId: { type: 'string', description: 'Project ID' }
+                                    },
+                                    required: ['projectId']
+                                }
+                            },
+                            {
+                                name: 'artifacts.getProjectArtifact',
+                                description: 'Get a specific project artifact by ID',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        artifactId: { type: 'string', description: 'Artifact ID' }
+                                    },
+                                    required: ['artifactId']
+                                }
+                            },
+                            {
+                                name: 'artifacts.createProjectArtifact',
+                                description: 'Create a new project artifact',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        projectId: { type: 'string', description: 'Project ID' },
+                                        title: { type: 'string', description: 'Artifact title' },
+                                        uri: { type: 'string', description: 'File path or URI' },
+                                        description: { type: 'string', description: 'Artifact description' }
+                                    },
+                                    required: ['projectId', 'title']
+                                }
+                            },
+                            {
+                                name: 'artifacts.updateProjectArtifact',
+                                description: 'Update an existing project artifact',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        artifactId: { type: 'string', description: 'Artifact ID' },
+                                        title: { type: 'string', description: 'Artifact title' },
+                                        uri: { type: 'string', description: 'File path or URI' },
+                                        description: { type: 'string', description: 'Artifact description' },
+                                        ifVersion: { type: 'number', description: 'Expected version for optimistic locking' }
+                                    },
+                                    required: ['artifactId']
+                                }
+                            },
+                            {
+                                name: 'artifacts.deleteProjectArtifact',
+                                description: 'Delete a project artifact',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        artifactId: { type: 'string', description: 'Artifact ID' }
+                                    },
+                                    required: ['artifactId']
                                 }
                             }
                         ]
@@ -386,6 +567,24 @@ class StdioMCPServer {
             assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
             status: args.status !== undefined ? args.status : currentTask.status,
             estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,
+            goal: args.goal !== undefined ? args.goal : currentTask.goal,
+            deliverables: Array.isArray(args.deliverables)
+                ? args.deliverables.map((item: any) => ({
+                    artifactId: item?.artifactId,
+                    crudOperations: item?.crudOperations ?? item?.crud ?? null
+                }))
+                : undefined,
+            prerequisites: Array.isArray(args.prerequisites)
+                ? args.prerequisites.map((item: any) => ({
+                    artifactId: item?.artifactId,
+                    crudOperations: item?.crudOperations ?? item?.crud ?? null
+                }))
+                : undefined,
+            completionConditions: Array.isArray(args.completionConditions)
+                ? args.completionConditions
+                    .filter((item: any) => typeof item?.description === 'string' && item.description.trim().length > 0)
+                    .map((item: any) => ({ description: item.description.trim() }))
+                : undefined,
             ifVersion: args.ifVersion
         };
     }
@@ -469,7 +668,22 @@ class StdioMCPServer {
                 args.parentId ?? null,
                 args.assignee ?? null,
                 args.estimate ?? null,
-                args.goal ?? null
+                args.goal ?? null,
+                {
+                    deliverables: Array.isArray(args.deliverables) ? args.deliverables.map((item: any) => ({
+                        artifactId: item?.artifactId,
+                        crudOperations: item?.crudOperations ?? item?.crud ?? null
+                    })) : [],
+                    prerequisites: Array.isArray(args.prerequisites) ? args.prerequisites.map((item: any) => ({
+                        artifactId: item?.artifactId,
+                        crudOperations: item?.crudOperations ?? item?.crud ?? null
+                    })) : [],
+                    completionConditions: Array.isArray(args.completionConditions)
+                        ? args.completionConditions
+                            .filter((item: any) => typeof item?.description === 'string' && item.description.trim().length > 0)
+                            .map((item: any) => ({ description: item.description.trim() }))
+                        : []
+                }
             );
             return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
         } catch (error) {
@@ -498,7 +712,7 @@ class StdioMCPServer {
      * タスク削除処理
      * 指定IDのタスクと子タスクを削除し、結果メッセージを返す
      * なぜ必要か: クライアントからの削除要求をDB操作に接続するため
-     * @param args 削除引数
+     * @param args 削除引数（taskId）
      * @returns ツールレスポンス
      */
     private async handleDeleteTask(args: any) {
@@ -610,6 +824,126 @@ class StdioMCPServer {
     }
 
     /**
+     * 成果物一覧取得ハンドラ
+     * 指定プロジェクトの成果物をJSONとして返す
+     * なぜ必要か: ツリービュー表示用に成果物一覧を取得するため
+     * @param args 引数（projectId）
+     * @returns ツールレスポンス
+     */
+    private async handleListProjectArtifacts(args: any) {
+        try {
+            const artifacts = await this.repo.listProjectArtifacts(args.projectId);
+            return {
+                content: [{ type: 'text', text: JSON.stringify(artifacts, null, 2) }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `❌ Failed to list artifacts: ${error instanceof Error ? error.message : String(error)}` }]
+            };
+        }
+    }
+
+    /**
+     * 成果物取得ハンドラ
+     * 指定IDの成果物をJSONとして返す
+     * なぜ必要か: 成果物詳細画面で表示するため
+     * @param args 引数（artifactId）
+     * @returns ツールレスポンス
+     */
+    private async handleGetProjectArtifact(args: any) {
+        try {
+            const artifact = await this.repo.getProjectArtifact(args.artifactId);
+            if (!artifact) {
+                return {
+                    content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }]
+                };
+            }
+            return {
+                content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `❌ Failed to get artifact: ${error instanceof Error ? error.message : String(error)}` }]
+            };
+        }
+    }
+
+    /**
+     * 成果物作成ハンドラ
+     * 成果物を新規登録し、結果を返す
+     * なぜ必要か: 成果物管理からの作成要求に応えるため
+     * @param args 引数（projectId, title, uri, description）
+     * @returns ツールレスポンス
+     */
+    private async handleCreateProjectArtifact(args: any) {
+        try {
+            const artifact = await this.repo.createProjectArtifact(
+                args.projectId,
+                args.title,
+                args.uri ?? null,
+                args.description ?? null
+            );
+            return {
+                content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `❌ Failed to create artifact: ${error instanceof Error ? error.message : String(error)}` }]
+            };
+        }
+    }
+
+    /**
+     * 成果物更新ハンドラ
+     * 既存成果物を更新し、結果を返す
+     * なぜ必要か: 成果物情報の編集をサーバへ反映するため
+     * @param args 引数（artifactId, title, uri, description, ifVersion）
+     * @returns ツールレスポンス
+     */
+    private async handleUpdateProjectArtifact(args: any) {
+        try {
+            const artifact = await this.repo.updateProjectArtifact(args.artifactId, {
+                title: args.title,
+                uri: args.uri ?? null,
+                description: args.description ?? null,
+                ifVersion: args.ifVersion
+            });
+            return {
+                content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `❌ Failed to update artifact: ${error instanceof Error ? error.message : String(error)}` }]
+            };
+        }
+    }
+
+    /**
+     * 成果物削除ハンドラ
+     * 指定成果物を削除し、結果メッセージを返す
+     * なぜ必要か: 成果物管理からの削除要求に応えるため
+     * @param args 引数（artifactId）
+     * @returns ツールレスポンス
+     */
+    private async handleDeleteProjectArtifact(args: any) {
+        try {
+            const deleted = await this.repo.deleteProjectArtifact(args.artifactId);
+            if (!deleted) {
+                return {
+                    content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }]
+                };
+            }
+            return {
+                content: [{ type: 'text', text: `✅ Artifact deleted successfully!\n\nID: ${args.artifactId}` }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `❌ Failed to delete artifact: ${error instanceof Error ? error.message : String(error)}` }]
+            };
+        }
+    }
+
+    /**
      * ツール呼び出し分岐処理
      * ツール名ごとに各ハンドラへ処理を振り分ける
      * なぜ必要か: クライアントからの各種API呼び出しを柔軟に拡張・管理するため
@@ -640,6 +974,16 @@ class StdioMCPServer {
                 return this.handleMoveTask(args);
             case 'wbs.impotTask':
                 return this.handleImpotTask(args);
+            case 'artifacts.listProjectArtifacts':
+                return this.handleListProjectArtifacts(args);
+            case 'artifacts.getProjectArtifact':
+                return this.handleGetProjectArtifact(args);
+            case 'artifacts.createProjectArtifact':
+                return this.handleCreateProjectArtifact(args);
+            case 'artifacts.updateProjectArtifact':
+                return this.handleUpdateProjectArtifact(args);
+            case 'artifacts.deleteProjectArtifact':
+                return this.handleDeleteProjectArtifact(args);
             default:
                 // 未知のツール名はエラー
                 throw new Error(`Unknown tool: ${name}`);

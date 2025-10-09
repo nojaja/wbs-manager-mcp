@@ -14,6 +14,44 @@ export interface Project {
     version: number;
 }
 
+export type TaskArtifactRole = 'deliverable' | 'prerequisite';
+
+export interface ProjectArtifact {
+    id: string;
+    project_id: string;
+    title: string;
+    uri?: string;
+    description?: string;
+    created_at: string;
+    updated_at: string;
+    version: number;
+}
+
+export interface TaskArtifactAssignment {
+    id: string;
+    artifact_id: string;
+    role: TaskArtifactRole;
+    crudOperations?: string | null;
+    order: number;
+    artifact: ProjectArtifact;
+}
+
+export interface TaskCompletionCondition {
+    id: string;
+    task_id: string;
+    description: string;
+    order: number;
+}
+
+interface TaskArtifactInput {
+    artifactId: string;
+    crudOperations?: string | null;
+}
+
+interface TaskCompletionConditionInput {
+    description: string;
+}
+
 export interface Task {
     id: string;
     project_id: string;
@@ -28,6 +66,9 @@ export interface Task {
     updated_at: string;
     version: number;
     children?: Task[];
+    deliverables?: TaskArtifactAssignment[];
+    prerequisites?: TaskArtifactAssignment[];
+    completionConditions?: TaskCompletionCondition[];
 }
 
 let dbPromise: Promise<Database> | null = null;
@@ -111,6 +152,48 @@ export async function initializeDatabase(): Promise<void> {
             version INTEGER NOT NULL DEFAULT 1,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS project_artifacts (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            uri TEXT,
+            description TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            version INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            UNIQUE(project_id, title)
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS task_artifacts (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            artifact_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            crud_operations TEXT,
+            order_index INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            FOREIGN KEY (artifact_id) REFERENCES project_artifacts(id) ON DELETE CASCADE
+        )
+    `);
+
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS task_completion_conditions (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            description TEXT NOT NULL,
+            order_index INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
         )
     `);
 
@@ -239,6 +322,10 @@ export class WBSRepository {
      * @param assignee 担当者
      * @param estimate 見積もり
      * @param goal ゴール
+     * @param options 付随情報（成果物・前提条件・完了条件）
+     * @param options.deliverables 成果物割当一覧
+     * @param options.prerequisites 前提条件の成果物割当一覧
+     * @param options.completionConditions 完了条件一覧
      * @returns Promise<Task>
      */
     async createTask(
@@ -248,28 +335,45 @@ export class WBSRepository {
         parentId: string | null = null,
         assignee: string | null = null,
         estimate: string | null = null,
-        goal: string | null = null
+        goal: string | null = null,
+        options?: {
+            deliverables?: TaskArtifactInput[];
+            prerequisites?: TaskArtifactInput[];
+            completionConditions?: TaskCompletionConditionInput[];
+        }
     ): Promise<Task> {
         const db = await this.db();
         const id = uuidv4();
         const now = new Date().toISOString();
 
-        await db.run(
-            `INSERT INTO tasks (
-                id, project_id, parent_id, title, description, goal, assignee,
-                status, estimate, created_at, updated_at, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 1)`,
-            id,
-            projectId,
-            parentId || null,
-            title,
-            description || null,
-            goal || null,
-            assignee || null,
-            estimate || null,
-            now,
-            now
-        );
+        await db.run('BEGIN');
+        try {
+            await db.run(
+                `INSERT INTO tasks (
+                    id, project_id, parent_id, title, description, goal, assignee,
+                    status, estimate, created_at, updated_at, version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 1)`,
+                id,
+                projectId,
+                parentId || null,
+                title,
+                description || null,
+                goal || null,
+                assignee || null,
+                estimate || null,
+                now,
+                now
+            );
+
+            await this.syncTaskArtifacts(db, projectId, id, 'deliverable', options?.deliverables ?? [], now);
+            await this.syncTaskArtifacts(db, projectId, id, 'prerequisite', options?.prerequisites ?? [], now);
+            await this.syncTaskCompletionConditions(db, id, options?.completionConditions ?? [], now);
+
+            await db.run('COMMIT');
+        } catch (error) {
+            await db.run('ROLLBACK');
+            throw error;
+        }
 
         return (await this.getTask(id))!;
     }
@@ -292,11 +396,167 @@ export class WBSRepository {
                 t.parentId ?? null,
                 t.assignee ?? null,
                 t.estimate ?? null,
-                t.goal ?? null
+                t.goal ?? null,
+                {
+                    deliverables: Array.isArray(t.deliverables) ? t.deliverables.map((d: any) => ({
+                        artifactId: d.artifactId,
+                        crudOperations: d.crudOperations ?? d.crud ?? null
+                    })) : [],
+                    prerequisites: Array.isArray(t.prerequisites) ? t.prerequisites.map((p: any) => ({
+                        artifactId: p.artifactId,
+                        crudOperations: p.crudOperations ?? null
+                    })) : [],
+                    completionConditions: Array.isArray(t.completionConditions) ? t.completionConditions
+                        .filter((c: any) => typeof c?.description === 'string' && c.description.trim().length > 0)
+                        .map((c: any) => ({ description: c.description.trim() })) : []
+                }
             );
             created.push(task);
         }
         return created;
+    }
+
+    /**
+     * プロジェクト成果物一覧取得処理
+     * 指定プロジェクトに紐づく成果物を全件取得する
+     * なぜ必要か: 成果物ツリービューやタスク編集で参照するため
+     * @param projectId プロジェクトID
+     * @returns 成果物配列
+     */
+    async listProjectArtifacts(projectId: string): Promise<ProjectArtifact[]> {
+        const db = await this.db();
+        const rows = await db.all<ProjectArtifact[]>(
+            `SELECT id, project_id, title, uri, description, created_at, updated_at, version
+             FROM project_artifacts
+             WHERE project_id = ?
+             ORDER BY title ASC`,
+            projectId
+        );
+        return rows;
+    }
+
+    /**
+     * 成果物取得処理
+     * 指定IDの成果物を取得する
+     * なぜ必要か: 編集・参照時に最新情報を取得するため
+     * @param artifactId 成果物ID
+     * @returns 成果物またはnull
+     */
+    async getProjectArtifact(artifactId: string): Promise<ProjectArtifact | null> {
+        const db = await this.db();
+        const artifact = await db.get<ProjectArtifact>(
+            `SELECT id, project_id, title, uri, description, created_at, updated_at, version
+             FROM project_artifacts
+             WHERE id = ?`,
+            artifactId
+        );
+        return artifact ?? null;
+    }
+
+    /**
+     * 成果物作成処理
+     * プロジェクトに新しい成果物を登録する
+     * なぜ必要か: 成果物管理機能から新規作成に対応するため
+     * @param projectId プロジェクトID
+     * @param title 成果物名
+     * @param uri 関連URI（任意）
+     * @param description 説明（任意）
+     * @returns 作成された成果物
+     */
+    async createProjectArtifact(
+        projectId: string,
+        title: string,
+        uri?: string,
+        description?: string
+    ): Promise<ProjectArtifact> {
+        const db = await this.db();
+        const id = uuidv4();
+        const now = new Date().toISOString();
+
+        await db.run(
+            `INSERT INTO project_artifacts (
+                id, project_id, title, uri, description, created_at, updated_at, version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+            id,
+            projectId,
+            title,
+            uri ?? null,
+            description ?? null,
+            now,
+            now
+        );
+
+        return (await this.getProjectArtifact(id))!;
+    }
+
+    /**
+     * 成果物更新処理
+     * 指定成果物を更新し、更新後の情報を返す
+     * なぜ必要か: 成果物情報の編集と楽観ロックに対応するため
+     * @param artifactId 成果物ID
+     * @param updates 更新内容
+     * @param updates.title 成果物名（任意）
+     * @param updates.uri 関連URI（任意）
+     * @param updates.description 説明（任意）
+     * @param updates.ifVersion 競合検出用バージョン（任意）
+     * @returns 更新後の成果物
+     */
+    async updateProjectArtifact(
+        artifactId: string,
+        updates: {
+            title?: string;
+            uri?: string | null;
+            description?: string | null;
+            ifVersion?: number;
+        }
+    ): Promise<ProjectArtifact> {
+        const db = await this.db();
+        const current = await this.getProjectArtifact(artifactId);
+
+        if (!current) {
+            throw new Error(`Artifact not found: ${artifactId}`);
+        }
+
+        if (updates.ifVersion !== undefined && updates.ifVersion !== current.version) {
+            throw new Error('Artifact has been modified by another user');
+        }
+
+        const now = new Date().toISOString();
+        const newVersion = current.version + 1;
+
+        await db.run(
+            `UPDATE project_artifacts
+             SET title = ?,
+                 uri = ?,
+                 description = ?,
+                 updated_at = ?,
+                 version = ?
+             WHERE id = ?`,
+            updates.title ?? current.title,
+            updates.uri !== undefined ? updates.uri : current.uri ?? null,
+            updates.description !== undefined ? updates.description : current.description ?? null,
+            now,
+            newVersion,
+            artifactId
+        );
+
+        return (await this.getProjectArtifact(artifactId))!;
+    }
+
+    /**
+     * 成果物削除処理
+     * 指定成果物を削除する
+     * なぜ必要か: 成果物管理から除去するため
+     * @param artifactId 成果物ID
+     * @returns 削除が行われたかどうか
+     */
+    async deleteProjectArtifact(artifactId: string): Promise<boolean> {
+        const db = await this.db();
+        const result = await db.run(
+            `DELETE FROM project_artifacts WHERE id = ?`,
+            artifactId
+        );
+        return (result.changes ?? 0) > 0;
     }
 
     /**
@@ -320,8 +580,19 @@ export class WBSRepository {
         const taskMap = new Map<string, Task>();
         const roots: Task[] = [];
 
+        const taskIds = rows.map((row) => row.id);
+        const artifacts = await this.collectTaskArtifacts(db, taskIds);
+        const completionConditions = await this.collectCompletionConditions(db, taskIds);
+
         rows.forEach((row) => {
-            taskMap.set(row.id, { ...row, children: [] });
+            const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
+            taskMap.set(row.id, {
+                ...row,
+                children: [],
+                deliverables: artifactInfo.deliverables,
+                prerequisites: artifactInfo.prerequisites,
+                completionConditions: completionConditions.get(row.id) ?? []
+            });
         });
 
         rows.forEach((row) => {
@@ -370,8 +641,19 @@ export class WBSRepository {
 
         const taskMap = new Map<string, Task>();
 
+        const taskIds = rows.map((row) => row.id);
+        const artifacts = await this.collectTaskArtifacts(db, taskIds);
+        const completionConditions = await this.collectCompletionConditions(db, taskIds);
+
         rows.forEach((row) => {
-            taskMap.set(row.id, { ...row, children: [] });
+            const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
+            taskMap.set(row.id, {
+                ...row,
+                children: [],
+                deliverables: artifactInfo.deliverables,
+                prerequisites: artifactInfo.prerequisites,
+                completionConditions: completionConditions.get(row.id) ?? []
+            });
         });
 
         rows.forEach((row) => {
@@ -397,7 +679,12 @@ export class WBSRepository {
      * @param updates 更新内容
      * @returns Promise<Task>
      */
-    async updateTask(taskId: string, updates: Partial<Task> & { ifVersion?: number }): Promise<Task> {
+    async updateTask(taskId: string, updates: Partial<Task> & {
+        ifVersion?: number;
+        deliverables?: TaskArtifactInput[];
+        prerequisites?: TaskArtifactInput[];
+        completionConditions?: TaskCompletionConditionInput[];
+    }): Promise<Task> {
         const db = await this.db();
         const current = await this.getTask(taskId);
         // タスクが存在しなければエラー
@@ -415,27 +702,47 @@ export class WBSRepository {
         const now = new Date().toISOString();
         const newVersion = current.version + 1;
 
-        await db.run(
-            `UPDATE tasks
-             SET title = ?,
-                 description = ?,
-                 goal = ?,
-                 assignee = ?,
-                 status = ?,
-                 estimate = ?,
-                 updated_at = ?,
-                 version = ?
-             WHERE id = ?`,
-            updates.title ?? current.title,
-            updates.description ?? current.description ?? null,
-            updates.goal ?? current.goal ?? null,
-            updates.assignee ?? current.assignee ?? null,
-            updates.status ?? current.status,
-            updates.estimate ?? current.estimate ?? null,
-            now,
-            newVersion,
-            taskId
-        );
+        await db.run('BEGIN');
+        try {
+            await db.run(
+                `UPDATE tasks
+                 SET title = ?,
+                     description = ?,
+                     goal = ?,
+                     assignee = ?,
+                     status = ?,
+                     estimate = ?,
+                     updated_at = ?,
+                     version = ?
+                 WHERE id = ?`,
+                updates.title ?? current.title,
+                updates.description ?? current.description ?? null,
+                updates.goal ?? current.goal ?? null,
+                updates.assignee ?? current.assignee ?? null,
+                updates.status ?? current.status,
+                updates.estimate ?? current.estimate ?? null,
+                now,
+                newVersion,
+                taskId
+            );
+
+            if (updates.deliverables !== undefined) {
+                await this.syncTaskArtifacts(db, current.project_id, taskId, 'deliverable', updates.deliverables ?? [], now);
+            }
+
+            if (updates.prerequisites !== undefined) {
+                await this.syncTaskArtifacts(db, current.project_id, taskId, 'prerequisite', updates.prerequisites ?? [], now);
+            }
+
+            if (updates.completionConditions !== undefined) {
+                await this.syncTaskCompletionConditions(db, taskId, updates.completionConditions ?? [], now);
+            }
+
+            await db.run('COMMIT');
+        } catch (error) {
+            await db.run('ROLLBACK');
+            throw error;
+        }
 
         return (await this.getTask(taskId))!;
     }
@@ -556,6 +863,261 @@ export class WBSRepository {
             taskId
         );
         return row ?? null;
+    }
+
+    /**
+     * 成果物所属検証処理
+     * 成果物が指定プロジェクトに属するか確認する
+     * なぜ必要か: 他プロジェクトの成果物を誤って参照するのを防ぐため
+     * @param db Databaseインスタンス
+     * @param projectId プロジェクトID
+     * @param artifactId 成果物ID
+     */
+    private async ensureArtifactBelongsToProject(db: Database, projectId: string, artifactId: string): Promise<void> {
+        const artifact = await db.get<ProjectArtifact>(
+            `SELECT id, project_id, title, uri, description, created_at, updated_at, version
+             FROM project_artifacts
+             WHERE id = ?`,
+            artifactId
+        );
+
+        if (!artifact) {
+            throw new Error(`Artifact not found: ${artifactId}`);
+        }
+
+        if (artifact.project_id !== projectId) {
+            throw new Error(`Artifact ${artifactId} does not belong to project ${projectId}`);
+        }
+    }
+
+    /**
+     * タスク成果物同期処理
+     * 指定タスクの成果物割当を再登録する
+     * なぜ必要か: タスク保存時に最新の割当内容へ置き換えるため
+     * @param db Databaseインスタンス
+     * @param projectId プロジェクトID
+     * @param taskId タスクID
+     * @param role 成果物の役割（deliverable/prerequisite）
+     * @param assignments 割当一覧
+     * @param timestamp 登録日時文字列
+     */
+    private async syncTaskArtifacts(
+        db: Database,
+        projectId: string,
+        taskId: string,
+        role: TaskArtifactRole,
+        assignments: TaskArtifactInput[] | undefined,
+        timestamp: string
+    ): Promise<void> {
+        await db.run(
+            `DELETE FROM task_artifacts WHERE task_id = ? AND role = ?`,
+            taskId,
+            role
+        );
+
+        if (!assignments || assignments.length === 0) {
+            return;
+        }
+
+        let index = 0;
+        for (const assignment of assignments) {
+            if (!assignment?.artifactId) {
+                continue;
+            }
+
+            await this.ensureArtifactBelongsToProject(db, projectId, assignment.artifactId);
+
+            await db.run(
+                `INSERT INTO task_artifacts (
+                    id, task_id, artifact_id, role, crud_operations, order_index, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                uuidv4(),
+                taskId,
+                assignment.artifactId,
+                role,
+                assignment.crudOperations ?? null,
+                index,
+                timestamp,
+                timestamp
+            );
+
+            index += 1;
+        }
+    }
+
+    /**
+     * タスク完了条件同期処理
+     * 完了条件を全件置き換える
+     * なぜ必要か: 入力内容をそのままDBへ反映するため
+     * @param db Databaseインスタンス
+     * @param taskId タスクID
+     * @param conditions 完了条件一覧
+     * @param timestamp 登録日時文字列
+     */
+    private async syncTaskCompletionConditions(
+        db: Database,
+        taskId: string,
+        conditions: TaskCompletionConditionInput[] | undefined,
+        timestamp: string
+    ): Promise<void> {
+        await db.run(
+            `DELETE FROM task_completion_conditions WHERE task_id = ?`,
+            taskId
+        );
+
+        if (!conditions || conditions.length === 0) {
+            return;
+        }
+
+        let index = 0;
+        for (const condition of conditions) {
+            const description = (condition?.description ?? '').trim();
+            if (description.length === 0) {
+                continue;
+            }
+
+            await db.run(
+                `INSERT INTO task_completion_conditions (
+                    id, task_id, description, order_index, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)`,
+                uuidv4(),
+                taskId,
+                description,
+                index,
+                timestamp,
+                timestamp
+            );
+
+            index += 1;
+        }
+    }
+
+    /**
+     * タスク成果物収集処理
+     * タスクID一覧に対する成果物割当を取得し、役割別にまとめる
+     * なぜ必要か: タスク一覧取得時に成果物情報を付与するため
+     * @param db Databaseインスタンス
+     * @param taskIds タスクID配列
+     * @returns タスクIDをキーとした成果物割当マップ
+     */
+    private async collectTaskArtifacts(db: Database, taskIds: string[]): Promise<Map<string, { deliverables: TaskArtifactAssignment[]; prerequisites: TaskArtifactAssignment[] }>> {
+        const result = new Map<string, { deliverables: TaskArtifactAssignment[]; prerequisites: TaskArtifactAssignment[] }>();
+
+        if (taskIds.length === 0) {
+            return result;
+        }
+
+        const placeholders = taskIds.map(() => '?').join(', ');
+        const rows = await db.all<Array<any>>(
+            `SELECT
+                ta.id AS assignment_id,
+                ta.task_id AS task_id,
+                ta.artifact_id AS artifact_id,
+                ta.role AS role,
+                ta.crud_operations AS crud_operations,
+                ta.order_index AS order_index,
+                pa.project_id AS artifact_project_id,
+                pa.title AS artifact_title,
+                pa.uri AS artifact_uri,
+                pa.description AS artifact_description,
+                pa.created_at AS artifact_created_at,
+                pa.updated_at AS artifact_updated_at,
+                pa.version AS artifact_version
+             FROM task_artifacts ta
+             JOIN project_artifacts pa ON pa.id = ta.artifact_id
+             WHERE ta.task_id IN (${placeholders})
+             ORDER BY ta.task_id, ta.role, ta.order_index`,
+            taskIds
+        );
+
+        for (const row of rows) {
+            const assignment: TaskArtifactAssignment = {
+                id: row.assignment_id,
+                artifact_id: row.artifact_id,
+                role: row.role as TaskArtifactRole,
+                crudOperations: row.crud_operations ?? undefined,
+                order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0),
+                artifact: {
+                    id: row.artifact_id,
+                    project_id: row.artifact_project_id,
+                    title: row.artifact_title,
+                    uri: row.artifact_uri ?? undefined,
+                    description: row.artifact_description ?? undefined,
+                    created_at: row.artifact_created_at,
+                    updated_at: row.artifact_updated_at,
+                    version: row.artifact_version
+                }
+            };
+
+            const bucket = result.get(row.task_id) ?? { deliverables: [], prerequisites: [] };
+            if (!result.has(row.task_id)) {
+                result.set(row.task_id, bucket);
+            }
+
+            if (assignment.role === 'deliverable') {
+                bucket.deliverables.push(assignment);
+            } else {
+                bucket.prerequisites.push(assignment);
+            }
+        }
+
+        taskIds.forEach((taskId) => {
+            if (!result.has(taskId)) {
+                result.set(taskId, { deliverables: [], prerequisites: [] });
+            }
+        });
+
+        return result;
+    }
+
+    /**
+     * タスク完了条件収集処理
+     * 複数タスクの完了条件をまとめて取得する
+     * なぜ必要か: タスク詳細・ツリー表示に完了条件を付与するため
+     * @param db Databaseインスタンス
+     * @param taskIds タスクID配列
+     * @returns タスクIDをキーとした完了条件マップ
+     */
+    private async collectCompletionConditions(db: Database, taskIds: string[]): Promise<Map<string, TaskCompletionCondition[]>> {
+        const result = new Map<string, TaskCompletionCondition[]>();
+
+        if (taskIds.length === 0) {
+            return result;
+        }
+
+        const placeholders = taskIds.map(() => '?').join(', ');
+        const rows = await db.all<Array<any>>(
+            `SELECT
+                id,
+                task_id,
+                description,
+                order_index
+             FROM task_completion_conditions
+             WHERE task_id IN (${placeholders})
+             ORDER BY task_id, order_index`,
+            taskIds
+        );
+
+        for (const row of rows) {
+            const condition: TaskCompletionCondition = {
+                id: row.id,
+                task_id: row.task_id,
+                description: row.description,
+                order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0)
+            };
+
+            const list = result.get(row.task_id) ?? [];
+            list.push(condition);
+            result.set(row.task_id, list);
+        }
+
+        taskIds.forEach((taskId) => {
+            if (!result.has(taskId)) {
+                result.set(taskId, []);
+            }
+        });
+
+        return result;
     }
 
     /**

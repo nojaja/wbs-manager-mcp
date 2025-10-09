@@ -30,7 +30,8 @@
   ],
   "activationEvents": [
     "onCommand:mcpWbs.start",
-    "onView:wbsTree"
+    "onView:wbsTree",
+    "onView:projectArtifactTree"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -64,6 +65,24 @@
       {
         "command": "wbsTree.deleteProject",
         "title": "プロジェクト削除"
+      },
+      {
+        "command": "projectArtifactTree.refresh",
+        "title": "成果物を再読み込み",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "projectArtifactTree.createArtifact",
+        "title": "成果物を追加",
+        "icon": "$(add)"
+      },
+      {
+        "command": "projectArtifactTree.editArtifact",
+        "title": "成果物を編集"
+      },
+      {
+        "command": "projectArtifactTree.deleteArtifact",
+        "title": "成果物を削除"
       }
     ],
     "views": {
@@ -71,6 +90,10 @@
         {
           "id": "wbsTree",
           "name": "WBS Projects"
+        },
+        {
+          "id": "projectArtifactTree",
+          "name": "Project Artifacts"
         }
       ]
     },
@@ -84,6 +107,16 @@
         {
           "command": "wbsTree.createTask",
           "when": "view == wbsTree",
+          "group": "navigation"
+        },
+        {
+          "command": "projectArtifactTree.refresh",
+          "when": "view == projectArtifactTree",
+          "group": "navigation"
+        },
+        {
+          "command": "projectArtifactTree.createArtifact",
+          "when": "view == projectArtifactTree",
           "group": "navigation"
         }
       ],
@@ -107,6 +140,16 @@
           "command": "wbsTree.deleteProject",
           "when": "view == wbsTree && viewItem == project",
           "group": "inline"
+        },
+        {
+          "command": "projectArtifactTree.editArtifact",
+          "when": "view == projectArtifactTree && viewItem == projectArtifact",
+          "group": "inline"
+        },
+        {
+          "command": "projectArtifactTree.deleteArtifact",
+          "when": "view == projectArtifactTree && viewItem == projectArtifact",
+          "group": "inline@1"
         }
       ]
     }

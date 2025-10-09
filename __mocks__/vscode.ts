@@ -4,6 +4,8 @@ export const window = {
   showErrorMessage: (_: any) => {},
   showInformationMessage: (_: any) => {},
   showWarningMessage: (_: any) => Promise.resolve(undefined),
+  showInputBox: (_?: any) => Promise.resolve(undefined),
+  createTreeView: (_id: string, _options: any) => ({ selection: [], dispose: () => {} }),
   activeTextEditor: undefined
 };
 
