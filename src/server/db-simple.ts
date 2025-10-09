@@ -33,8 +33,9 @@ export interface Task {
 let dbPromise: Promise<Database> | null = null;
 
 /**
- *
- * @returns string
+ * データベースパス解決処理
+ * データディレクトリの絶対パスを生成し返す
+ * @returns データベースファイルパス
  */
 function resolveDatabasePath(): string {
     const baseDir = process.env.WBS_MCP_DATA_DIR && process.env.WBS_MCP_DATA_DIR.trim().length > 0
@@ -49,7 +50,8 @@ const DB_PATH = resolveDatabasePath();
 const DB_DIR = path.dirname(DB_PATH);
 
 /**
- *
+ * データベース取得処理
+ * DBファイルがなければ作成し、Databaseインスタンスを返す
  * @returns Promise<Database>
  */
 async function getDatabase(): Promise<Database> {
@@ -70,7 +72,8 @@ async function getDatabase(): Promise<Database> {
 }
 
 /**
- *
+ * データベース初期化処理
+ * 必要なテーブルを作成し、初期データを投入する
  */
 export async function initializeDatabase(): Promise<void> {
     const db = await getDatabase();
@@ -136,8 +139,9 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 /**
- *
- * @param db
+ * 初期データ投入処理
+ * DBにサンプルプロジェクト・タスクを投入する
+ * @param db Databaseインスタンス
  */
 async function seedInitialData(db: Database): Promise<void> {
     const existing = await db.get<{ count: number }>(
@@ -290,11 +294,13 @@ async function seedInitialData(db: Database): Promise<void> {
 }
 
 /**
- *
+ * WBSリポジトリクラス
+ * プロジェクト・タスクのDB操作を提供する
  */
 export class WBSRepository {
     /**
-     *
+     * DB取得処理
+     * Databaseインスタンスを返す
      * @returns Promise<Database>
      */
     private async db(): Promise<Database> {
@@ -302,9 +308,10 @@ export class WBSRepository {
     }
 
     /**
-     *
-     * @param title
-     * @param description
+     * プロジェクト作成処理
+     * 新規プロジェクトをDBに登録し、作成結果を返す
+     * @param title プロジェクト名
+     * @param description プロジェクト説明
      * @returns Promise<Project>
      */
     async createProject(title: string, description: string = ''): Promise<Project> {
@@ -326,7 +333,8 @@ export class WBSRepository {
     }
 
     /**
-     *
+     * プロジェクト一覧取得処理
+     * DBから全プロジェクトを取得し、配列で返す
      * @returns Promise<Project[]>
      */
     async listProjects(): Promise<Project[]> {
@@ -340,8 +348,9 @@ export class WBSRepository {
     }
 
     /**
-     *
-     * @param id
+     * プロジェクト取得処理
+     * 指定IDのプロジェクトをDBから取得する
+     * @param id プロジェクトID
      * @returns Promise<Project | null>
      */
     async getProject(id: string): Promise<Project | null> {
@@ -356,14 +365,15 @@ export class WBSRepository {
     }
 
     /**
-     *
-     * @param projectId
-     * @param title
-     * @param description
-     * @param parentId
-     * @param assignee
-     * @param estimate
-     * @param goal
+     * タスク作成処理
+     * 新規タスクをDBに登録し、作成結果を返す
+     * @param projectId プロジェクトID
+     * @param title タスク名
+     * @param description タスク説明
+     * @param parentId 親タスクID
+     * @param assignee 担当者
+     * @param estimate 見積もり
+     * @param goal ゴール
      * @returns Promise<Task>
      */
     async createTask(
@@ -400,8 +410,9 @@ export class WBSRepository {
     }
 
     /**
-     *
-     * @param projectId
+     * タスク一覧取得処理
+     * 指定プロジェクトIDのタスクをDBから取得し、階層構造で返す
+     * @param projectId プロジェクトID
      * @returns Promise<Task[]>
      */
     async listTasks(projectId: string): Promise<Task[]> {
@@ -436,8 +447,9 @@ export class WBSRepository {
     }
 
     /**
-     *
-     * @param taskId
+     * タスク取得処理
+     * 指定IDのタスクをDBから取得する
+     * @param taskId タスクID
      * @returns Promise<Task | null>
      */
     async getTask(taskId: string): Promise<Task | null> {
@@ -453,9 +465,10 @@ export class WBSRepository {
     }
 
     /**
-     *
-     * @param taskId
-     * @param updates
+     * タスク更新処理
+     * 指定IDのタスクをDBで更新し、更新後のタスクを返す
+     * @param taskId タスクID
+     * @param updates 更新内容
      * @returns Promise<Task>
      */
     async updateTask(taskId: string, updates: Partial<Task> & { ifVersion?: number }): Promise<Task> {

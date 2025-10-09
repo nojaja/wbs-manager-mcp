@@ -20,7 +20,8 @@ interface JsonRpcResponse {
 }
 
 /**
- *
+ * MCPクライアントクラス
+ * サーバプロセスの起動・通信・リクエスト管理を行う
  */
 export class MCPClient {
     private serverProcess: child_process.ChildProcess | null = null;
@@ -29,17 +30,19 @@ export class MCPClient {
     private outputChannel: vscode.OutputChannel;
 
     /**
-     *
-     * @param outputChannel
+     * コンストラクタ
+     * 出力チャネルを受け取り、初期化する
+     * @param outputChannel 出力チャネル
      */
     constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
     }
 
     /**
-     *
-     * @param serverPath
-     * @param options
+     * サーバプロセス起動処理
+     * MCPサーバプロセスを起動し、初期化・接続を行う
+     * @param serverPath サーバ実行ファイルのパス
+     * @param options オプション（cwd, env）
      * @param options.cwd
      * @param options.env
      */
@@ -108,7 +111,8 @@ export class MCPClient {
     }
 
     /**
-     *
+     * 初期化処理
+     * サーバへinitializeリクエストを送り、初期化・通知を行う
      */
     private async initialize(): Promise<void> {
         const response = await this.sendRequest('initialize', {
@@ -129,9 +133,10 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param method
-     * @param params
+     * リクエスト送信処理
+     * サーバへJSON-RPCリクエストを送信し、レスポンスをPromiseで返す
+     * @param method メソッド名
+     * @param params パラメータ
      * @returns Promise<JsonRpcResponse>
      */
     private sendRequest(method: string, params?: any): Promise<JsonRpcResponse> {
@@ -171,9 +176,10 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param method
-     * @param params
+     * 通知送信処理
+     * サーバへJSON-RPC通知を送信する（応答不要）
+     * @param method メソッド名
+     * @param params パラメータ
      */
     private sendNotification(method: string, params?: any): void {
         if (!this.serverProcess) {
@@ -191,8 +197,9 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param response
+     * レスポンス処理
+     * サーバからのJSON-RPCレスポンスを受け取り、対応するPromiseを解決/拒否する
+     * @param response サーバからのレスポンス
      */
     private handleResponse(response: JsonRpcResponse): void {
         if (response.id !== undefined) {
@@ -209,9 +216,10 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param toolName
-     * @param args
+     * ツール呼び出し処理
+     * サーバのツールAPIを呼び出し、結果を返す
+     * @param toolName ツール名
+     * @param args 引数
      * @returns Promise<any>
      */
     async callTool(toolName: string, args: any): Promise<any> {
@@ -228,7 +236,8 @@ export class MCPClient {
     }
 
     /**
-     *
+     * プロジェクト一覧取得処理
+     * サーバからプロジェクト一覧を取得し、配列で返す
      * @returns Promise<any[]>
      */
     async listProjects(): Promise<any[]> {
@@ -246,8 +255,9 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param projectId
+     * タスク一覧取得処理
+     * 指定プロジェクトのタスク一覧を取得し、配列で返す
+     * @param projectId プロジェクトID
      * @returns Promise<any[]>
      */
     async listTasks(projectId: string): Promise<any[]> {
@@ -265,8 +275,9 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param taskId
+     * タスク取得処理
+     * 指定タスクIDのタスク詳細を取得する
+     * @param taskId タスクID
      * @returns Promise<any | null>
      */
     async getTask(taskId: string): Promise<any | null> {
@@ -284,10 +295,11 @@ export class MCPClient {
     }
 
     /**
-     *
-     * @param taskId
-     * @param updates
-     * @returns Promise<{ success: boolean; conflict?: boolean; error?: string }>
+     * タスク更新処理
+     * 指定タスクIDの内容を更新し、結果を返す
+     * @param taskId タスクID
+     * @param updates 更新内容
+     * @returns 更新結果オブジェクト
      */
     async updateTask(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
         try {
@@ -307,7 +319,8 @@ export class MCPClient {
     }
 
     /**
-     *
+     * サーバプロセス停止処理
+     * サーバプロセスを停止し、リクエスト管理をクリアする
      */
     stop(): void {
         if (this.serverProcess) {

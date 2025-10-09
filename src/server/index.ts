@@ -25,13 +25,15 @@ interface JsonRpcNotification {
 }
 
 /**
- *
+ * 標準入出力MCPサーバクラス
+ * 標準入出力経由でリクエスト受付・DB操作・レスポンス返却を行う
  */
 class StdioMCPServer {
     private repo: WBSRepository;
 
     /**
-     *
+     * コンストラクタ
+     * WBSリポジトリ初期化・標準入出力ハンドラ設定を行う
      */
     constructor() {
         this.repo = new WBSRepository();
@@ -39,7 +41,8 @@ class StdioMCPServer {
     }
 
     /**
-     *
+     * 標準入出力ハンドラ設定処理
+     * stdinからのデータ受信・パース・メッセージ分岐処理を行う
      */
     private setupStdioHandlers() {
         process.stdin.setEncoding('utf8');
@@ -72,8 +75,9 @@ class StdioMCPServer {
     }
 
     /**
-     *
-     * @param message
+     * メッセージ受信処理
+     * JSON-RPCリクエスト/通知を受信し、リクエストはhandleRequest、通知はhandleNotificationへ振り分ける
+     * @param message 受信メッセージ
      */
     private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
         try {
@@ -103,9 +107,10 @@ class StdioMCPServer {
     }
 
     /**
-     *
-     * @param request
-     * @returns Promise<JsonRpcResponse>
+     * リクエスト処理
+     * JSON-RPCリクエストのメソッドごとにDB操作やツール呼び出しを行い、レスポンスを返す
+     * @param request リクエストオブジェクト
+     * @returns レスポンスオブジェクト
      */
     private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
         const { method, params, id } = request;
@@ -257,8 +262,9 @@ class StdioMCPServer {
     }
 
     /**
-     *
-     * @param notification
+     * 通知処理
+     * JSON-RPC通知のメソッドごとにログ出力等を行う
+     * @param notification 通知オブジェクト
      */
     private async handleNotification(notification: JsonRpcNotification) {
         const { method } = notification;
@@ -274,9 +280,10 @@ class StdioMCPServer {
     }
 
     /**
-     * Handles project creation
-     * @param args - Project creation arguments
-     * @returns Tool response
+     * プロジェクト作成処理
+     * DBに新規プロジェクトを作成し、結果を返す
+     * @param args プロジェクト作成引数
+     * @returns ツールレスポンス
      */
     private async handleCreateProject(args: any) {
         try {
@@ -298,8 +305,9 @@ class StdioMCPServer {
     }
 
     /**
-     * Handles project listing
-     * @returns Tool response
+     * プロジェクト一覧取得処理
+     * DBからプロジェクト一覧を取得し、ツールレスポンスで返す
+     * @returns ツールレスポンス
      */
     private async handleListProjects() {
         try {
@@ -321,9 +329,10 @@ class StdioMCPServer {
     }
 
     /**
-     * Handles task creation
-     * @param args - Task creation arguments
-     * @returns Tool response
+     * タスク作成処理
+     * DBに新規タスクを作成し、結果を返す
+     * @param args タスク作成引数
+     * @returns ツールレスポンス
      */
     private async handleCreateTask(args: any) {
         try {
@@ -352,9 +361,10 @@ class StdioMCPServer {
     }
 
     /**
-     * Handles task retrieval
-     * @param args - Task get arguments
-     * @returns Tool response
+     * タスク取得処理
+     * 指定IDのタスクをDBから取得し、ツールレスポンスで返す
+     * @param args タスク取得引数
+     * @returns ツールレスポンス
      */
     private async handleGetTask(args: any) {
         try {
@@ -384,9 +394,10 @@ class StdioMCPServer {
     }
 
     /**
-     * Checks if task exists and returns it
-     * @param taskId - Task ID
-     * @returns Task or null
+     * タスク存在確認・取得処理
+     * 指定IDのタスクが存在すれば返し、なければエラーを返す
+     * @param taskId タスクID
+     * @returns タスクまたはエラー
      */
     private async getTaskForUpdate(taskId: string) {
         const task = await this.repo.getTask(taskId);
@@ -404,10 +415,11 @@ class StdioMCPServer {
     }
 
     /**
-     * Validates version for optimistic locking
-     * @param args - Update arguments
-     * @param currentTask - Current task
-     * @returns Error response or null
+     * 楽観ロック用バージョン検証処理
+     * バージョン不一致時はエラーを返す
+     * @param args 更新引数
+     * @param currentTask 現在のタスク
+     * @returns エラー応答またはnull
      */
     private validateTaskVersion(args: any, currentTask: any) {
         if (args.ifVersion !== undefined && currentTask.version !== args.ifVersion) {
@@ -422,10 +434,11 @@ class StdioMCPServer {
     }
 
     /**
-     * Builds update object for task
-     * @param args - Update arguments
-     * @param currentTask - Current task
-     * @returns Update object
+     * タスク更新オブジェクト生成処理
+     * 更新引数と現在のタスクから更新用オブジェクトを生成する
+     * @param args 更新引数
+     * @param currentTask 現在のタスク
+     * @returns 更新オブジェクト
      */
     private buildTaskUpdate(args: any, currentTask: any) {
         return {
@@ -439,9 +452,10 @@ class StdioMCPServer {
     }
 
     /**
-     * Handles task update
-     * @param args - Task update arguments
-     * @returns Tool response
+     * タスク更新処理
+     * 指定IDのタスクをDBで更新し、結果を返す
+     * @param args タスク更新引数
+     * @returns ツールレスポンス
      */
     private async handleUpdateTask(args: any) {
         try {
@@ -476,9 +490,10 @@ class StdioMCPServer {
     }
 
     /**
-     * Handles task listing
-     * @param args - Task list arguments
-     * @returns Tool response
+     * タスク一覧取得処理
+     * 指定プロジェクトIDのタスク一覧をDBから取得し、ツールレスポンスで返す
+     * @param args タスクリスト引数
+     * @returns ツールレスポンス
      */
     private async handleListTasks(args: any) {
         try {
@@ -500,7 +515,9 @@ class StdioMCPServer {
     }
 
     /**
-     * @param params - Tool call parameters
+     * ツール呼び出し分岐処理
+     * ツール名ごとに各ハンドラへ処理を振り分ける
+     * @param params ツール呼び出しパラメータ
      * @returns Promise<any>
      */
     private async handleToolCall(params: any) {
@@ -527,8 +544,9 @@ class StdioMCPServer {
     }
 
     /**
-     *
-     * @param response
+     * レスポンス送信処理
+     * JSON-RPCレスポンスを標準出力へ送信する
+     * @param response レスポンスオブジェクト
      */
     private sendResponse(response: JsonRpcResponse) {
         const responseStr = JSON.stringify(response);

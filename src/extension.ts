@@ -12,8 +12,9 @@ let treeProvider: WBSTreeProvider;
 let mcpClient: MCPClient;
 
 /**
- *
- * @param context
+ * アクティベート処理
+ * 拡張機能の初期化、MCPクライアント・サーバ起動、ツリービュー・コマンド登録を行う
+ * @param context VSCode拡張機能のコンテキスト
  */
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('MCP-WBS');
@@ -63,7 +64,8 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 /**
- *
+ * デアクティベート処理
+ * 拡張機能の終了時にMCPクライアント・サーバプロセスを停止する
  */
 export function deactivate() {
     if (mcpClient) {
@@ -77,9 +79,10 @@ export function deactivate() {
 }
 
 /**
- * Creates the MCP config file
- * @param workspaceRoot - The workspace root path
- * @param serverPath - Path to the server executable
+ * MCP設定ファイル作成処理
+ * .vscode/mcp.jsonを生成し、サーバ起動設定を保存する
+ * @param workspaceRoot ワークスペースルートパス
+ * @param serverPath サーバ実行ファイルのパス
  */
 function createMcpConfig(workspaceRoot: string, serverPath: string): void {
     const vscodeDir = path.join(workspaceRoot, '.vscode');
@@ -110,8 +113,9 @@ function createMcpConfig(workspaceRoot: string, serverPath: string): void {
 }
 
 /**
- * Sets up server process event handlers
- * @param serverProcess - The server process
+ * サーバプロセスイベントハンドラ設定処理
+ * サーバプロセスの標準出力・エラー・終了イベントを監視し、ログ出力やエラー通知を行う
+ * @param serverProcess サーバプロセス
  */
 function setupServerProcessHandlers(serverProcess: child_process.ChildProcess): void {
     serverProcess.stdout?.on('data', (data) => {
@@ -143,9 +147,10 @@ function setupServerProcessHandlers(serverProcess: child_process.ChildProcess): 
 }
 
 /**
- * Validates server path exists
- * @param serverPath - Path to server executable
- * @returns True if valid
+ * サーバパス検証処理
+ * サーバ実行ファイルの存在を確認し、なければエラー通知する
+ * @param serverPath サーバ実行ファイルのパス
+ * @returns 存在すればtrue、なければfalse
  */
 function validateServerPath(serverPath: string): boolean {
     if (!fs.existsSync(serverPath)) {
@@ -157,9 +162,10 @@ function validateServerPath(serverPath: string): boolean {
 }
 
 /**
- * Starts MCP client and connects to server
- * @param serverPath - Path to server executable
- * @param serverEnv - Environment variables
+ * MCPクライアント起動・接続処理
+ * MCPクライアントを起動し、サーバへ接続する
+ * @param serverPath サーバ実行ファイルのパス
+ * @param serverEnv サーバ用環境変数
  */
 async function startMcpClient(serverPath: string, serverEnv: any): Promise<void> {
     outputChannel.appendLine('Starting MCP client connection...');
@@ -171,10 +177,11 @@ async function startMcpClient(serverPath: string, serverEnv: any): Promise<void>
 }
 
 /**
- * Spawns the server process
- * @param serverPath - Path to server executable
- * @param workspaceRoot - Workspace root path
- * @returns Server environment
+ * サーバプロセス起動処理
+ * MCPサーバプロセスを新規に起動し、環境変数を返す
+ * @param serverPath サーバ実行ファイルのパス
+ * @param workspaceRoot ワークスペースルートパス
+ * @returns サーバ用環境変数
  */
 function spawnServerProcess(serverPath: string, workspaceRoot: string) {
     outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
@@ -194,10 +201,11 @@ function spawnServerProcess(serverPath: string, workspaceRoot: string) {
 }
 
 /**
- * Handles MCP config creation
- * @param workspaceFolders - VS Code workspace folders
- * @param workspaceRoot - Workspace root path
- * @param serverPath - Path to server executable
+ * MCP設定作成ハンドラ
+ * ワークスペースが存在する場合のみMCP設定ファイルを作成する
+ * @param workspaceFolders ワークスペースフォルダ一覧
+ * @param workspaceRoot ワークスペースルートパス
+ * @param serverPath サーバ実行ファイルのパス
  */
 function handleMcpConfigCreation(workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined, workspaceRoot: string, serverPath: string): void {
     if (workspaceFolders && workspaceFolders.length > 0) {
@@ -208,7 +216,9 @@ function handleMcpConfigCreation(workspaceFolders: readonly vscode.WorkspaceFold
 }
 
 /**
- * @param context - VS Code extension context
+ * ローカルサーバ起動処理
+ * MCPサーバプロセスを起動し、クライアント接続・設定作成を行う
+ * @param context VSCode拡張機能のコンテキスト
  */
 async function startLocalServer(context: vscode.ExtensionContext) {
     if (serverProcess) {

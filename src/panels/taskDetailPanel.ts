@@ -15,7 +15,8 @@ interface Task {
 }
 
 /**
- *
+ * タスク詳細パネルクラス
+ * タスク詳細のWebview表示・編集・保存を行う
  */
 export class TaskDetailPanel {
     public static currentPanel: TaskDetailPanel | undefined;
@@ -26,10 +27,11 @@ export class TaskDetailPanel {
     private mcpClient: MCPClient;
 
     /**
-     *
-     * @param extensionUri
-     * @param taskId
-     * @param mcpClient
+     * パネル生成・表示処理
+     * 既存パネルがあれば再利用し、なければ新規作成してタスク詳細を表示する
+     * @param extensionUri 拡張機能のURI
+     * @param taskId タスクID
+     * @param mcpClient MCPクライアント
      */
     public static createOrShow(extensionUri: vscode.Uri, taskId: string, mcpClient: MCPClient) {
         const column = vscode.window.activeTextEditor
@@ -56,11 +58,12 @@ export class TaskDetailPanel {
     }
 
     /**
-     *
-     * @param panel
-     * @param extensionUri
-     * @param taskId
-     * @param mcpClient
+     * コンストラクタ
+     * Webviewパネル・タスクID・MCPクライアントを受け取り初期化する
+     * @param panel Webviewパネル
+     * @param extensionUri 拡張機能のURI
+     * @param taskId タスクID
+     * @param mcpClient MCPクライアント
      */
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, mcpClient: MCPClient) {
         this._panel = panel;
@@ -85,8 +88,9 @@ export class TaskDetailPanel {
     }
 
     /**
-     *
-     * @param taskId
+     * タスク更新処理
+     * 指定タスクIDのタスク情報を再取得し、画面を更新する
+     * @param taskId タスクID
      */
     private async updateTask(taskId: string) {
         this._taskId = taskId;
@@ -94,7 +98,8 @@ export class TaskDetailPanel {
     }
 
     /**
-     *
+     * タスク読込処理
+     * タスク情報をMCPクライアントから取得し、Webviewに反映する
      */
     private async loadTask() {
         try {
@@ -109,9 +114,10 @@ export class TaskDetailPanel {
     }
 
     /**
-     * Builds update object from form data
-     * @param data - Form data
-     * @returns Update object
+     * 更新オブジェクト生成処理
+     * フォームデータからタスク更新用オブジェクトを生成する
+     * @param data フォームデータ
+     * @returns 更新オブジェクト
      */
     private buildUpdateObject(data: any): any {
         const updates: any = {};
@@ -126,7 +132,8 @@ export class TaskDetailPanel {
     }
 
     /**
-     * Handles successful task update
+     * タスク更新成功時処理
+     * 成功メッセージ表示・再読込・ツリーリフレッシュを行う
      */
     private handleUpdateSuccess(): void {
         vscode.window.showInformationMessage('Task updated successfully');
@@ -135,7 +142,8 @@ export class TaskDetailPanel {
     }
 
     /**
-     * Handles update conflict
+     * 更新競合時処理
+     * 他ユーザーによる競合時に警告・再読込を行う
      */
     private async handleUpdateConflict(): Promise<void> {
         const choice = await vscode.window.showWarningMessage(
@@ -149,7 +157,9 @@ export class TaskDetailPanel {
     }
 
     /**
-     * @param data - Form data to save
+     * タスク保存処理
+     * 入力データをもとにタスクを更新し、結果に応じて画面制御する
+     * @param data 保存するフォームデータ
      */
     private async saveTask(data: any) {
         try {
@@ -171,9 +181,10 @@ export class TaskDetailPanel {
 
 
     /**
-     *
-     * @param task
-     * @returns string
+     * Webview用HTML生成処理
+     * タスク情報をもとに詳細画面のHTMLを生成する
+     * @param task タスク情報
+     * @returns HTML文字列
      */
     private getHtmlForWebview(task: Task): string {
         return `<!DOCTYPE html>
@@ -340,9 +351,10 @@ export class TaskDetailPanel {
     }
 
     /**
-     *
-     * @param text
-     * @returns string
+     * HTMLエスケープ処理
+     * テキスト内の危険文字をHTMLエスケープする
+     * @param text 入力テキスト
+     * @returns エスケープ済み文字列
      */
     private escapeHtml(text: string): string {
         return text
@@ -354,7 +366,8 @@ export class TaskDetailPanel {
     }
 
     /**
-     *
+     * パネル破棄処理
+     * パネル・リソースを破棄し、メモリリークを防ぐ
      */
     public dispose() {
         TaskDetailPanel.currentPanel = undefined;

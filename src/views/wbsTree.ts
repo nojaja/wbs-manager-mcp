@@ -23,7 +23,8 @@ interface Project {
 }
 
 /**
- *
+ * WBSツリープロバイダクラス
+ * プロジェクト・タスクのツリー表示・データ取得を行う
  */
 export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
@@ -32,32 +33,36 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     private mcpClient: MCPClient;
 
     /**
-     *
-     * @param mcpClient
+     * コンストラクタ
+     * MCPクライアントを受け取り初期化する
+     * @param mcpClient MCPクライアント
      */
     constructor(mcpClient: MCPClient) {
         this.mcpClient = mcpClient;
     }
 
     /**
-     *
+     * ツリーリフレッシュ処理
+     * ツリーデータの再取得・再描画を行う
      */
     refresh(): void {
         this._onDidChangeTreeData.fire();
     }
 
     /**
-     *
-     * @param element
-     * @returns vscode.TreeItem
+     * ツリーアイテム取得処理
+     * 指定要素のTreeItemを返す
+     * @param element ツリー要素
+     * @returns ツリーアイテム
      */
     getTreeItem(element: TreeItem): vscode.TreeItem {
         return element;
     }
 
     /**
-     *
-     * @param element
+     * 子要素取得処理
+     * 指定要素の子要素（プロジェクト・タスク）を取得し返す
+     * @param element ツリー要素
      * @returns Promise<TreeItem[]>
      */
     async getChildren(element?: TreeItem): Promise<TreeItem[]> {
@@ -85,8 +90,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     /**
-     *
-     * @returns Promise<TreeItem[]>
+     * プロジェクト一覧取得処理
+     * MCPクライアントからプロジェクト一覧を取得し、TreeItem配列で返す
+     * @returns プロジェクトのTreeItem配列
      */
     private async getProjects(): Promise<TreeItem[]> {
         try {
@@ -105,8 +111,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     /**
-     *
-     * @param projectId
+     * タスク一覧取得処理
+     * 指定プロジェクトIDのタスク一覧を取得し、TreeItem配列で返す
+     * @param projectId プロジェクトID
      * @returns Promise<TreeItem[]>
      */
     private async getTasksForProject(projectId: string): Promise<TreeItem[]> {
@@ -127,9 +134,10 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     /**
-     *
-     * @param task
-     * @returns string
+     * タスク説明生成処理
+     * タスクの状態・担当・見積もりを文字列化して返す
+     * @param task タスク情報
+     * @returns 説明文字列
      */
     private getTaskDescription(task: Task): string {
         const parts: string[] = [];
@@ -143,17 +151,19 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 }
 
 /**
- *
+ * ツリーアイテムクラス
+ * プロジェクト・タスクのツリー表示用アイテムを表現する
  */
 class TreeItem extends vscode.TreeItem {
     /**
-     *
-     * @param label
-     * @param itemId
-     * @param contextValue
-     * @param collapsibleState
-     * @param description
-     * @param task
+     * コンストラクタ
+     * ラベル・ID・種別・状態・説明・タスク情報を受け取り初期化する
+     * @param label ラベル
+     * @param itemId アイテムID
+     * @param contextValue コンテキスト種別
+     * @param collapsibleState ツリー折りたたみ状態
+     * @param description 説明
+     * @param task タスク情報
      */
     constructor(
         public readonly label: string,
