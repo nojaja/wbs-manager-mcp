@@ -98,7 +98,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             // タスク配下: サブタスク一覧を表示
             if (element.task && element.task.children && element.task.children.length > 0) {
                 return element.task.children.map(child => new TreeItem(
-                    child.title,
+                    this.getTaskLabel(child),
                     child.id,
                     'task',
                     child.children && child.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
@@ -151,7 +151,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             const tasks = await this.mcpClient.listTasks(projectId);
             // 各タスクをTreeItemに変換
             return tasks.map(task => new TreeItem(
-                task.title,
+                this.getTaskLabel(task),
                 task.id,
                 'task',
                 task.children && task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
@@ -163,6 +163,63 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             vscode.window.showErrorMessage(`Failed to fetch tasks: ${error}`);
             return [];
         }
+    }
+
+    /**
+     * タスク追加処理
+     * 選択中のプロジェクトまたはタスク配下に新しいタスクを追加する
+     * なぜ必要か: ツリー上から直接タスクを追加できるようにするため
+     * @param target 選択中のツリーアイテム
+     * @returns 作成結果（成功時はタスクIDを含む）
+     */
+    async createTask(target?: TreeItem): Promise<{ success: boolean; taskId?: string }> {
+        const { projectId, parentId } = this.resolveCreationContext(target);
+
+        if (!projectId) {
+            vscode.window.showWarningMessage('新しいタスクを追加するには、プロジェクトまたはタスクを選択してください。');
+            return { success: false };
+        }
+
+        try {
+            const response = await this.mcpClient.createTask({
+                projectId,
+                parentId: parentId ?? null,
+                title: 'New Task',
+            });
+            if (!response.success) {
+                if (response.error) {
+                    vscode.window.showErrorMessage(`タスクの作成に失敗しました: ${response.error}`);
+                }
+                return { success: false };
+            }
+
+            this.refresh();
+            vscode.window.showInformationMessage('新しいタスクを作成しました。');
+            return { success: true, taskId: response.taskId };
+        } catch (error) {
+            vscode.window.showErrorMessage(`タスクの作成中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
+            return { success: false };
+        }
+    }
+
+    /**
+     * タスク作成先の解決処理
+     * 選択ノードに基づきプロジェクトIDと親タスクIDを特定する
+     * なぜ必要か: タスク作成時の分岐ロジックを整理し、複雑度を下げるため
+     * @param target 選択中のツリーアイテム
+     * @returns プロジェクトIDと親タスクID
+     */
+    private resolveCreationContext(target?: TreeItem): { projectId?: string; parentId?: string } {
+        if (!target) {
+            return {};
+        }
+        if (target.contextValue === 'project') {
+            return { projectId: target.itemId, parentId: undefined };
+        }
+        if (target.contextValue === 'task' && target.task) {
+            return { projectId: target.task.project_id, parentId: target.task.id };
+        }
+        return {};
     }
 
     /**
@@ -178,6 +235,20 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         if (task.assignee) parts.push(`@${task.assignee}`);
         if (task.estimate) parts.push(task.estimate);
         return parts.join(' ');
+    }
+
+    /**
+     * タスクラベル生成処理
+     * タスクタイトルが空の場合はIDを表示ラベルとして返す
+     * なぜ必要か: 初期状態でタイトル未設定のタスクがツリー上で識別できるようにするため
+     * @param task タスク情報
+     * @returns 表示用ラベル
+     */
+    private getTaskLabel(task: Task): string {
+        if (task.title && task.title.trim().length > 0) {
+            return task.title;
+        }
+        return task.id;
     }
 
 }

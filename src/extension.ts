@@ -78,11 +78,20 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    const createTaskCommand = vscode.commands.registerCommand('wbsTree.createTask', async () => {
+        const selected = treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined;
+        const result = await treeProvider.createTask(selected as any);
+        if (result?.taskId) {
+            TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, mcpClient);
+        }
+    });
+
     // サブスクリプションに各コマンド・ビュー・チャネルを登録（拡張機能のライフサイクル管理のため）
     context.subscriptions.push(
         startServerCommand,
         refreshTreeCommand,
         openTaskCommand,
+        createTaskCommand,
         treeView,
         outputChannel
     );

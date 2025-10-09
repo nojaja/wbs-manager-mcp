@@ -47,6 +47,11 @@
       {
         "command": "wbsTree.openTask",
         "title": "Open Task Details"
+      },
+      {
+        "command": "wbsTree.createTask",
+        "title": "新しいタスク",
+        "icon": "$(add)"
       }
     ],
     "views": {
@@ -61,6 +66,11 @@
       "view/title": [
         {
           "command": "wbsTree.refresh",
+          "when": "view == wbsTree",
+          "group": "navigation"
+        },
+        {
+          "command": "wbsTree.createTask",
           "when": "view == wbsTree",
           "group": "navigation"
         }

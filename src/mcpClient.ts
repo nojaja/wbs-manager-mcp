@@ -366,6 +366,52 @@ export class MCPClient {
     }
 
     /**
+     * タスク作成処理
+     * 指定プロジェクトに新しいタスクを作成し、結果を返す
+     * なぜ必要か: ツリー上からタスクを追加する機能を提供するため
+     * @param params 作成パラメータ
+    * @param params.projectId プロジェクトID
+    * @param params.title タスクタイトル
+    * @param params.description タスク説明
+    * @param params.parentId 親タスクID
+    * @param params.assignee 担当者
+    * @param params.estimate 見積もり
+    * @param params.goal ゴール
+     * @returns 作成結果（成功時はタスクIDを含む）
+     */
+    async createTask(params: {
+        projectId: string;
+        title?: string;
+        description?: string;
+        parentId?: string | null;
+        assignee?: string | null;
+        estimate?: string | null;
+        goal?: string | null;
+    }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }> {
+        try {
+            const result = await this.callTool('wbs.createTask', {
+                projectId: params.projectId,
+                title: params.title ?? 'New Task',
+                description: params.description ?? '',
+                parentId: params.parentId ?? null,
+                assignee: params.assignee ?? null,
+                estimate: params.estimate ?? null,
+                goal: params.goal ?? null
+            });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('✅')) {
+                const idMatch = content.match(/ID:\s*(.+)/);
+                const createdId = idMatch ? idMatch[1].trim() : undefined;
+                return { success: true, taskId: createdId, message: content };
+            }
+            return { success: false, error: content || 'Unknown error', message: content };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return { success: false, error: message };
+        }
+    }
+
+    /**
      * サーバプロセス停止処理
      * サーバプロセスを停止し、リクエスト管理をクリアする
      * なぜ必要か: プロセスリーク・リソース消費を防ぎ、拡張機能終了時に安全に停止するため
