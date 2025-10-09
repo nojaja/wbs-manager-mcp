@@ -46,12 +46,24 @@
       },
       {
         "command": "wbsTree.openTask",
-        "title": "Open Task Details"
+        "title": "開く"
       },
       {
         "command": "wbsTree.createTask",
         "title": "新しいタスク",
         "icon": "$(add)"
+      },
+      {
+        "command": "wbsTree.deleteTask",
+        "title": "削除"
+      },
+      {
+        "command": "wbsTree.addChildTask",
+        "title": "子タスク追加"
+      },
+      {
+        "command": "wbsTree.deleteProject",
+        "title": "プロジェクト削除"
       }
     ],
     "views": {
@@ -79,6 +91,21 @@
         {
           "command": "wbsTree.openTask",
           "when": "view == wbsTree && viewItem == task",
+          "group": "inline"
+        },
+        {
+          "command": "wbsTree.deleteTask",
+          "when": "view == wbsTree && viewItem == task",
+          "group": "inline@1"
+        },
+        {
+          "command": "wbsTree.addChildTask",
+          "when": "view == wbsTree && viewItem == task",
+          "group": "inline@2"
+        },
+        {
+          "command": "wbsTree.deleteProject",
+          "when": "view == wbsTree && viewItem == project",
           "group": "inline"
         }
       ]

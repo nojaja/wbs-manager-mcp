@@ -203,6 +203,87 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     /**
+     * タスク削除処理
+     * 選択されたタスクとその子タスクを削除する
+     * なぜ必要か: ツリー上から不要なタスク階層を直接削除できるようにするため
+     * @param target 選択中のタスクアイテム
+     * @returns 削除結果
+     */
+    async deleteTask(target?: TreeItem): Promise<{ success: boolean }> {
+        if (!target || target.contextValue !== 'task' || !target.task) {
+            vscode.window.showWarningMessage('削除するタスクを選択してください。');
+            return { success: false };
+        }
+
+        const answer = await vscode.window.showWarningMessage(
+            '選択したタスクとその子タスクを削除します。よろしいですか？',
+            { modal: true },
+            '削除'
+        );
+
+        if (answer !== '削除') {
+            return { success: false };
+        }
+        try {
+            const response = await this.mcpClient.deleteTask(target.task.id);
+            if (!response.success) {
+                if (response.error) {
+                    vscode.window.showErrorMessage(`タスクの削除に失敗しました: ${response.error}`);
+                }
+                return { success: false };
+            }
+
+            this.refresh();
+            vscode.window.showInformationMessage('タスクを削除しました。');
+            return { success: true };
+        } catch (error) {
+            vscode.window.showErrorMessage(`タスクの削除中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
+            return { success: false };
+        }
+    }
+
+    /**
+     * プロジェクト削除処理
+     * 選択されたプロジェクトと配下のタスクを削除する
+     * なぜ必要か: UI上から不要なプロジェクトを整理できるようにするため
+     * @param target 選択中のプロジェクトアイテム
+     * @returns 削除結果
+     */
+    async deleteProject(target?: TreeItem): Promise<{ success: boolean }> {
+        if (!target || target.contextValue !== 'project') {
+            vscode.window.showWarningMessage('削除するプロジェクトを選択してください。');
+            return { success: false };
+        }
+
+        const answer = await vscode.window.showWarningMessage(
+            '選択したプロジェクトと配下のタスクを削除します。よろしいですか？',
+            { modal: true },
+            '削除'
+        );
+
+        if (answer !== '削除') {
+            return { success: false };
+        }
+
+        try {
+            const response = await this.mcpClient.deleteProject(target.itemId);
+            if (!response.success) {
+                if (response.error) {
+                    vscode.window.showErrorMessage(`プロジェクトの削除に失敗しました: ${response.error}`);
+                }
+                return { success: false };
+            }
+
+            this.refresh();
+            vscode.window.showInformationMessage('プロジェクトを削除しました。');
+            return { success: true };
+        } catch (error) {
+            vscode.window.showErrorMessage(`プロジェクトの削除中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
+            return { success: false };
+        }
+    }
+
+    /**
      * タスク作成先の解決処理
      * 選択ノードに基づきプロジェクトIDと親タスクIDを特定する
      * なぜ必要か: タスク作成時の分岐ロジックを整理し、複雑度を下げるため

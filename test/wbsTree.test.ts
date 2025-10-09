@@ -4,7 +4,9 @@ import * as vscode from 'vscode';
 const fakeClient: any = {
   listProjects: jest.fn(),
   listTasks: jest.fn(),
-  createTask: jest.fn()
+  createTask: jest.fn(),
+  deleteTask: jest.fn(),
+  deleteProject: jest.fn()
 };
 
 describe('WBSTreeProvider', () => {
@@ -71,5 +73,69 @@ describe('WBSTreeProvider', () => {
     expect(result.success).toBe(false);
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+
+  test('deleteTask warns when target missing', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    const result = await provider.deleteTask();
+    expect(result.success).toBe(false);
+    expect(warningSpy).toHaveBeenCalled();
+    warningSpy.mockRestore();
+  });
+
+  test('deleteTask aborts when user cancels', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValueOnce(undefined as any);
+    const result = await provider.deleteTask({ contextValue: 'task', task: { id: 't1' } } as any);
+    expect(result.success).toBe(false);
+    expect(fakeClient.deleteTask).not.toHaveBeenCalled();
+    warningSpy.mockRestore();
+  });
+
+  test('deleteTask delegates to client and refreshes', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    warningSpy.mockResolvedValueOnce('削除' as never);
+    const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
+    const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
+    fakeClient.deleteTask.mockResolvedValue({ success: true });
+    const result = await provider.deleteTask({ contextValue: 'task', task: { id: 't5' } } as any);
+    expect(fakeClient.deleteTask).toHaveBeenCalledWith('t5');
+    expect(result).toEqual({ success: true });
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalled();
+    warningSpy.mockRestore();
+    infoSpy.mockRestore();
+    refreshSpy.mockRestore();
+  });
+
+  test('deleteProject warns when target missing', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    const result = await provider.deleteProject();
+    expect(result.success).toBe(false);
+    expect(warningSpy).toHaveBeenCalled();
+    warningSpy.mockRestore();
+  });
+
+  test('deleteProject aborts when user cancels', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValueOnce(undefined as never);
+    const result = await provider.deleteProject({ contextValue: 'project', itemId: 'p1' } as any);
+    expect(result.success).toBe(false);
+    expect(fakeClient.deleteProject).not.toHaveBeenCalled();
+    warningSpy.mockRestore();
+  });
+
+  test('deleteProject delegates to client and refreshes', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    warningSpy.mockResolvedValueOnce('削除' as never);
+    const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
+    const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
+    fakeClient.deleteProject.mockResolvedValue({ success: true });
+    const result = await provider.deleteProject({ contextValue: 'project', itemId: 'p7' } as any);
+    expect(fakeClient.deleteProject).toHaveBeenCalledWith('p7');
+    expect(result).toEqual({ success: true });
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalled();
+    warningSpy.mockRestore();
+    infoSpy.mockRestore();
+    refreshSpy.mockRestore();
   });
 });

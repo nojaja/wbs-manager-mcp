@@ -120,4 +120,40 @@ describe('MCPClient', () => {
     spy.mockRestore();
   });
 
+  test('deleteTask handles success and error paths', async () => {
+    const spy = jest.spyOn(client as any, 'callTool');
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
+    const ok = await client.deleteTask('t5');
+    expect(ok).toEqual({ success: true });
+    expect(spy).toHaveBeenCalledWith('wbs.deleteTask', { taskId: 't5' });
+
+    spy.mockResolvedValueOnce({ content: [{ text: '❌ missing' }] });
+    const fail = await client.deleteTask('t5');
+    expect(fail).toEqual({ success: false, error: '❌ missing' });
+
+    spy.mockRejectedValueOnce(new Error('boom'));
+    const err = await client.deleteTask('t5');
+    expect(err).toEqual({ success: false, error: 'boom' });
+
+    spy.mockRestore();
+  });
+
+  test('deleteProject handles success and error paths', async () => {
+    const spy = jest.spyOn(client as any, 'callTool');
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
+    const ok = await client.deleteProject('p1');
+    expect(ok).toEqual({ success: true });
+    expect(spy).toHaveBeenCalledWith('wbs.deleteProject', { projectId: 'p1' });
+
+    spy.mockResolvedValueOnce({ content: [{ text: '❌ missing' }] });
+    const fail = await client.deleteProject('p1');
+    expect(fail).toEqual({ success: false, error: '❌ missing' });
+
+    spy.mockRejectedValueOnce(new Error('boom'));
+    const err = await client.deleteProject('p1');
+    expect(err).toEqual({ success: false, error: 'boom' });
+
+    spy.mockRestore();
+  });
+
 });

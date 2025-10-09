@@ -227,6 +227,28 @@ class StdioMCPServer {
                                     },
                                     required: ['projectId']
                                 }
+                            },
+                            {
+                                name: 'wbs.deleteTask',
+                                description: 'Delete task and descendants',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        taskId: { type: 'string', description: 'Task ID' }
+                                    },
+                                    required: ['taskId']
+                                }
+                            },
+                            {
+                                name: 'wbs.deleteProject',
+                                description: 'Delete project and all its tasks',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        projectId: { type: 'string', description: 'Project ID' }
+                                    },
+                                    required: ['projectId']
+                                }
                             }
                         ]
                     }
@@ -546,6 +568,74 @@ class StdioMCPServer {
     }
 
     /**
+     * タスク削除処理
+     * 指定IDのタスクと子タスクを削除し、結果メッセージを返す
+     * なぜ必要か: クライアントからの削除要求をDB操作に接続するため
+     * @param args 削除引数
+     * @returns ツールレスポンス
+     */
+    private async handleDeleteTask(args: any) {
+        try {
+            const deleted = await this.repo.deleteTask(args.taskId);
+            if (!deleted) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `❌ Task not found: ${args.taskId}`
+                    }]
+                };
+            }
+            return {
+                content: [{
+                    type: 'text',
+                    text: `✅ Task deleted successfully!\n\nID: ${args.taskId}`
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to delete task: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
+     * プロジェクト削除処理
+     * 指定IDのプロジェクトを削除し、結果メッセージを返す
+     * なぜ必要か: クライアントからのプロジェクト削除要求をDB操作と接続するため
+     * @param args 削除引数
+     * @returns ツールレスポンス
+     */
+    private async handleDeleteProject(args: any) {
+        try {
+            const deleted = await this.repo.deleteProject(args.projectId);
+            if (!deleted) {
+                return {
+                    content: [{
+                        type: 'text',
+                        text: `❌ Project not found: ${args.projectId}`
+                    }]
+                };
+            }
+            return {
+                content: [{
+                    type: 'text',
+                    text: `✅ Project deleted successfully!\n\nID: ${args.projectId}`
+                }]
+            };
+        } catch (error) {
+            return {
+                content: [{
+                    type: 'text',
+                    text: `❌ Failed to delete project: ${error instanceof Error ? error.message : String(error)}`
+                }]
+            };
+        }
+    }
+
+    /**
      * ツール呼び出し分岐処理
      * ツール名ごとに各ハンドラへ処理を振り分ける
      * なぜ必要か: クライアントからの各種API呼び出しを柔軟に拡張・管理するため
@@ -572,6 +662,10 @@ class StdioMCPServer {
                 return this.handleUpdateTask(args);
             case 'wbs.listTasks':
                 return this.handleListTasks(args);
+            case 'wbs.deleteTask':
+                return this.handleDeleteTask(args);
+            case 'wbs.deleteProject':
+                return this.handleDeleteProject(args);
             default:
                 // 未知のツール名はエラー
                 throw new Error(`Unknown tool: ${name}`);

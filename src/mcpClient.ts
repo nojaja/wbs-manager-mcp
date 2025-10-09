@@ -412,6 +412,46 @@ export class MCPClient {
     }
 
     /**
+     * タスク削除処理
+     * 指定したタスクIDと紐づく子タスクを削除する
+     * なぜ必要か: UIからの削除操作をサーバAPI呼び出しに委譲するため
+     * @param taskId タスクID
+     * @returns 削除結果
+     */
+    async deleteTask(taskId: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const result = await this.callTool('wbs.deleteTask', { taskId });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('✅')) {
+                return { success: true };
+            }
+            return { success: false, error: content || 'Unknown error' };
+        } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+    }
+
+    /**
+     * プロジェクト削除処理
+     * 指定したプロジェクトIDと配下のタスクを削除する
+     * なぜ必要か: UIからの削除操作をサーバAPI呼び出しに委譲するため
+     * @param projectId プロジェクトID
+     * @returns 削除結果
+     */
+    async deleteProject(projectId: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const result = await this.callTool('wbs.deleteProject', { projectId });
+            const content = result.content?.[0]?.text ?? '';
+            if (content.includes('✅')) {
+                return { success: true };
+            }
+            return { success: false, error: content || 'Unknown error' };
+        } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+    }
+
+    /**
      * サーバプロセス停止処理
      * サーバプロセスを停止し、リクエスト管理をクリアする
      * なぜ必要か: プロセスリーク・リソース消費を防ぎ、拡張機能終了時に安全に停止するため

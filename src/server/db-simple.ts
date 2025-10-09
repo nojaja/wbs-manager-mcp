@@ -564,4 +564,56 @@ export class WBSRepository {
 
         return (await this.getTask(taskId))!;
     }
+
+    /**
+     * タスク削除処理
+     * 指定されたタスクとその子タスクをDBから削除する
+     * なぜ必要か: UIやAPIからの削除要求を実データベースに反映するため
+     * @param taskId タスクID
+     * @returns 削除が行われたかどうか
+     */
+    async deleteTask(taskId: string): Promise<boolean> {
+        const db = await this.db();
+        const existing = await db.get<{ id: string }>(
+            `SELECT id FROM tasks WHERE id = ?`,
+            taskId
+        );
+
+        if (!existing) {
+            return false;
+        }
+
+        const result = await db.run(
+            `DELETE FROM tasks WHERE id = ?`,
+            taskId
+        );
+
+        return (result.changes ?? 0) > 0;
+    }
+
+    /**
+     * プロジェクト削除処理
+     * 指定されたプロジェクトと配下のタスクを削除する
+     * なぜ必要か: プロジェクト削除要求をDBへ反映し、関連タスクも一括で削除するため
+     * @param projectId プロジェクトID
+     * @returns 削除が行われたかどうか
+     */
+    async deleteProject(projectId: string): Promise<boolean> {
+        const db = await this.db();
+        const existing = await db.get<{ id: string }>(
+            `SELECT id FROM projects WHERE id = ?`,
+            projectId
+        );
+
+        if (!existing) {
+            return false;
+        }
+
+        const result = await db.run(
+            `DELETE FROM projects WHERE id = ?`,
+            projectId
+        );
+
+        return (result.changes ?? 0) > 0;
+    }
 }

@@ -86,12 +86,33 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    const addChildTaskCommand = vscode.commands.registerCommand('wbsTree.addChildTask', async (item) => {
+        const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
+        const result = await treeProvider.createTask(target as any);
+        if (result?.taskId) {
+            TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, mcpClient);
+        }
+    });
+
+    const deleteTaskCommand = vscode.commands.registerCommand('wbsTree.deleteTask', async (item) => {
+        const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
+        await treeProvider.deleteTask(target as any);
+    });
+
+    const deleteProjectCommand = vscode.commands.registerCommand('wbsTree.deleteProject', async (item) => {
+        const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
+        await treeProvider.deleteProject(target as any);
+    });
+
     // サブスクリプションに各コマンド・ビュー・チャネルを登録（拡張機能のライフサイクル管理のため）
     context.subscriptions.push(
         startServerCommand,
         refreshTreeCommand,
         openTaskCommand,
         createTaskCommand,
+        addChildTaskCommand,
+        deleteTaskCommand,
+        deleteProjectCommand,
         treeView,
         outputChannel
     );
