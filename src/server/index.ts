@@ -250,6 +250,19 @@ class StdioMCPServer {
                                     required: ['taskId']
                                 }
                             }
+                            ,
+                            {
+                                name: 'wbs.impotTask',
+                                description: 'Import multiple tasks into a project',
+                                inputSchema: {
+                                    type: 'object',
+                                    properties: {
+                                        projectId: { type: 'string', description: 'Project ID' },
+                                        tasks: { type: 'array', description: 'Array of task objects' }
+                                    },
+                                    required: ['projectId', 'tasks']
+                                }
+                            }
                         ]
                     }
                 };
@@ -577,6 +590,26 @@ class StdioMCPServer {
     }
 
     /**
+     * 複数タスク一括登録ツールハンドラ
+     * @param args 引数 (projectId, tasks)
+     * @returns ツールレスポンス
+     */
+    private async handleImpotTask(args: any) {
+        try {
+            const projectId = args.projectId;
+            const tasks = Array.isArray(args.tasks) ? args.tasks : [];
+            const created = await this.repo.importTasks(projectId, tasks);
+            return {
+                content: [{ type: 'text', text: JSON.stringify(created, null, 2) }]
+            };
+        } catch (error) {
+            return {
+                content: [{ type: 'text', text: `❌ Failed to import tasks: ${error instanceof Error ? error.message : String(error)}` }]
+            };
+        }
+    }
+
+    /**
      * ツール呼び出し分岐処理
      * ツール名ごとに各ハンドラへ処理を振り分ける
      * なぜ必要か: クライアントからの各種API呼び出しを柔軟に拡張・管理するため
@@ -605,6 +638,8 @@ class StdioMCPServer {
                 return this.handleDeleteTask(args);
             case 'wbs.moveTask':
                 return this.handleMoveTask(args);
+            case 'wbs.impotTask':
+                return this.handleImpotTask(args);
             default:
                 // 未知のツール名はエラー
                 throw new Error(`Unknown tool: ${name}`);

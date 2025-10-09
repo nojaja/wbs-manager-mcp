@@ -166,7 +166,7 @@ async function seedInitialData(db: Database): Promise<void> {
     // ユーザーの要求により登録しないようにします。
     // ワークスペース専用のプロジェクトは必要に応じて WBSRepository.getWorkspaceProject()
     // により自動生成されます。
-    console.log('初期サンプルデータ登録は無効化されています。');
+    console.error('初期サンプルデータ登録は無効化されています。');
     return;
 }
 
@@ -272,6 +272,31 @@ export class WBSRepository {
         );
 
         return (await this.getTask(id))!;
+    }
+
+    /**
+     * 複数タスク一括登録処理
+     * @param projectId プロジェクトID
+     * @param tasksTasks タスク配列 (各要素に title 等のプロパティを持つ)
+     * @returns 作成された Task の配列
+     */
+    async importTasks(projectId: string, tasksTasks: Array<any>): Promise<Task[]> {
+        const created: Task[] = [];
+        for (const t of tasksTasks || []) {
+            // 最小限のバリデーション
+            if (!t || !t.title) continue;
+            const task = await this.createTask(
+                projectId,
+                t.title,
+                t.description ?? '',
+                t.parentId ?? null,
+                t.assignee ?? null,
+                t.estimate ?? null,
+                t.goal ?? null
+            );
+            created.push(task);
+        }
+        return created;
     }
 
     /**
