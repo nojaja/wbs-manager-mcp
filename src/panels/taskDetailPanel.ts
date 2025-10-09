@@ -1,4 +1,7 @@
+
+// VSCode API
 import * as vscode from 'vscode';
+// MCPクライアント（API通信・管理用）
 import { MCPClient } from '../mcpClient';
 
 interface Task {
@@ -17,6 +20,7 @@ interface Task {
 /**
  * タスク詳細パネルクラス
  * タスク詳細のWebview表示・編集・保存を行う
+ * なぜ必要か: タスクの詳細情報をリッチなUIで表示・編集できるようにするため
  */
 export class TaskDetailPanel {
     public static currentPanel: TaskDetailPanel | undefined;
@@ -29,6 +33,7 @@ export class TaskDetailPanel {
     /**
      * パネル生成・表示処理
      * 既存パネルがあれば再利用し、なければ新規作成してタスク詳細を表示する
+     * なぜ必要か: 複数タブを乱立させず、1つの詳細パネルでタスク編集を集中管理するため
      * @param extensionUri 拡張機能のURI
      * @param taskId タスクID
      * @param mcpClient MCPクライアント
@@ -38,6 +43,8 @@ export class TaskDetailPanel {
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
+        // 既存パネルがあれば再利用し、タスクIDを更新
+        // 理由: 複数パネル生成による混乱・リソース浪費を防ぐため
         if (TaskDetailPanel.currentPanel) {
             TaskDetailPanel.currentPanel._panel.reveal(column);
             TaskDetailPanel.currentPanel.updateTask(taskId);
@@ -60,6 +67,7 @@ export class TaskDetailPanel {
     /**
      * コンストラクタ
      * Webviewパネル・タスクID・MCPクライアントを受け取り初期化する
+     * なぜ必要か: パネルの状態・タスク情報・API通信を一元管理するため
      * @param panel Webviewパネル
      * @param extensionUri 拡張機能のURI
      * @param taskId タスクID
@@ -76,6 +84,8 @@ export class TaskDetailPanel {
 
         this._panel.webview.onDidReceiveMessage(
             message => {
+                // 受信メッセージのコマンド種別で処理分岐
+                // 理由: 複数コマンド拡張時の可読性・保守性向上のため
                 switch (message.command) {
                     case 'save':
                         this.saveTask(message.data);
@@ -90,6 +100,7 @@ export class TaskDetailPanel {
     /**
      * タスク更新処理
      * 指定タスクIDのタスク情報を再取得し、画面を更新する
+     * なぜ必要か: 別タブや他ユーザーによる変更を即時反映するため
      * @param taskId タスクID
      */
     private async updateTask(taskId: string) {
@@ -100,9 +111,11 @@ export class TaskDetailPanel {
     /**
      * タスク読込処理
      * タスク情報をMCPクライアントから取得し、Webviewに反映する
+     * なぜ必要か: 詳細画面表示時に常に最新のタスク情報を取得するため
      */
     private async loadTask() {
         try {
+            // 理由: タスク取得失敗時もエラー通知し、UIの不整合を防ぐ
             this._task = await this.mcpClient.getTask(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
@@ -116,11 +129,14 @@ export class TaskDetailPanel {
     /**
      * 更新オブジェクト生成処理
      * フォームデータからタスク更新用オブジェクトを生成する
+     * なぜ必要か: サーバAPIに渡す更新内容を安全・簡潔にまとめるため
      * @param data フォームデータ
      * @returns 更新オブジェクト
      */
     private buildUpdateObject(data: any): any {
         const updates: any = {};
+        // 各フォーム項目が未定義でなければ更新オブジェクトに追加
+        // 理由: サーバAPIに不要なフィールド送信を防ぐ
         if (data.title !== undefined) updates.title = data.title;
         if (data.description !== undefined) updates.description = data.description;
         if (data.goal !== undefined) updates.goal = data.goal;
@@ -134,6 +150,7 @@ export class TaskDetailPanel {
     /**
      * タスク更新成功時処理
      * 成功メッセージ表示・再読込・ツリーリフレッシュを行う
+     * なぜ必要か: ユーザーに成功通知し、画面・ツリーを即時反映するため
      */
     private handleUpdateSuccess(): void {
         vscode.window.showInformationMessage('Task updated successfully');
@@ -144,6 +161,7 @@ export class TaskDetailPanel {
     /**
      * 更新競合時処理
      * 他ユーザーによる競合時に警告・再読込を行う
+     * なぜ必要か: 楽観ロック失敗時にユーザーへ警告し、再取得を促すため
      */
     private async handleUpdateConflict(): Promise<void> {
         const choice = await vscode.window.showWarningMessage(
@@ -151,6 +169,8 @@ export class TaskDetailPanel {
             'Reload',
             'Cancel'
         );
+        // ユーザーがReloadを選択した場合のみ再読込
+        // 理由: 意図しない再取得を防ぐ
         if (choice === 'Reload') {
             this.loadTask();
         }
@@ -159,17 +179,22 @@ export class TaskDetailPanel {
     /**
      * タスク保存処理
      * 入力データをもとにタスクを更新し、結果に応じて画面制御する
+     * なぜ必要か: 編集内容をサーバに反映し、UI状態を一貫させるため
      * @param data 保存するフォームデータ
      */
     private async saveTask(data: any) {
         try {
+            // 理由: サーバ更新失敗時もエラー通知し、UIの不整合を防ぐ
             const updates = this.buildUpdateObject(data);
             const result = await this.mcpClient.updateTask(this._taskId, updates);
-            
+
+            // 更新成功時
             if (result.success) {
                 this.handleUpdateSuccess();
+                // 楽観ロック競合時
             } else if (result.conflict) {
                 await this.handleUpdateConflict();
+                // その他エラー時
             } else {
                 vscode.window.showErrorMessage(`Failed to update task: ${result.error}`);
             }
@@ -183,6 +208,7 @@ export class TaskDetailPanel {
     /**
      * Webview用HTML生成処理
      * タスク情報をもとに詳細画面のHTMLを生成する
+     * なぜ必要か: WebviewでリッチなUIを動的に生成するため
      * @param task タスク情報
      * @returns HTML文字列
      */
@@ -353,6 +379,7 @@ export class TaskDetailPanel {
     /**
      * HTMLエスケープ処理
      * テキスト内の危険文字をHTMLエスケープする
+     * なぜ必要か: XSS等の脆弱性対策として、ユーザー入力を安全に表示するため
      * @param text 入力テキスト
      * @returns エスケープ済み文字列
      */
@@ -368,10 +395,13 @@ export class TaskDetailPanel {
     /**
      * パネル破棄処理
      * パネル・リソースを破棄し、メモリリークを防ぐ
+     * なぜ必要か: Webviewパネルの多重生成・リソースリークを防止するため
      */
     public dispose() {
         TaskDetailPanel.currentPanel = undefined;
         this._panel.dispose();
+        // 登録済みリソースを全て破棄
+        // 理由: メモリリーク・リソースリークを防ぐ
         while (this._disposables.length) {
             const disposable = this._disposables.pop();
             if (disposable) {

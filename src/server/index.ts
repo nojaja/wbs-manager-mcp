@@ -27,6 +27,7 @@ interface JsonRpcNotification {
 /**
  * 標準入出力MCPサーバクラス
  * 標準入出力経由でリクエスト受付・DB操作・レスポンス返却を行う
+ * なぜ必要か: VSCode拡張とサーバ間をシンプルなプロトコルで接続し、DB操作を分離するため
  */
 class StdioMCPServer {
     private repo: WBSRepository;
@@ -34,6 +35,7 @@ class StdioMCPServer {
     /**
      * コンストラクタ
      * WBSリポジトリ初期化・標準入出力ハンドラ設定を行う
+     * なぜ必要か: DB操作・リクエスト受付を一元管理するため
      */
     constructor() {
         this.repo = new WBSRepository();
@@ -43,6 +45,7 @@ class StdioMCPServer {
     /**
      * 標準入出力ハンドラ設定処理
      * stdinからのデータ受信・パース・メッセージ分岐処理を行う
+     * なぜ必要か: VSCode拡張からのリクエストをリアルタイムで受信・処理するため
      */
     private setupStdioHandlers() {
         process.stdin.setEncoding('utf8');
@@ -53,8 +56,11 @@ class StdioMCPServer {
             let lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
+            // 1行ずつJSON-RPCメッセージとして処理
             for (const line of lines) {
+                // 空行はスキップ
                 if (line.trim()) {
+                    // 理由: サーバへの不正リクエストやパース失敗時も安全にエラー通知
                     try {
                         const message = JSON.parse(line.trim());
                         this.handleMessage(message);
@@ -77,12 +83,15 @@ class StdioMCPServer {
     /**
      * メッセージ受信処理
      * JSON-RPCリクエスト/通知を受信し、リクエストはhandleRequest、通知はhandleNotificationへ振り分ける
+     * なぜ必要か: クライアントからの各種操作要求を正しく分岐・処理するため
      * @param message 受信メッセージ
      */
     private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
         try {
             console.error(`[MCP Server] Received: ${message.method}`, message.params);
 
+            // idプロパティの有無でリクエスト/通知を分岐
+            // 理由: JSON-RPC仕様に従い、応答要否を正しく判定するため
             if ('id' in message) {
                 // Request - needs response
                 const response = await this.handleRequest(message as JsonRpcRequest);
@@ -93,6 +102,8 @@ class StdioMCPServer {
             }
         } catch (error) {
             console.error('[MCP Server] Error handling message:', error);
+            // idプロパティがある場合のみエラー応答を返す
+            // 理由: 通知には応答不要、リクエストのみエラー返却
             if ('id' in message) {
                 this.sendResponse({
                     jsonrpc: '2.0',
@@ -109,12 +120,15 @@ class StdioMCPServer {
     /**
      * リクエスト処理
      * JSON-RPCリクエストのメソッドごとにDB操作やツール呼び出しを行い、レスポンスを返す
+     * なぜ必要か: クライアントからのAPI呼び出しをDB操作やツール呼び出しにマッピングするため
      * @param request リクエストオブジェクト
      * @returns レスポンスオブジェクト
      */
     private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
         const { method, params, id } = request;
 
+        // メソッド名ごとに処理を分岐
+        // 理由: JSON-RPC仕様に従い、APIごとに適切なレスポンスを返すため
         switch (method) {
             case 'initialize':
                 return {
@@ -217,6 +231,7 @@ class StdioMCPServer {
                 };
 
             case 'tools/call':
+                // 理由: ツール名ごとに個別ハンドラへ分岐
                 const toolResult = await this.handleToolCall(params);
                 return {
                     jsonrpc: '2.0',
@@ -250,6 +265,7 @@ class StdioMCPServer {
                 };
 
             default:
+                // 未知のメソッドはエラー応答
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -264,11 +280,14 @@ class StdioMCPServer {
     /**
      * 通知処理
      * JSON-RPC通知のメソッドごとにログ出力等を行う
+     * なぜ必要か: クライアントからの状態通知やイベントを受けてサーバ側で処理するため
      * @param notification 通知オブジェクト
      */
     private async handleNotification(notification: JsonRpcNotification) {
         const { method } = notification;
 
+        // 通知メソッド名ごとに処理を分岐
+        // 理由: 拡張性・保守性向上のため
         switch (method) {
             case 'notifications/initialized':
                 console.error('[MCP Server] Client initialized successfully');
@@ -282,6 +301,7 @@ class StdioMCPServer {
     /**
      * プロジェクト作成処理
      * DBに新規プロジェクトを作成し、結果を返す
+     * なぜ必要か: クライアントからの新規プロジェクト作成要求に応えるため
      * @param args プロジェクト作成引数
      * @returns ツールレスポンス
      */
@@ -307,6 +327,7 @@ class StdioMCPServer {
     /**
      * プロジェクト一覧取得処理
      * DBからプロジェクト一覧を取得し、ツールレスポンスで返す
+     * なぜ必要か: クライアントからのプロジェクト一覧表示要求に応えるため
      * @returns ツールレスポンス
      */
     private async handleListProjects() {
@@ -331,6 +352,7 @@ class StdioMCPServer {
     /**
      * タスク作成処理
      * DBに新規タスクを作成し、結果を返す
+     * なぜ必要か: クライアントからの新規タスク作成要求に応えるため
      * @param args タスク作成引数
      * @returns ツールレスポンス
      */
@@ -363,6 +385,7 @@ class StdioMCPServer {
     /**
      * タスク取得処理
      * 指定IDのタスクをDBから取得し、ツールレスポンスで返す
+     * なぜ必要か: クライアントからのタスク詳細表示要求に応えるため
      * @param args タスク取得引数
      * @returns ツールレスポンス
      */
@@ -396,6 +419,7 @@ class StdioMCPServer {
     /**
      * タスク存在確認・取得処理
      * 指定IDのタスクが存在すれば返し、なければエラーを返す
+     * なぜ必要か: タスク更新時に存在チェック・楽観ロック用バージョン取得のため
      * @param taskId タスクID
      * @returns タスクまたはエラー
      */
@@ -417,6 +441,7 @@ class StdioMCPServer {
     /**
      * 楽観ロック用バージョン検証処理
      * バージョン不一致時はエラーを返す
+     * なぜ必要か: 複数ユーザー編集時の競合検出・整合性維持のため
      * @param args 更新引数
      * @param currentTask 現在のタスク
      * @returns エラー応答またはnull
@@ -436,6 +461,7 @@ class StdioMCPServer {
     /**
      * タスク更新オブジェクト生成処理
      * 更新引数と現在のタスクから更新用オブジェクトを生成する
+     * なぜ必要か: DB更新時に必要な差分のみを安全にまとめるため
      * @param args 更新引数
      * @param currentTask 現在のタスク
      * @returns 更新オブジェクト
@@ -454,6 +480,7 @@ class StdioMCPServer {
     /**
      * タスク更新処理
      * 指定IDのタスクをDBで更新し、結果を返す
+     * なぜ必要か: クライアントからのタスク編集・保存要求に応えるため
      * @param args タスク更新引数
      * @returns ツールレスポンス
      */
@@ -492,6 +519,7 @@ class StdioMCPServer {
     /**
      * タスク一覧取得処理
      * 指定プロジェクトIDのタスク一覧をDBから取得し、ツールレスポンスで返す
+     * なぜ必要か: クライアントからのタスク一覧表示要求に応えるため
      * @param args タスクリスト引数
      * @returns ツールレスポンス
      */
@@ -517,6 +545,7 @@ class StdioMCPServer {
     /**
      * ツール呼び出し分岐処理
      * ツール名ごとに各ハンドラへ処理を振り分ける
+     * なぜ必要か: クライアントからの各種API呼び出しを柔軟に拡張・管理するため
      * @param params ツール呼び出しパラメータ
      * @returns Promise<any>
      */
@@ -525,6 +554,8 @@ class StdioMCPServer {
 
         console.error(`[MCP Server] Tool call: ${name}`, args);
 
+        // ツール名ごとに個別ハンドラへ分岐
+        // 理由: 新規ツール追加時の拡張性・保守性向上のため
         switch (name) {
             case 'wbs.createProject':
                 return this.handleCreateProject(args);
@@ -539,6 +570,7 @@ class StdioMCPServer {
             case 'wbs.listTasks':
                 return this.handleListTasks(args);
             default:
+                // 未知のツール名はエラー
                 throw new Error(`Unknown tool: ${name}`);
         }
     }
@@ -546,6 +578,7 @@ class StdioMCPServer {
     /**
      * レスポンス送信処理
      * JSON-RPCレスポンスを標準出力へ送信する
+     * なぜ必要か: クライアントへAPI応答を返し、UIを更新させるため
      * @param response レスポンスオブジェクト
      */
     private sendResponse(response: JsonRpcResponse) {
@@ -558,6 +591,7 @@ class StdioMCPServer {
 // Start the MCP server once the database is ready
 (async () => {
     console.error('[MCP Server] Starting stdio MCP server...');
+    // 理由: DB初期化・サーバ起動失敗時もエラー通知し、異常終了させる
     try {
         await initializeDatabase();
         new StdioMCPServer();

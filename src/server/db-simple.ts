@@ -35,6 +35,7 @@ let dbPromise: Promise<Database> | null = null;
 /**
  * データベースパス解決処理
  * データディレクトリの絶対パスを生成し返す
+ * なぜ必要か: ワークスペースごとに独立したDBファイルを安全に配置するため
  * @returns データベースファイルパス
  */
 function resolveDatabasePath(): string {
@@ -52,10 +53,14 @@ const DB_DIR = path.dirname(DB_PATH);
 /**
  * データベース取得処理
  * DBファイルがなければ作成し、Databaseインスタンスを返す
+ * なぜ必要か: DB初期化・多重生成防止・全DB操作の共通入口とするため
  * @returns Promise<Database>
  */
 async function getDatabase(): Promise<Database> {
+    // dbPromiseが未初期化ならDBを初期化
+    // 理由: 多重初期化・競合を防ぐため
     if (!dbPromise) {
+        // DBディレクトリがなければ作成
         if (!fs.existsSync(DB_DIR)) {
             fs.mkdirSync(DB_DIR, { recursive: true });
         }
@@ -74,6 +79,7 @@ async function getDatabase(): Promise<Database> {
 /**
  * データベース初期化処理
  * 必要なテーブルを作成し、初期データを投入する
+ * なぜ必要か: サーバ起動時にDBスキーマ・サンプルデータを自動生成するため
  */
 export async function initializeDatabase(): Promise<void> {
     const db = await getDatabase();
@@ -141,6 +147,7 @@ export async function initializeDatabase(): Promise<void> {
 /**
  * 初期データ投入処理
  * DBにサンプルプロジェクト・タスクを投入する
+ * なぜ必要か: 新規環境でも動作確認できるように初期データを自動投入するため
  * @param db Databaseインスタンス
  */
 async function seedInitialData(db: Database): Promise<void> {
@@ -148,6 +155,8 @@ async function seedInitialData(db: Database): Promise<void> {
         'SELECT COUNT(*) as count FROM projects'
     );
 
+    // 既存データが1件以上あれば初期データ投入をスキップ
+    // 理由: 再投入による重複・整合性崩壊を防ぐため
     if ((existing?.count ?? 0) > 0) {
         return;
     }
@@ -296,11 +305,13 @@ async function seedInitialData(db: Database): Promise<void> {
 /**
  * WBSリポジトリクラス
  * プロジェクト・タスクのDB操作を提供する
+ * なぜ必要か: DBアクセスを集約し、サーバ本体から分離・再利用性を高めるため
  */
 export class WBSRepository {
     /**
      * DB取得処理
      * Databaseインスタンスを返す
+     * なぜ必要か: 全DB操作で同一インスタンスを使い、コネクション管理を簡素化するため
      * @returns Promise<Database>
      */
     private async db(): Promise<Database> {
@@ -310,6 +321,7 @@ export class WBSRepository {
     /**
      * プロジェクト作成処理
      * 新規プロジェクトをDBに登録し、作成結果を返す
+     * なぜ必要か: クライアントからの新規プロジェクト作成要求に応えるため
      * @param title プロジェクト名
      * @param description プロジェクト説明
      * @returns Promise<Project>
@@ -335,6 +347,7 @@ export class WBSRepository {
     /**
      * プロジェクト一覧取得処理
      * DBから全プロジェクトを取得し、配列で返す
+     * なぜ必要か: クライアントからのプロジェクト一覧表示要求に応えるため
      * @returns Promise<Project[]>
      */
     async listProjects(): Promise<Project[]> {
@@ -350,6 +363,7 @@ export class WBSRepository {
     /**
      * プロジェクト取得処理
      * 指定IDのプロジェクトをDBから取得する
+     * なぜ必要か: プロジェクト詳細画面やタスク作成時に参照するため
      * @param id プロジェクトID
      * @returns Promise<Project | null>
      */
@@ -367,6 +381,7 @@ export class WBSRepository {
     /**
      * タスク作成処理
      * 新規タスクをDBに登録し、作成結果を返す
+     * なぜ必要か: クライアントからの新規タスク作成要求に応えるため
      * @param projectId プロジェクトID
      * @param title タスク名
      * @param description タスク説明
@@ -412,6 +427,7 @@ export class WBSRepository {
     /**
      * タスク一覧取得処理
      * 指定プロジェクトIDのタスクをDBから取得し、階層構造で返す
+     * なぜ必要か: プロジェクト配下のタスクツリーをUIに表示するため
      * @param projectId プロジェクトID
      * @returns Promise<Task[]>
      */
@@ -435,6 +451,8 @@ export class WBSRepository {
 
         rows.forEach((row) => {
             const node = taskMap.get(row.id)!;
+            // 親タスクが存在すれば親のchildrenに追加、なければルートに追加
+            // 理由: タスクツリー構造を正しく再現するため
             if (row.parent_id && taskMap.has(row.parent_id)) {
                 const parent = taskMap.get(row.parent_id)!;
                 parent.children!.push(node);
@@ -449,6 +467,7 @@ export class WBSRepository {
     /**
      * タスク取得処理
      * 指定IDのタスクをDBから取得する
+     * なぜ必要か: タスク詳細画面や編集時に最新情報を取得するため
      * @param taskId タスクID
      * @returns Promise<Task | null>
      */
@@ -467,6 +486,7 @@ export class WBSRepository {
     /**
      * タスク更新処理
      * 指定IDのタスクをDBで更新し、更新後のタスクを返す
+     * なぜ必要か: タスク編集・保存時にDBへ反映し、バージョン管理・競合検出も行うため
      * @param taskId タスクID
      * @param updates 更新内容
      * @returns Promise<Task>
@@ -474,10 +494,14 @@ export class WBSRepository {
     async updateTask(taskId: string, updates: Partial<Task> & { ifVersion?: number }): Promise<Task> {
         const db = await this.db();
         const current = await this.getTask(taskId);
+        // タスクが存在しなければエラー
+        // 理由: 存在しないタスクの更新を防ぐ
         if (!current) {
             throw new Error(`Task not found: ${taskId}`);
         }
 
+        // 楽観ロック: バージョン不一致ならエラー
+        // 理由: 複数ユーザー編集時の競合検出・整合性維持のため
         if (updates.ifVersion !== undefined && current.version !== updates.ifVersion) {
             throw new Error('Task has been modified by another user');
         }
