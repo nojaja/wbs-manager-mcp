@@ -101,10 +101,7 @@ export async function activate(context: vscode.ExtensionContext) {
         await treeProvider.deleteTask(target as any);
     });
 
-    const deleteProjectCommand = vscode.commands.registerCommand('wbsTree.deleteProject', async (item) => {
-        const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
-        await treeProvider.deleteProject(target as any);
-    });
+
 
     // サブスクリプションに各コマンド・ビュー・チャネルを登録（拡張機能のライフサイクル管理のため）
     context.subscriptions.push(
@@ -114,7 +111,6 @@ export async function activate(context: vscode.ExtensionContext) {
         createTaskCommand,
         addChildTaskCommand,
         deleteTaskCommand,
-        deleteProjectCommand,
         dragAndDropController,
         treeView,
         outputChannel

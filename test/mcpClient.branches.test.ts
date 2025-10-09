@@ -67,16 +67,7 @@ describe('MCPClient branch coverage', () => {
     await expect(client.callTool('x', {})).rejects.toThrow('tool error');
   });
 
-  test('listProjects returns parsed array on success', async () => {
-    const mod = await import('../src/mcpClient');
-    client = new mod.MCPClient(fakeOutput);
-    const payload = JSON.stringify([{ id: 'p1', title: 'P1' }]);
-    const res = { content: [{ text: payload }] };
-    jest.spyOn(client as any, 'callTool').mockResolvedValue(res);
-    const r = await client.listProjects();
-    expect(Array.isArray(r)).toBe(true);
-    expect(r[0].id).toBe('p1');
-  });
+
 
   test('listTasks returns parsed array on success', async () => {
     const mod = await import('../src/mcpClient');

@@ -93,12 +93,12 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns Promise<TreeItem[]>
      */
     async getChildren(element?: TreeItem): Promise<TreeItem[]> {
+        // ルートレベル: プロジェクト階層を表示せず、1プロジェクト配下のタスクのみ表示
         if (!element) {
-            // ルートレベル: プロジェクト一覧を表示
-            return this.getProjects();
-        } else if (element.contextValue === 'project') {
-            // プロジェクト配下: タスク一覧を表示
-            return this.getTasksForProject(element.itemId);
+            // プロジェクトIDを取得（1ワークスペース1プロジェクト前提）
+            const project = await this.mcpClient.getWorkspaceProject();
+            if (!project) return [];
+            return this.getTasksForProject(project.id);
         } else if (element.contextValue === 'task') {
             // タスク配下: サブタスク一覧を表示
             if (element.task && element.task.children && element.task.children.length > 0) {
@@ -124,24 +124,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * なぜ必要か: ツリーのルートにプロジェクトを表示するため
      * @returns プロジェクトのTreeItem配列
      */
-    private async getProjects(): Promise<TreeItem[]> {
-        try {
-            // プロジェクト一覧をAPIから取得
-            const projects = await this.mcpClient.listProjects();
-            // 各プロジェクトをTreeItemに変換
-            return projects.map(project => new TreeItem(
-                project.title,
-                project.id,
-                'project',
-                vscode.TreeItemCollapsibleState.Collapsed,
-                project.description
-            ));
-        } catch (error) {
-            // エラー時はメッセージ表示し空配列返却
-            vscode.window.showErrorMessage(`Failed to fetch projects: ${error}`);
-            return [];
-        }
-    }
+    // getProjectsは不要になったため削除
 
     /**
      * タスク一覧取得処理
@@ -254,39 +237,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param target 選択中のプロジェクトアイテム
      * @returns 削除結果
      */
-    async deleteProject(target?: TreeItem): Promise<{ success: boolean }> {
-        if (!target || target.contextValue !== 'project') {
-            vscode.window.showWarningMessage('削除するプロジェクトを選択してください。');
-            return { success: false };
-        }
-
-        const answer = await vscode.window.showWarningMessage(
-            '選択したプロジェクトと配下のタスクを削除します。よろしいですか？',
-            { modal: true },
-            '削除'
-        );
-
-        if (answer !== '削除') {
-            return { success: false };
-        }
-
-        try {
-            const response = await this.mcpClient.deleteProject(target.itemId);
-            if (!response.success) {
-                if (response.error) {
-                    vscode.window.showErrorMessage(`プロジェクトの削除に失敗しました: ${response.error}`);
-                }
-                return { success: false };
-            }
-
-            this.refresh();
-            vscode.window.showInformationMessage('プロジェクトを削除しました。');
-            return { success: true };
-        } catch (error) {
-            vscode.window.showErrorMessage(`プロジェクトの削除中にエラーが発生しました: ${error instanceof Error ? error.message : String(error)}`);
-            return { success: false };
-        }
-    }
+    // プロジェクト削除UIは不要になったため削除
 
     /**
      * タスク作成先の解決処理

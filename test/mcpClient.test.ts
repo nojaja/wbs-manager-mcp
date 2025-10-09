@@ -43,13 +43,6 @@ describe('MCPClient', () => {
     await expect(p).resolves.toBeDefined();
   });
 
-  test('listProjects returns empty array on error', async () => {
-    const spy = jest.spyOn(client as any, 'callTool').mockRejectedValue(new Error('fail'));
-    const projects = await client.listProjects();
-    expect(projects).toEqual([]);
-    expect(fakeOutput.appendLine).toHaveBeenCalled();
-    spy.mockRestore();
-  });
 
   test('getTask returns parsed object when content valid', async () => {
     const mockResult = { content: [{ text: JSON.stringify({ id: 't1', title: 'Task' }) }] };
@@ -138,23 +131,6 @@ describe('MCPClient', () => {
     spy.mockRestore();
   });
 
-  test('deleteProject handles success and error paths', async () => {
-    const spy = jest.spyOn(client as any, 'callTool');
-    spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
-    const ok = await client.deleteProject('p1');
-    expect(ok).toEqual({ success: true });
-    expect(spy).toHaveBeenCalledWith('wbs.deleteProject', { projectId: 'p1' });
-
-    spy.mockResolvedValueOnce({ content: [{ text: '❌ missing' }] });
-    const fail = await client.deleteProject('p1');
-    expect(fail).toEqual({ success: false, error: '❌ missing' });
-
-    spy.mockRejectedValueOnce(new Error('boom'));
-    const err = await client.deleteProject('p1');
-    expect(err).toEqual({ success: false, error: 'boom' });
-
-    spy.mockRestore();
-  });
 
   test('moveTask handles success and error paths', async () => {
     const spy = jest.spyOn(client as any, 'callTool');

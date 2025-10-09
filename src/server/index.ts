@@ -153,20 +153,8 @@ class StdioMCPServer {
                     result: {
                         tools: [
                             {
-                                name: 'wbs.createProject',
-                                description: 'Create a new WBS project',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        title: { type: 'string', description: 'Project title' },
-                                        description: { type: 'string', description: 'Project description' }
-                                    },
-                                    required: ['title']
-                                }
-                            },
-                            {
-                                name: 'wbs.listProjects',
-                                description: 'List all WBS projects',
+                                name: 'wbs.getWorkspaceProject',
+                                description: 'Get the single workspace project',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {}
@@ -322,135 +310,10 @@ class StdioMCPServer {
     private async handleNotification(notification: JsonRpcNotification) {
         const { method } = notification;
 
-        // 通知メソッド名ごとに処理を分岐
-        // 理由: 拡張性・保守性向上のため
-        switch (method) {
-            case 'notifications/initialized':
-                console.error('[MCP Server] Client initialized successfully');
-                break;
-            default:
-                console.error(`[MCP Server] Unknown notification: ${method}`);
-                break;
-        }
-    }
 
-    /**
-     * プロジェクト作成処理
-     * DBに新規プロジェクトを作成し、結果を返す
-     * なぜ必要か: クライアントからの新規プロジェクト作成要求に応えるため
-     * @param args プロジェクト作成引数
-     * @returns ツールレスポンス
-     */
-    private async handleCreateProject(args: any) {
-        try {
-            const project = await this.repo.createProject(args.title, args.description || '');
-            return {
-                content: [{
-                    type: 'text',
-                    text: `✅ Project created successfully!\n\nTitle: ${project.title}\nID: ${project.id}\nDescription: ${project.description || 'None'}\nCreated: ${project.created_at}`
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to create project: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
 
-    /**
-     * プロジェクト一覧取得処理
-     * DBからプロジェクト一覧を取得し、ツールレスポンスで返す
-     * なぜ必要か: クライアントからのプロジェクト一覧表示要求に応えるため
-     * @returns ツールレスポンス
-     */
-    private async handleListProjects() {
-        try {
-            const projects = await this.repo.listProjects();
-            return {
-                content: [{
-                    type: 'text',
-                    text: JSON.stringify(projects, null, 2)
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to list projects: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
 
-    /**
-     * タスク作成処理
-     * DBに新規タスクを作成し、結果を返す
-     * なぜ必要か: クライアントからの新規タスク作成要求に応えるため
-     * @param args タスク作成引数
-     * @returns ツールレスポンス
-     */
-    private async handleCreateTask(args: any) {
-        try {
-            const task = await this.repo.createTask(
-                args.projectId,
-                args.title,
-                args.description || '',
-                args.parentId || null,
-                args.assignee || null,
-                args.estimate || null,
-                args.goal || null
-            );
-            return {
-                content: [{
-                    type: 'text',
-                    text: `✅ Task created successfully!\n\nTitle: ${task.title}\nID: ${task.id}\nProject: ${task.project_id}\nAssignee: ${task.assignee || 'Unassigned'}\nEstimate: ${task.estimate || 'Not set'}\nCreated: ${task.created_at}`
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
-
-    /**
-     * タスク取得処理
-     * 指定IDのタスクをDBから取得し、ツールレスポンスで返す
-     * なぜ必要か: クライアントからのタスク詳細表示要求に応えるため
-     * @param args タスク取得引数
-     * @returns ツールレスポンス
-     */
-    private async handleGetTask(args: any) {
-        try {
-            const task = await this.repo.getTask(args.taskId);
-            if (!task) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Task not found: ${args.taskId}`
-                    }]
-                };
-            }
-            return {
-                content: [{
-                    type: 'text',
-                    text: JSON.stringify(task, null, 2)
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
+    // 不要なJSDocコメント・空行を削除
     }
 
     /**
@@ -647,6 +510,7 @@ class StdioMCPServer {
         }
     }
 
+
     /**
      * タスク移動処理
      * 指定タスクの親タスクを変更し、結果メッセージを返す
@@ -688,10 +552,8 @@ class StdioMCPServer {
         // ツール名ごとに個別ハンドラへ分岐
         // 理由: 新規ツール追加時の拡張性・保守性向上のため
         switch (name) {
-            case 'wbs.createProject':
-                return this.handleCreateProject(args);
-            case 'wbs.listProjects':
-                return this.handleListProjects();
+            case 'wbs.getWorkspaceProject':
+                return this.handleGetWorkspaceProject();
             case 'wbs.createTask':
                 return this.handleCreateTask(args);
             case 'wbs.getTask':
@@ -702,14 +564,23 @@ class StdioMCPServer {
                 return this.handleListTasks(args);
             case 'wbs.deleteTask':
                 return this.handleDeleteTask(args);
-            case 'wbs.deleteProject':
-                return this.handleDeleteProject(args);
             case 'wbs.moveTask':
                 return this.handleMoveTask(args);
             default:
                 // 未知のツール名はエラー
                 throw new Error(`Unknown tool: ${name}`);
         }
+    }
+
+    /**
+     * ワークスペース唯一のプロジェクト情報を返す
+     * @returns ツールレスポンス
+     */
+    private async handleGetWorkspaceProject() {
+        const project = await this.repo.getWorkspaceProject();
+        return {
+            content: [{ type: 'text', text: JSON.stringify(project) }]
+        };
     }
 
     /**

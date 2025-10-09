@@ -271,24 +271,22 @@ export class MCPClient {
         return response.result;
     }
 
+
     /**
-     * プロジェクト一覧取得処理
-     * サーバからプロジェクト一覧を取得し、配列で返す
-     * なぜ必要か: UIツリーのルートにプロジェクト一覧を表示するため
-     * @returns Promise<any[]>
+     * ワークスペース唯一のプロジェクト情報を取得
+     * @returns Promise<any|null>
      */
-    async listProjects(): Promise<any[]> {
+    async getWorkspaceProject(): Promise<any|null> {
         try {
-            // 理由: サーバAPI呼び出し・パース失敗時も空配列で安全に返す
-            const result = await this.callTool('wbs.listProjects', {});
+            const result = await this.callTool('wbs.getWorkspaceProject', {});
             const content = result.content?.[0]?.text;
             if (content) {
                 return JSON.parse(content);
             }
-            return [];
+            return null;
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to list projects: ${error}`);
-            return [];
+            this.outputChannel.appendLine(`[MCP Client] Failed to get workspace project: ${error}`);
+            return null;
         }
     }
 
@@ -431,25 +429,8 @@ export class MCPClient {
         }
     }
 
-    /**
-     * プロジェクト削除処理
-     * 指定したプロジェクトIDと配下のタスクを削除する
-     * なぜ必要か: UIからの削除操作をサーバAPI呼び出しに委譲するため
-     * @param projectId プロジェクトID
-     * @returns 削除結果
-     */
-    async deleteProject(projectId: string): Promise<{ success: boolean; error?: string }> {
-        try {
-            const result = await this.callTool('wbs.deleteProject', { projectId });
-            const content = result.content?.[0]?.text ?? '';
-            if (content.includes('✅')) {
-                return { success: true };
-            }
-            return { success: false, error: content || 'Unknown error' };
-        } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : String(error) };
-        }
-    }
+
+    // プロジェクト削除は不可のため削除
 
     /**
      * タスク移動処理

@@ -326,55 +326,37 @@ export class WBSRepository {
      * @param description プロジェクト説明
      * @returns Promise<Project>
      */
-    async createProject(title: string, description: string = ''): Promise<Project> {
-        const db = await this.db();
-        const id = uuidv4();
-        const now = new Date().toISOString();
-
-        await db.run(
-            `INSERT INTO projects (id, title, description, created_at, updated_at, version)
-             VALUES (?, ?, ?, ?, ?, 1)`,
-            id,
-            title,
-            description || null,
-            now,
-            now
-        );
-
-        return this.getProject(id) as Promise<Project>;
-    }
 
     /**
-     * プロジェクト一覧取得処理
-     * DBから全プロジェクトを取得し、配列で返す
-     * なぜ必要か: クライアントからのプロジェクト一覧表示要求に応えるため
-     * @returns Promise<Project[]>
+     * ワークスペース唯一のプロジェクト情報を返す。なければ自動生成。
+     * @returns Promise<Project|null>
      */
-    async listProjects(): Promise<Project[]> {
+    async getWorkspaceProject(): Promise<Project|null> {
         const db = await this.db();
-        const rows = await db.all<Project[]>(
-            `SELECT id, title, description, created_at, updated_at, version
-             FROM projects
-             ORDER BY created_at DESC`
+        let project = await db.get<Project>(
+            `SELECT id, title, description, created_at, updated_at, version FROM projects LIMIT 1`
         );
-        return rows;
-    }
-
-    /**
-     * プロジェクト取得処理
-     * 指定IDのプロジェクトをDBから取得する
-     * なぜ必要か: プロジェクト詳細画面やタスク作成時に参照するため
-     * @param id プロジェクトID
-     * @returns Promise<Project | null>
-     */
-    async getProject(id: string): Promise<Project | null> {
-        const db = await this.db();
-        const project = await db.get<Project>(
-            `SELECT id, title, description, created_at, updated_at, version
-             FROM projects
-             WHERE id = ?`,
-            id
-        );
+        if (!project) {
+            // ワークスペース名を取得
+            const wsName = (process.env.WBS_MCP_DATA_DIR ?
+                require('path').basename(process.env.WBS_MCP_DATA_DIR) :
+                'WBSProject');
+            const id = uuidv4();
+            const now = new Date().toISOString();
+            await db.run(
+                `INSERT INTO projects (id, title, description, created_at, updated_at, version)
+                 VALUES (?, ?, ?, ?, ?, 1)`,
+                id,
+                wsName,
+                '',
+                now,
+                now
+            );
+            project = await db.get<Project>(
+                `SELECT id, title, description, created_at, updated_at, version FROM projects WHERE id = ?`,
+                id
+            );
+        }
         return project ?? null;
     }
 
@@ -716,22 +698,5 @@ export class WBSRepository {
      * @param projectId プロジェクトID
      * @returns 削除が行われたかどうか
      */
-    async deleteProject(projectId: string): Promise<boolean> {
-        const db = await this.db();
-        const existing = await db.get<{ id: string }>(
-            `SELECT id FROM projects WHERE id = ?`,
-            projectId
-        );
-
-        if (!existing) {
-            return false;
-        }
-
-        const result = await db.run(
-            `DELETE FROM projects WHERE id = ?`,
-            projectId
-        );
-
-        return (result.changes ?? 0) > 0;
-    }
+    // プロジェクト削除は不可のため削除
 }
