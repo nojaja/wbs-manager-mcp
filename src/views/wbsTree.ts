@@ -97,6 +97,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             return this.getTasks();
         } else if (element.contextValue === 'task') {
             // タスク配下: サブタスク一覧を表示
+            // 処理概要: 子配列が存在する場合のみ子ノードを生成して返す
+            // 実装理由: 空配列や未定義時に無駄なノード生成を避け、描画コストを抑える
             if (element.task && element.task.children && element.task.children.length > 0) {
                 return element.task.children.map(child => new TreeItem(
                     this.getTaskLabel(child),
@@ -246,9 +248,13 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             return {};
         }
         if (target.contextValue === 'project') {
+            // 処理概要: プロジェクト直下に作成する場合は親無し
+            // 実装理由: ルート直下タスクの作成を明示し、親IDを付与しない
             return { parentId: undefined };
         }
         if (target.contextValue === 'task' && target.task) {
+            // 処理概要: タスク配下に新規作成する場合はそのタスクIDを親に設定
+            // 実装理由: ツリー構造を維持し、直感的な作成位置に反映する
             return { parentId: target.task.id };
         }
         return {};
@@ -309,9 +315,13 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      */
     private containsTask(task: Task, searchId: string): boolean {
         if (!task.children || task.children.length === 0) {
+            // 処理概要: 子が無い場合は探索不要
+            // 実装理由: 再帰呼び出しの最小化により性能を確保
             return false;
         }
         for (const child of task.children) {
+            // 処理概要: 直下の一致または子孫に含まれるかを再帰的に判定
+            // 実装理由: 循環移動の検出（自分の配下へ移す誤操作）を防ぐ
             if (child.id === searchId || this.containsTask(child, searchId)) {
                 return true;
             }
@@ -340,6 +350,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     /**
      * プロジェクトノードへのドロップ評価
+    * ドロップ先がルート（プロジェクト扱い）の場合に、親タスクを外すべきかを判定する
+    * なぜ必要か: ツリー最上位への移動（親なし）を正しく表現し、無意味な更新を避けるため
      * @param draggedTask ドラッグ中のタスク
      * @param target プロジェクトノード
      * @returns 判定結果
@@ -347,6 +359,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     private evaluateProjectDrop(draggedTask: Task, target: TreeItem): DropDecision {
         const currentParentId = draggedTask.parent_id ?? null;
         if (currentParentId === null) {
+            // 処理概要: すでにルートであれば何もしない
+            // 実装理由: 無意味なDB更新を避け、履歴汚染を防止
             return { kind: 'noop' };
         }
 
@@ -355,6 +369,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     /**
      * タスクノードへのドロップ評価
+    * ドロップ先がタスクノードの場合に、循環や同一親などの無効ケースを排除して新しい親IDを決定する
+    * なぜ必要か: 不正な親子関係の生成を防ぎ、Drag&Drop操作を安全に反映するため
      * @param draggedTask ドラッグ中のタスク
      * @param targetTask ドロップ先タスク
      * @returns 判定結果
@@ -363,15 +379,21 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         // プロジェクト分離は行わないためチェックしない
 
         if (draggedTask.id === targetTask.id || draggedTask.parent_id === targetTask.id) {
+            // 処理概要: 自身や現在の親をドロップ先にする場合は変化なし
+            // 実装理由: 無効な移動（自己親子）や無意味な更新を抑止
             return { kind: 'noop' };
         }
 
         if (this.containsTask(draggedTask, targetTask.id)) {
+            // 処理概要: 自分の子孫を親にしようとしている場合は警告
+            // 実装理由: 循環参照によるツリー破壊を防ぐ
             return { kind: 'warning', message: '子孫タスクの下への移動はできません。' };
         }
 
         const currentParentId = draggedTask.parent_id ?? null;
         if (currentParentId === targetTask.id) {
+            // 処理概要: 既に同じ親であれば何もしない
+            // 実装理由: 不要な更新を避ける
             return { kind: 'noop' };
         }
 
@@ -474,6 +496,8 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
 
     /**
      * コンストラクタ
+    * ドロップ処理の委譲先プロバイダを受け取り初期化する
+    * なぜ必要か: Drag&DropのUI制御とデータ更新（サーバ呼び出し）を分離し、責務を明確化するため
      * @param provider ドロップ処理を委譲するWBSツリープロバイダ
      */
     constructor(private readonly provider: WBSTreeProvider) {}
@@ -481,6 +505,7 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
     /**
      * ドラッグ開始処理
      * データ転送にタスクID一覧を格納する
+    * なぜ必要か: 複数ノードのドラッグ時にもターゲット側で正しくIDを復元できるようにするため
      * @param source ドラッグされたツリーアイテム
      * @param dataTransfer データ転送オブジェクト
      */
@@ -499,6 +524,7 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
     /**
      * ドロップ処理
      * データ転送からタスクIDを取得し、プロバイダへ処理を委譲する
+    * なぜ必要か: UIイベントから実データ更新（親子関係変更）への橋渡しを行うため
      * @param target ドロップ先ツリーアイテム
      * @param dataTransfer データ転送オブジェクト
      */
@@ -528,6 +554,7 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
     /**
      * リソース解放処理
      * コントローラ破棄時に呼び出される
+     * なぜ必要か: TreeView破棄時のクリーンアップでメモリリークを防ぐため
      */
     dispose(): void {
         // no resources to dispose

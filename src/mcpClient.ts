@@ -117,8 +117,11 @@ export class MCPClient {
                 buffer = lines.pop() || '';
 
                 // 1行ずつJSON-RPCレスポンスとして処理
+                // 処理概要: 受信済みの行を1件ずつJSONとしてパースし、対応する保留中リクエストへ応答する
+                // 実装理由: JSON-RPCは1メッセージ=1行で送られるため、改行単位での処理が堅牢（部分受信や結合を考慮）
                 for (const line of lines) {
                     // 空行はスキップ
+                    // 理由: 心ならずも出力された空行でパース失敗を起こさないため
                     if (line.trim()) {
                         // 理由: サーバからのレスポンスを安全にパースし、失敗時はログ出力
                         try {
@@ -144,6 +147,7 @@ export class MCPClient {
                 this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
                 this.serverProcess = null;
                 // 保留中リクエストを全てreject
+                // 理由: 未解決のリクエストがぶら下がらないように、待機側へ即時エラー通知して整合性を保つ
                 for (const [id, { reject }] of this.pendingRequests) {
                     reject(new Error('Server process exited'));
                 }
@@ -233,6 +237,7 @@ export class MCPClient {
             });
 
             // 10秒タイムアウトで未応答リクエストを自動エラー化
+            // 理由: サーバハング・通信断で待ち続けることを避け、UIの応答性を保つ
             setTimeout(() => {
                 if (this.pendingRequests.has(id)) {
                     this.pendingRequests.delete(id);
@@ -483,6 +488,8 @@ export class MCPClient {
             const result = await this.callTool('artifacts.listArtifacts', {});
             const content = result.content?.[0]?.text;
             if (content) {
+                // 処理概要: サーバから返却されたJSON文字列を配列へ復元
+                // 実装理由: JSONを直接受け渡しすることで、スキーマ変更にも柔軟に追随可能
                 return JSON.parse(content) as Artifact[];
             }
             return [];
@@ -680,6 +687,8 @@ export class MCPClient {
 
         const normalized: SanitizedArtifactInput[] = [];
 
+        // 処理概要: 各入力を正規化し、不正・空値は除外
+        // 実装理由: サーバ側の検証負荷を下げ、クライアント側でできるだけ整形して送る
         for (const item of inputs) {
             const sanitized = this.normalizeArtifactInput(item);
             if (sanitized) {
@@ -703,6 +712,8 @@ export class MCPClient {
         }
 
         const normalized: Array<{ description: string }> = [];
+        // 処理概要: 文字列トリム・空行除外を行い、DBにそのまま入れられる形に整える
+        // 実装理由: UIでの入力ぶれ（空白・空行）をサーバ到達前に吸収する
         for (const item of inputs) {
             const description = typeof item?.description === 'string' ? item.description.trim() : '';
             if (description.length > 0) {
@@ -716,6 +727,7 @@ export class MCPClient {
     /**
      * 成果物流用入力正規化
      * 与えられた入力を検証し、成果物IDとCRUDを整形して返す
+     * なぜ必要か: サーバ側が期待するスキーマに準拠させ、不要な空値や不正値を排除するため
      * @param input 成果物参照入力
      * @returns 正規化済み入力またはnull
      */

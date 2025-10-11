@@ -90,6 +90,8 @@ export class TaskDetailPanel {
                 // 理由: 複数コマンド拡張時の可読性・保守性向上のため
                 switch (message.command) {
                     case 'save':
+                        // 処理概要: フォームからの保存要求を受けて更新処理を実行
+                        // 実装理由: Webview→拡張ホスト間で最低限のコマンドAPIに統一
                         this.saveTask(message.data);
                         return;
                 }
@@ -124,6 +126,8 @@ export class TaskDetailPanel {
                 // Fetch project artifacts for suggestion list (minimal change)
                 let artifacts: Artifact[] = [];
                 try {
+                    // 処理概要: サジェスト用の成果物一覧を取得（失敗しても機能継続）
+                    // 実装理由: 主要機能（詳細表示/編集）を阻害しない非必須データのため
                     artifacts = await this.mcpClient.listArtifacts();
                 } catch (e) {
                     // ignore and continue without suggestions
@@ -152,9 +156,9 @@ export class TaskDetailPanel {
         if (data.assignee !== undefined) updates.assignee = data.assignee;
         if (data.status !== undefined) updates.status = data.status;
         if (data.estimate !== undefined) updates.estimate = data.estimate;
-        if (Array.isArray(data.deliverables)) updates.deliverables = data.deliverables;
-        if (Array.isArray(data.prerequisites)) updates.prerequisites = data.prerequisites;
-        if (Array.isArray(data.completionConditions)) updates.completionConditions = data.completionConditions;
+        if (Array.isArray(data.deliverables)) updates.deliverables = data.deliverables; // フォームからの配列はそのまま送る
+        if (Array.isArray(data.prerequisites)) updates.prerequisites = data.prerequisites; // 同上
+        if (Array.isArray(data.completionConditions)) updates.completionConditions = data.completionConditions; // 同上
         updates.ifVersion = this._task?.version;
         return updates;
     }
@@ -219,6 +223,8 @@ export class TaskDetailPanel {
 
     /**
      * 成果物割当のテキスト整形
+    * 割当配列をartifactTitle[:CRUD]形式の改行区切り文字列へ変換する
+    * なぜ必要か: Webviewフォームへの初期値表示と編集容易性を両立させるため
      * @param assignments 成果物割当
      * @returns 改行区切り文字列
      */
@@ -240,6 +246,8 @@ export class TaskDetailPanel {
 
     /**
      * 成果物割当のサマリー生成
+    * 割当のID/CRUD/タイトル/URIを人が読みやすい1行文字列の配列にする
+    * なぜ必要か: 詳細入力欄とは別に、視認性の高い概要表示を提供するため
      * @param assignments 成果物割当
      * @returns 人が読みやすいサマリー
      */
@@ -262,6 +270,8 @@ export class TaskDetailPanel {
 
     /**
      * 完了条件の整形
+    * 完了条件配列を改行区切りのテキストに変換する
+    * なぜ必要か: Webviewフォームへの初期表示・編集を簡便にするため
      * @param conditions 完了条件
      * @returns 改行区切り文字列
      */

@@ -99,6 +99,8 @@ async function getDatabase(): Promise<Database> {
             filename: DB_PATH,
             driver: sqlite3.Database
         }).then(async (db) => {
+            // 処理概要: 外部キー制約を有効化
+            // 実装理由: 親子削除等の整合性をDBレイヤで担保するため
             await db.exec('PRAGMA foreign_keys = ON');
             return db;
         });
@@ -117,6 +119,8 @@ export async function initializeDatabase(): Promise<void> {
     // drop related tables first so we can recreate them with the new schema.
     // This is safe for test environments where DB is ephemeral.
     await db.exec('PRAGMA foreign_keys = OFF');
+    // 処理概要: スキーマ作成前は外部キー制約を一時的に無効化
+    // 実装理由: 作成順による依存関係の問題を回避するため（作成後にON）
 
 
     await db.exec(`
@@ -283,6 +287,8 @@ export class WBSRepository {
 
             await db.run('COMMIT');
         } catch (error) {
+            // 処理概要: 途中エラー時はロールバックして一貫性を維持
+            // 実装理由: 子テーブルが部分的に更新される不整合を避ける
             await db.run('ROLLBACK');
             throw error;
         }
@@ -292,6 +298,8 @@ export class WBSRepository {
 
     /**
      * 複数タスク一括登録処理
+    * 複数のタスク定義を連続して作成する
+    * なぜ必要か: 外部データ（WBS記法やJSON）からのインポートを効率よく反映するため
      * @param tasksTasks タスク配列 (各要素に title 等のプロパティを持つ)
      * @returns 作成された Task の配列
      */
@@ -299,7 +307,7 @@ export class WBSRepository {
         const created: Task[] = [];
         for (const t of tasksTasks || []) {
             // 最小限のバリデーション
-            if (!t || !t.title) continue;
+            if (!t || !t.title) continue; // 理由: 必須項目（title）が無い行はスキップするのみ
             const task = await this.createTask(
                 t.title,
                 t.description ?? '',
@@ -418,10 +426,14 @@ export class WBSRepository {
         const current = await this.getArtifact(artifactId);
 
         if (!current) {
+            // 処理概要: 対象が存在しない場合はエラー
+            // 実装理由: 更新対象の特定に失敗しているため
             throw new Error(`Artifact not found: ${artifactId}`);
         }
 
         if (updates.ifVersion !== undefined && updates.ifVersion !== current.version) {
+            // 処理概要: 楽観ロックのバージョン不一致
+            // 実装理由: 競合検出し、上書き更新を防止
             throw new Error('Artifact has been modified by another user');
         }
 
@@ -486,6 +498,8 @@ export class WBSRepository {
         const completionConditions = await this.collectCompletionConditions(db, taskIds);
 
         rows.forEach((row) => {
+            // 処理概要: 取得済みの成果物/完了条件をマージしてノード化
+            // 実装理由: 一度の問い合わせ結果を元に木構造を構築するため
             const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
             taskMap.set(row.id, {
                 ...row,
@@ -564,6 +578,8 @@ export class WBSRepository {
 
         const target = taskMap.get(taskId);
         if (!target) {
+            // 処理概要: 子配列が構築できていない場合のフォールバック
+            // 実装理由: 取得できた単体行を最低限返す
             return { ...task, children: [] };
         }
 
@@ -589,19 +605,23 @@ export class WBSRepository {
         // タスクが存在しなければエラー
         // 理由: 存在しないタスクの更新を防ぐ
         if (!current) {
+            // 処理概要: タスクが存在しない
+            // 実装理由: 更新できないため明示エラー
             throw new Error(`Task not found: ${taskId}`);
         }
 
         // 楽観ロック: バージョン不一致ならエラー
         // 理由: 複数ユーザー編集時の競合検出・整合性維持のため
         if (updates.ifVersion !== undefined && current.version !== updates.ifVersion) {
+            // 処理概要: 楽観ロックにより競合検出
+            // 実装理由: 他の更新によりバージョンが進んでいる
             throw new Error('Task has been modified by another user');
         }
 
         const now = new Date().toISOString();
         const newVersion = current.version + 1;
 
-        await db.run('BEGIN');
+    await db.run('BEGIN');
         try {
             await db.run(
                 `UPDATE tasks
@@ -626,19 +646,27 @@ export class WBSRepository {
             );
 
             if (updates.deliverables !== undefined) {
+                // 処理概要: 成果物（生成物）割当を全置換
+                // 実装理由: 並び順やCRUDの変更を確実に反映
                 await this.syncTaskArtifacts(db, taskId, 'deliverable', updates.deliverables ?? [], now);
             }
 
             if (updates.prerequisites !== undefined) {
+                // 処理概要: 成果物（前提条件）割当を全置換
+                // 実装理由: 現状は差分更新ではなくシンプルに再作成
                 await this.syncTaskArtifacts(db, taskId, 'prerequisite', updates.prerequisites ?? [], now);
             }
 
             if (updates.completionConditions !== undefined) {
+                // 処理概要: 完了条件を全置換
+                // 実装理由: 並び順維持と内容更新を簡潔に実現
                 await this.syncTaskCompletionConditions(db, taskId, updates.completionConditions ?? [], now);
             }
 
             await db.run('COMMIT');
         } catch (error) {
+            // 処理概要: 失敗時はロールバック
+            // 実装理由: 一部だけ更新される中途半端な状態を避ける
             await db.run('ROLLBACK');
             throw error;
         }
@@ -698,10 +726,14 @@ export class WBSRepository {
      */
     private async validateMoveTarget(db: Database, task: Task, normalizedParentId: string | null): Promise<void> {
         if (!normalizedParentId) {
+            // 処理概要: ルートへ移動は特段の検証なし
+            // 実装理由: ルートは常に有効
             return;
         }
 
         if (normalizedParentId === task.id) {
+            // 処理概要: 自己を親にすることは不可
+            // 実装理由: 循環参照の起点となるため
             throw new Error('Task cannot be its own parent');
         }
 
@@ -713,6 +745,8 @@ export class WBSRepository {
         );
 
         if (!parent) {
+            // 処理概要: 指定された親が存在しない
+            // 実装理由: 不正な移動要求を拒否
             throw new Error(`Parent task not found: ${normalizedParentId}`);
         }
 
@@ -732,6 +766,8 @@ export class WBSRepository {
     private async ensureNotDescendant(db: Database, taskId: string, startParentId: string | null): Promise<void> {
         let ancestorId = startParentId;
         while (ancestorId) {
+            // 処理概要: 親チェーンを遡って対象IDに到達するか検査
+            // 実装理由: 自分の配下へ移動する循環を阻止
             if (ancestorId === taskId) {
                 throw new Error('Cannot move task into its descendant');
             }
@@ -786,12 +822,16 @@ export class WBSRepository {
         );
 
         if (!assignments || assignments.length === 0) {
+            // 処理概要: 何も割当が無ければ削除のみで終了
+            // 実装理由: 全置換方式のため
             return;
         }
 
         let index = 0;
         for (const assignment of assignments) {
             if (!assignment?.artifactId) {
+                // 処理概要: artifactIdが無い行はスキップ
+                // 実装理由: 必須項目の欠落
                 continue;
             }
 
@@ -801,6 +841,8 @@ export class WBSRepository {
                 assignment.artifactId
             );
             if (!artifact) {
+                // 処理概要: 参照先の成果物が存在しない
+                // 実装理由: 参照整合性を保つため例外
                 throw new Error(`Artifact not found: ${assignment.artifactId}`);
             }
 
@@ -843,6 +885,8 @@ export class WBSRepository {
         );
 
         if (!conditions || conditions.length === 0) {
+            // 処理概要: 条件未指定なら削除のみ
+            // 実装理由: 全置換
             return;
         }
 
@@ -850,6 +894,8 @@ export class WBSRepository {
         for (const condition of conditions) {
             const description = (condition?.description ?? '').trim();
             if (description.length === 0) {
+                // 処理概要: 空行は無視
+                // 実装理由: ノイズデータの登録を避ける
                 continue;
             }
 
@@ -907,6 +953,8 @@ export class WBSRepository {
         );
 
         for (const row of rows) {
+            // 処理概要: 取得行を割当オブジェクトへ変換
+            // 実装理由: ビュー層へ返すための整形
             const assignment: TaskArtifactAssignment = {
                 id: row.assignment_id,
                 artifact_id: row.artifact_id,
@@ -937,6 +985,8 @@ export class WBSRepository {
         }
 
         taskIds.forEach((taskId) => {
+            // 処理概要: 未取得のタスクには空配列をセット
+            // 実装理由: 参照側でのundefinedチェックを減らす
             if (!result.has(taskId)) {
                 result.set(taskId, { deliverables: [], prerequisites: [] });
             }
@@ -974,6 +1024,8 @@ export class WBSRepository {
         );
 
         for (const row of rows) {
+            // 処理概要: 取得行を完了条件オブジェクトへ変換
+            // 実装理由: ビュー層での表示/編集に供する
             const condition: TaskCompletionCondition = {
                 id: row.id,
                 task_id: row.task_id,
@@ -987,6 +1039,8 @@ export class WBSRepository {
         }
 
         taskIds.forEach((taskId) => {
+            // 処理概要: 未取得のタスクには空配列をセット
+            // 実装理由: 参照側でのガード簡略化
             if (!result.has(taskId)) {
                 result.set(taskId, []);
             }
@@ -1010,6 +1064,8 @@ export class WBSRepository {
         );
 
         if (!existing) {
+            // 処理概要: 既に無い場合は削除不要
+            // 実装理由: idempotent な削除APIにする
             return false;
         }
 

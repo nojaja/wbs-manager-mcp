@@ -17,6 +17,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
 
     /**
      * ツリーの再読込を通知する
+     * なぜ必要か: 成果物の追加・更新・削除後にツリー表示へ即時反映するため
      */
     refresh(): void {
         this.onDidChangeTreeDataEmitter.fire();
@@ -24,6 +25,8 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
 
     /**
      * ツリーアイテム取得処理
+     * 入力要素をそのまま返し、VS Codeに描画を委譲する
+     * なぜ必要か: TreeDataProviderインターフェースの必須実装で、描画時に各項目の見た目を提供するため
      * @param element ツリー項目
      * @returns 入力された項目
      */
@@ -34,11 +37,14 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
     /**
      * 子項目取得処理
      * ルートで成果物一覧を読み込む
+    * なぜ必要か: 成果物の最新一覧をサーバから取得し、ツリーに反映するため
      * @param element 親項目
      * @returns 子項目配列
      */
     async getChildren(element?: ArtifactTreeItem): Promise<ArtifactTreeItem[]> {
         if (element) {
+            // 処理概要: 本ツリーはフラット構造のため子は持たない
+            // 実装理由: 成果物は階層化しない設計。将来の拡張余地を残しつつ現状は空配列
             return [];
         }
 
@@ -49,6 +55,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
     /**
      * 成果物作成処理
      * 入力ダイアログから新しい成果物を登録する
+    * なぜ必要か: ツリーから直接成果物を追加し、管理効率を高めるため
     * @returns Promise<void>
      */
     async createArtifact(): Promise<void> {
@@ -62,6 +69,8 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             validateInput: (value) => (value.trim().length === 0 ? '名称は必須です。' : undefined)
         });
         if (!title) {
+            // 処理概要: キャンセルまたは未入力時は何もしない
+            // 実装理由: 必須入力の不備で無効なレコードを作らない
             return;
         }
 
@@ -82,6 +91,8 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
         });
 
         if (!result.success) {
+            // 処理概要: サーバエラー時はメッセージ表示のみ
+            // 実装理由: 画面の一貫性維持（部分更新は行わない）
             vscode.window.showErrorMessage(result.error ?? '成果物の作成に失敗しました。');
             return;
         }
@@ -93,11 +104,14 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
     /**
      * 成果物編集処理
      * 選択中の成果物を編集する
+    * なぜ必要か: 既存成果物の属性をUI上から更新できるようにするため
      * @param target 編集対象項目
     * @returns Promise<void>
      */
     async editArtifact(target?: ArtifactTreeItem): Promise<void> {
         if (!target) {
+            // 処理概要: 選択が無い状態での編集は警告
+            // 実装理由: 意図しない編集を防ぐ
             vscode.window.showWarningMessage('編集する成果物を選択してください。');
             return;
         }
@@ -115,6 +129,8 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             validateInput: (value) => (value.trim().length === 0 ? '名称は必須です。' : undefined)
         });
         if (!title) {
+            // 処理概要: キャンセルまたは未入力時は何もしない
+            // 実装理由: 必須入力の不備で無効な更新を行わない
             return;
         }
 
@@ -137,6 +153,8 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
         });
 
         if (!result.success) {
+            // 処理概要: 競合時は警告の上で再読み込み、それ以外はエラー表示
+            // 実装理由: 楽観ロックでの衝突に対しユーザーに再取得を促す
             if (result.conflict) {
                 vscode.window.showWarningMessage('成果物が他の処理で更新されたため再読み込みします。');
             } else {
@@ -153,11 +171,14 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
     /**
      * 成果物削除処理
      * 選択した成果物を削除する
+    * なぜ必要か: 不要となった成果物をリポジトリから除去し、一覧を整理するため
      * @param target 削除対象項目
     * @returns Promise<void>
      */
     async deleteArtifact(target?: ArtifactTreeItem): Promise<void> {
         if (!target) {
+            // 処理概要: 選択なしでの削除要求はガード
+            // 実装理由: 誤削除を防止
             vscode.window.showWarningMessage('削除する成果物を選択してください。');
             return;
         }
@@ -169,11 +190,15 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
         );
 
         if (answer !== '削除') {
+            // 処理概要: キャンセル時は何も行わない
+            // 実装理由: 破壊的操作は明示同意を必須とする
             return;
         }
 
         const result = await this.mcpClient.deleteArtifact(target.artifact.id);
         if (!result.success) {
+            // 処理概要: サーバエラーをユーザーへ通知
+            // 実装理由: 失敗を隠さず次の行動（再試行/問い合わせ）につなげる
             vscode.window.showErrorMessage(result.error ?? '成果物の削除に失敗しました。');
             return;
         }
@@ -191,6 +216,8 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
 export class ArtifactTreeItem extends vscode.TreeItem {
     /**
      * コンストラクタ
+    * ラベル・説明・ツールチップ・コンテキスト値・アイコンなどツリー表示に必要な属性を設定する
+    * なぜ必要か: ツリー上の見た目と挙動（右クリックメニュー等）を一元的に定義するため
      * @param artifact 成果物情報
      */
     constructor(public readonly artifact: Artifact) {
@@ -204,6 +231,8 @@ export class ArtifactTreeItem extends vscode.TreeItem {
 
     /**
      * ツールチップ生成
+    * 成果物のID/URI/説明からツールチップ用の文字列を構築する
+    * なぜ必要か: マウスホバーで詳細情報を素早く確認できるようにするため
      * @param artifact 成果物情報
      * @returns ツールチップ文字列
      */

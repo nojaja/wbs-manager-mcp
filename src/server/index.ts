@@ -45,7 +45,7 @@ class StdioMCPServer {
     /**
      * 標準入出力ハンドラ設定処理
      * stdinからのデータ受信・パース・メッセージ分岐処理を行う
-     * なぜ必要か: VSCode拡張からのリクエストをリアルタイムで受信・処理するため
+    * なぜ必要か: VSCode拡張からのリクエストをリアルタイムで受信・処理するため（標準入出力を通信チャネルとして利用）
      */
     private setupStdioHandlers() {
         process.stdin.setEncoding('utf8');
@@ -57,6 +57,8 @@ class StdioMCPServer {
             buffer = lines.pop() || '';
 
             // 1行ずつJSON-RPCメッセージとして処理
+            // 処理概要: 受信した行をJSONとしてパースし、通知/リクエストへ振り分け
+            // 実装理由: ストリーム分割の境界問題（途中受信）を避け、確実に1行単位で扱う
             for (const line of lines) {
                 // 空行はスキップ
                 if (line.trim()) {
@@ -422,6 +424,8 @@ class StdioMCPServer {
 
             case 'tools/call':
                 // 理由: ツール名ごとに個別ハンドラへ分岐
+                // 処理概要: name/argumentsに応じて適切なツール処理を実行
+                // 実装理由: サーバの機能拡張をスイッチ1箇所で集中管理
                 const toolResult = await this.handleToolCall(params);
                 return {
                     jsonrpc: '2.0',
@@ -456,6 +460,7 @@ class StdioMCPServer {
 
             default:
                 // 未知のメソッドはエラー応答
+                // 理由: 仕様外の呼び出しを明示的に拒否し、クライアントの誤実装に気づけるようにする
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -470,7 +475,7 @@ class StdioMCPServer {
     /**
      * 通知処理
      * JSON-RPC通知のメソッドごとにログ出力等を行う
-     * なぜ必要か: クライアントからの状態通知やイベントを受けてサーバ側で処理するため
+     * なぜ必要か: クライアントからの状態通知やイベントを受けてサーバ側で処理するため（応答不要の一方向通信）
      * @param notification 通知オブジェクト
      */
     private async handleNotification(notification: JsonRpcNotification) {
@@ -920,6 +925,7 @@ class StdioMCPServer {
                 return this.handleDeleteArtifact(args);
             default:
                 // 未知のツール名はエラー
+                // 理由: ツール一覧に無い呼び出しを検出し、デバッグ容易性を高める
                 throw new Error(`Unknown tool: ${name}`);
         }
     }

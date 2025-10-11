@@ -95,6 +95,8 @@ export async function activate(context: vscode.ExtensionContext) {
         const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
             ? artifactTreeView.selection[0]
             : undefined);
+        // 処理概要: 明示指定なければ現在の選択を編集対象とする
+        // 実装理由: コンテキストメニュー/ツールバーからの実行どちらにも対応するため
         if (target) {
             ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, mcpClient);
         }
@@ -104,6 +106,8 @@ export async function activate(context: vscode.ExtensionContext) {
         const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
             ? artifactTreeView.selection[0]
             : undefined);
+        // 処理概要: 明示指定がなければ選択中の成果物を削除
+        // 実装理由: 操作性を統一し、誤削除を避けるため選択が無い場合は何もしない
         await artifactTreeProvider.deleteArtifact(target);
     });
 
@@ -128,6 +132,8 @@ export async function activate(context: vscode.ExtensionContext) {
     const addChildTaskCommand = vscode.commands.registerCommand('wbsTree.addChildTask', async (item) => {
         const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
         const result = await treeProvider.createTask(target as any);
+        // 処理概要: 作成成功時のみ詳細パネルを開く
+        // 実装理由: 失敗時に空のパネルを開かないためのガード
         if (result?.taskId) {
             TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, mcpClient);
         }
