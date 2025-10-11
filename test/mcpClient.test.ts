@@ -82,10 +82,9 @@ describe('MCPClient', () => {
   test('createTask parses success response', async () => {
     const message = '✅ Task created successfully!\nID: new-task-id';
     const spy = jest.spyOn(client as any, 'callTool').mockResolvedValue({ content: [{ text: message }] });
-    const result = await client.createTask({ projectId: 'p1' });
+    const result = await client.createTask({});
     expect(result).toEqual({ success: true, taskId: 'new-task-id', message });
     expect(spy).toHaveBeenCalledWith('wbs.createTask', {
-      projectId: 'p1',
       title: 'New Task',
       description: '',
       parentId: null,
@@ -99,10 +98,9 @@ describe('MCPClient', () => {
   test('createTask handles error response', async () => {
     const message = '❌ Failed to create task';
     const spy = jest.spyOn(client as any, 'callTool').mockResolvedValue({ content: [{ text: message }] });
-    const result = await client.createTask({ projectId: 'p1', parentId: 't1', title: ' ' });
+    const result = await client.createTask({ parentId: 't1', title: ' ' });
     expect(result).toEqual({ success: false, error: message, message });
     expect(spy).toHaveBeenCalledWith('wbs.createTask', {
-      projectId: 'p1',
       title: ' ',
       description: '',
       parentId: 't1',

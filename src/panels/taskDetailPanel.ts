@@ -2,11 +2,10 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import { MCPClient, TaskArtifactAssignment, TaskCompletionCondition, ProjectArtifact } from '../mcpClient';
+import { MCPClient, TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../mcpClient';
 
 interface Task {
     id: string;
-    project_id: string;
     parent_id?: string;
     title: string;
     description?: string;
@@ -123,13 +122,13 @@ export class TaskDetailPanel {
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
                 // Fetch project artifacts for suggestion list (minimal change)
-                let artifacts: ProjectArtifact[] = [];
+                let artifacts: Artifact[] = [];
                 try {
-                    artifacts = await this.mcpClient.listProjectArtifacts(this._task.project_id);
+                    artifacts = await this.mcpClient.listArtifacts();
                 } catch (e) {
                     // ignore and continue without suggestions
                 }
-                    this._panel.webview.html = this.getHtmlForWebview(this._task, artifacts);
+                this._panel.webview.html = this.getHtmlForWebview(this._task, artifacts);
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load task: ${error}`);
@@ -284,10 +283,10 @@ export class TaskDetailPanel {
      * タスク情報をもとに詳細画面のHTMLを生成する
      * なぜ必要か: WebviewでリッチなUIを動的に生成するため
      * @param task タスク情報
-     * @param artifacts プロジェクトの成果物一覧（サジェストに利用される）
+     * @param artifacts 成果物一覧（サジェストに利用される）
      * @returns HTML文字列
      */
-    private getHtmlForWebview(task: Task, artifacts: ProjectArtifact[] = []): string {
+    private getHtmlForWebview(task: Task, artifacts: Artifact[] = []): string {
         const deliverablesText = this.formatArtifactAssignments(task.deliverables);
         const prerequisitesText = this.formatArtifactAssignments(task.prerequisites);
         const completionText = this.formatCompletionConditions(task.completionConditions);
@@ -491,6 +490,7 @@ export class TaskDetailPanel {
 
         // Initialize form fields with task data
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('Task Detail Webview loaded2');
             document.getElementById('title').value = taskData.title || '';
             document.getElementById('description').value = taskData.description || '';
             document.getElementById('goal').value = taskData.goal || '';
@@ -512,8 +512,8 @@ export class TaskDetailPanel {
                     if (!val) return;
                     const textarea = document.getElementById('deliverables');
                     if (textarea) {
-                        textarea.value = (textarea.value ? textarea.value + '\n' : '') + val;
-                        (deliverableSuggest as any).value = '';
+                        textarea.value = (textarea.value ? textarea.value + '\\n' : '') + val;
+                        deliverableSuggest.value = '';
                     }
                 });
             }
@@ -526,8 +526,8 @@ export class TaskDetailPanel {
                     if (!val) return;
                     const textarea = document.getElementById('prerequisites');
                     if (textarea) {
-                        textarea.value = (textarea.value ? textarea.value + '\n' : '') + val;
-                        (prereqSuggest as any).value = '';
+                        textarea.value = (textarea.value ? textarea.value + '\\n' : '') + val;
+                        prereqSuggest.value = '';
                     }
                 });
             }
@@ -554,7 +554,7 @@ export class TaskDetailPanel {
 
         function parseArtifactText(value) {
             return value
-                .split('\n')
+                .split('\\n')
                 .map((line) => line.trim())
                 .filter((line) => line.length > 0)
                 .map((line) => {
@@ -575,7 +575,7 @@ export class TaskDetailPanel {
 
         function parseConditionsText(value) {
             return value
-                .split('\n')
+                .split('\\n')
                 .map((line) => line.trim())
                 .filter((line) => line.length > 0)
                 .map((line) => ({ description: line }));

@@ -5,20 +5,10 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 
-export interface Project {
-    id: string;
-    title: string;
-    description?: string;
-    created_at: string;
-    updated_at: string;
-    version: number;
-}
-
 export type TaskArtifactRole = 'deliverable' | 'prerequisite';
 
-export interface ProjectArtifact {
+export interface Artifact {
     id: string;
-    project_id: string;
     title: string;
     uri?: string;
     description?: string;
@@ -33,7 +23,7 @@ export interface TaskArtifactAssignment {
     role: TaskArtifactRole;
     crudOperations?: string | null;
     order: number;
-    artifact: ProjectArtifact;
+    artifact: Artifact;
 }
 
 export interface TaskCompletionCondition {
@@ -54,7 +44,6 @@ interface TaskCompletionConditionInput {
 
 export interface Task {
     id: string;
-    project_id: string;
     parent_id?: string;
     title: string;
     description?: string;
@@ -124,22 +113,15 @@ async function getDatabase(): Promise<Database> {
  */
 export async function initializeDatabase(): Promise<void> {
     const db = await getDatabase();
+    // To avoid issues when migrating away from a projects table (old schema),
+    // drop related tables first so we can recreate them with the new schema.
+    // This is safe for test environments where DB is ephemeral.
+    await db.exec('PRAGMA foreign_keys = OFF');
 
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS projects (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            description TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            version INTEGER NOT NULL DEFAULT 1
-        )
-    `);
 
     await db.exec(`
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
             parent_id TEXT,
             title TEXT NOT NULL,
             description TEXT,
@@ -150,23 +132,20 @@ export async function initializeDatabase(): Promise<void> {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             version INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
             FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
         )
     `);
 
     await db.exec(`
-        CREATE TABLE IF NOT EXISTS project_artifacts (
+        CREATE TABLE IF NOT EXISTS artifacts (
             id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL,
             title TEXT NOT NULL,
             uri TEXT,
             description TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             version INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-            UNIQUE(project_id, title)
+            UNIQUE(title)
         )
     `);
 
@@ -181,7 +160,7 @@ export async function initializeDatabase(): Promise<void> {
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            FOREIGN KEY (artifact_id) REFERENCES project_artifacts(id) ON DELETE CASCADE
+            FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
         )
     `);
 
@@ -224,34 +203,10 @@ export async function initializeDatabase(): Promise<void> {
         )
     `);
 
-    await seedInitialData(db);
+    await db.exec('PRAGMA foreign_keys = ON');
+
 }
 
-/**
- * 初期データ投入処理
- * DBにサンプルプロジェクト・タスクを投入する
- * なぜ必要か: 新規環境でも動作確認できるように初期データを自動投入するため
- * @param db Databaseインスタンス
- */
-async function seedInitialData(db: Database): Promise<void> {
-    const existing = await db.get<{ count: number }>(
-        'SELECT COUNT(*) as count FROM projects'
-    );
-
-    // 既存データが1件以上あれば初期データ投入をスキップ
-    // 理由: 再投入による重複・整合性崩壊を防ぐため
-    if ((existing?.count ?? 0) > 0) {
-        return;
-    }
-
-    // 初期サンプルデータの自動投入は無効化されています。
-    // 理由: 特定のサンプルプロジェクト（'Alpha Release Plan' と 'Beta Feedback Sprint'）は
-    // ユーザーの要求により登録しないようにします。
-    // ワークスペース専用のプロジェクトは必要に応じて WBSRepository.getWorkspaceProject()
-    // により自動生成されます。
-    console.error('初期サンプルデータ登録は無効化されています。');
-    return;
-}
 
 /**
  * WBSリポジトリクラス
@@ -270,52 +225,9 @@ export class WBSRepository {
     }
 
     /**
-     * プロジェクト作成処理
-     * 新規プロジェクトをDBに登録し、作成結果を返す
-     * なぜ必要か: クライアントからの新規プロジェクト作成要求に応えるため
-     * @param title プロジェクト名
-     * @param description プロジェクト説明
-     * @returns Promise<Project>
-     */
-
-    /**
-     * ワークスペース唯一のプロジェクト情報を返す。なければ自動生成。
-     * @returns Promise<Project|null>
-     */
-    async getWorkspaceProject(): Promise<Project|null> {
-        const db = await this.db();
-        let project = await db.get<Project>(
-            `SELECT id, title, description, created_at, updated_at, version FROM projects LIMIT 1`
-        );
-        if (!project) {
-            // ワークスペース名を取得
-            const wsName = (process.env.WBS_MCP_DATA_DIR ?
-                require('path').basename(process.env.WBS_MCP_DATA_DIR) :
-                'WBSProject');
-            const id = uuidv4();
-            const now = new Date().toISOString();
-            await db.run(
-                `INSERT INTO projects (id, title, description, created_at, updated_at, version)
-                 VALUES (?, ?, ?, ?, ?, 1)`,
-                id,
-                wsName,
-                '',
-                now,
-                now
-            );
-            project = await db.get<Project>(
-                `SELECT id, title, description, created_at, updated_at, version FROM projects WHERE id = ?`,
-                id
-            );
-        }
-        return project ?? null;
-    }
-
-    /**
      * タスク作成処理
      * 新規タスクをDBに登録し、作成結果を返す
      * なぜ必要か: クライアントからの新規タスク作成要求に応えるため
-     * @param projectId プロジェクトID
      * @param title タスク名
      * @param description タスク説明
      * @param parentId 親タスクID
@@ -329,7 +241,6 @@ export class WBSRepository {
      * @returns Promise<Task>
      */
     async createTask(
-        projectId: string,
         title: string,
         description: string = '',
         parentId: string | null = null,
@@ -348,13 +259,14 @@ export class WBSRepository {
 
         await db.run('BEGIN');
         try {
+            // projects テーブルを廃止したため、tasks テーブルの project_id カラムは存在しない
+            // INSERT 文から project_id を削除して登録する
             await db.run(
                 `INSERT INTO tasks (
-                    id, project_id, parent_id, title, description, goal, assignee,
+                    id, parent_id, title, description, goal, assignee,
                     status, estimate, created_at, updated_at, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 1)`,
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 1)`,
                 id,
-                projectId,
                 parentId || null,
                 title,
                 description || null,
@@ -365,8 +277,8 @@ export class WBSRepository {
                 now
             );
 
-            await this.syncTaskArtifacts(db, projectId, id, 'deliverable', options?.deliverables ?? [], now);
-            await this.syncTaskArtifacts(db, projectId, id, 'prerequisite', options?.prerequisites ?? [], now);
+            await this.syncTaskArtifacts(db, id, 'deliverable', options?.deliverables ?? [], now);
+            await this.syncTaskArtifacts(db, id, 'prerequisite', options?.prerequisites ?? [], now);
             await this.syncTaskCompletionConditions(db, id, options?.completionConditions ?? [], now);
 
             await db.run('COMMIT');
@@ -380,17 +292,15 @@ export class WBSRepository {
 
     /**
      * 複数タスク一括登録処理
-     * @param projectId プロジェクトID
      * @param tasksTasks タスク配列 (各要素に title 等のプロパティを持つ)
      * @returns 作成された Task の配列
      */
-    async importTasks(projectId: string, tasksTasks: Array<any>): Promise<Task[]> {
+    async importTasks(tasksTasks: Array<any>): Promise<Task[]> {
         const created: Task[] = [];
         for (const t of tasksTasks || []) {
             // 最小限のバリデーション
             if (!t || !t.title) continue;
             const task = await this.createTask(
-                projectId,
                 t.title,
                 t.description ?? '',
                 t.parentId ?? null,
@@ -417,20 +327,18 @@ export class WBSRepository {
     }
 
     /**
-     * プロジェクト成果物一覧取得処理
-     * 指定プロジェクトに紐づく成果物を全件取得する
+     * 成果物一覧取得処理
+     * 成果物を全件取得する
+     * 引数を省略した場合はワークスペースの成果物を返す
      * なぜ必要か: 成果物ツリービューやタスク編集で参照するため
-     * @param projectId プロジェクトID
      * @returns 成果物配列
      */
-    async listProjectArtifacts(projectId: string): Promise<ProjectArtifact[]> {
+    async listArtifacts(): Promise<Artifact[]> {
         const db = await this.db();
-        const rows = await db.all<ProjectArtifact[]>(
-            `SELECT id, project_id, title, uri, description, created_at, updated_at, version
-             FROM project_artifacts
-             WHERE project_id = ?
-             ORDER BY title ASC`,
-            projectId
+        const rows = await db.all<Artifact[]>(
+            `SELECT id, title, uri, description, created_at, updated_at, version
+             FROM artifacts
+             ORDER BY title ASC`
         );
         return rows;
     }
@@ -442,11 +350,11 @@ export class WBSRepository {
      * @param artifactId 成果物ID
      * @returns 成果物またはnull
      */
-    async getProjectArtifact(artifactId: string): Promise<ProjectArtifact | null> {
+    async getArtifact(artifactId: string): Promise<Artifact | null> {
         const db = await this.db();
-        const artifact = await db.get<ProjectArtifact>(
-            `SELECT id, project_id, title, uri, description, created_at, updated_at, version
-             FROM project_artifacts
+        const artifact = await db.get<Artifact>(
+            `SELECT id, title, uri, description, created_at, updated_at, version
+             FROM artifacts
              WHERE id = ?`,
             artifactId
         );
@@ -455,30 +363,26 @@ export class WBSRepository {
 
     /**
      * 成果物作成処理
-     * プロジェクトに新しい成果物を登録する
+     * 新しい成果物を登録する
      * なぜ必要か: 成果物管理機能から新規作成に対応するため
-     * @param projectId プロジェクトID
      * @param title 成果物名
      * @param uri 関連URI（任意）
      * @param description 説明（任意）
      * @returns 作成された成果物
      */
-    async createProjectArtifact(
-        projectId: string,
+    async createArtifact(
         title: string,
         uri?: string,
         description?: string
-    ): Promise<ProjectArtifact> {
+    ): Promise<Artifact> {
         const db = await this.db();
         const id = uuidv4();
         const now = new Date().toISOString();
-
         await db.run(
-            `INSERT INTO project_artifacts (
-                id, project_id, title, uri, description, created_at, updated_at, version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+            `INSERT INTO artifacts (
+                id, title, uri, description, created_at, updated_at, version
+            ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
             id,
-            projectId,
             title,
             uri ?? null,
             description ?? null,
@@ -486,7 +390,7 @@ export class WBSRepository {
             now
         );
 
-        return (await this.getProjectArtifact(id))!;
+        return (await this.getArtifact(id))!;
     }
 
     /**
@@ -501,7 +405,7 @@ export class WBSRepository {
      * @param updates.ifVersion 競合検出用バージョン（任意）
      * @returns 更新後の成果物
      */
-    async updateProjectArtifact(
+    async updateArtifact(
         artifactId: string,
         updates: {
             title?: string;
@@ -509,9 +413,9 @@ export class WBSRepository {
             description?: string | null;
             ifVersion?: number;
         }
-    ): Promise<ProjectArtifact> {
+    ): Promise<Artifact> {
         const db = await this.db();
-        const current = await this.getProjectArtifact(artifactId);
+        const current = await this.getArtifact(artifactId);
 
         if (!current) {
             throw new Error(`Artifact not found: ${artifactId}`);
@@ -525,7 +429,7 @@ export class WBSRepository {
         const newVersion = current.version + 1;
 
         await db.run(
-            `UPDATE project_artifacts
+            `UPDATE artifacts
              SET title = ?,
                  uri = ?,
                  description = ?,
@@ -540,7 +444,7 @@ export class WBSRepository {
             artifactId
         );
 
-        return (await this.getProjectArtifact(artifactId))!;
+        return (await this.getArtifact(artifactId))!;
     }
 
     /**
@@ -550,10 +454,10 @@ export class WBSRepository {
      * @param artifactId 成果物ID
      * @returns 削除が行われたかどうか
      */
-    async deleteProjectArtifact(artifactId: string): Promise<boolean> {
+    async deleteArtifact(artifactId: string): Promise<boolean> {
         const db = await this.db();
         const result = await db.run(
-            `DELETE FROM project_artifacts WHERE id = ?`,
+            `DELETE FROM artifacts WHERE id = ?`,
             artifactId
         );
         return (result.changes ?? 0) > 0;
@@ -561,20 +465,17 @@ export class WBSRepository {
 
     /**
      * タスク一覧取得処理
-     * 指定プロジェクトIDのタスクをDBから取得し、階層構造で返す
+     * タスクをDBから取得し、階層構造で返す
      * なぜ必要か: プロジェクト配下のタスクツリーをUIに表示するため
-     * @param projectId プロジェクトID
      * @returns Promise<Task[]>
      */
-    async listTasks(projectId: string): Promise<Task[]> {
+    async listTasks(): Promise<Task[]> {
         const db = await this.db();
         const rows = await db.all<Task[]>(
-            `SELECT id, project_id, parent_id, title, description, goal, assignee, status,
-                    estimate, created_at, updated_at, version
-             FROM tasks
-             WHERE project_id = ?
-             ORDER BY created_at ASC`,
-            projectId
+            `SELECT id, parent_id, title, description, goal, assignee, status,
+            estimate, created_at, updated_at, version
+         FROM tasks
+         ORDER BY created_at ASC`
         );
 
         const taskMap = new Map<string, Task>();
@@ -620,7 +521,7 @@ export class WBSRepository {
     async getTask(taskId: string): Promise<Task | null> {
         const db = await this.db();
         const task = await db.get<Task>(
-            `SELECT id, project_id, parent_id, title, description, goal, assignee, status,
+            `SELECT id, parent_id, title, description, goal, assignee, status,
                     estimate, created_at, updated_at, version
              FROM tasks
              WHERE id = ?`,
@@ -631,12 +532,10 @@ export class WBSRepository {
         }
 
         const rows = await db.all<Task[]>(
-            `SELECT id, project_id, parent_id, title, description, goal, assignee, status,
+            `SELECT id, parent_id, title, description, goal, assignee, status,
                     estimate, created_at, updated_at, version
              FROM tasks
-             WHERE project_id = ?
-             ORDER BY created_at ASC`,
-            task.project_id
+             ORDER BY created_at ASC`
         );
 
         const taskMap = new Map<string, Task>();
@@ -727,11 +626,11 @@ export class WBSRepository {
             );
 
             if (updates.deliverables !== undefined) {
-                await this.syncTaskArtifacts(db, current.project_id, taskId, 'deliverable', updates.deliverables ?? [], now);
+                await this.syncTaskArtifacts(db, taskId, 'deliverable', updates.deliverables ?? [], now);
             }
 
             if (updates.prerequisites !== undefined) {
-                await this.syncTaskArtifacts(db, current.project_id, taskId, 'prerequisite', updates.prerequisites ?? [], now);
+                await this.syncTaskArtifacts(db, taskId, 'prerequisite', updates.prerequisites ?? [], now);
             }
 
             if (updates.completionConditions !== undefined) {
@@ -807,7 +706,7 @@ export class WBSRepository {
         }
 
         const parent = await db.get<Task>(
-            `SELECT id, project_id, parent_id
+            `SELECT id, parent_id
              FROM tasks
              WHERE id = ?`,
             normalizedParentId
@@ -817,9 +716,7 @@ export class WBSRepository {
             throw new Error(`Parent task not found: ${normalizedParentId}`);
         }
 
-        if (parent.project_id !== task.project_id) {
-            throw new Error('Cannot move task to a different project');
-        }
+        // projects テーブルは廃止され、プロジェクト分離は行われないため移動チェックは不要
 
         await this.ensureNotDescendant(db, task.id, parent.parent_id ?? null);
     }
@@ -856,7 +753,7 @@ export class WBSRepository {
      */
     private async fetchTaskRow(db: Database, taskId: string): Promise<Task | null> {
         const row = await db.get<Task>(
-            `SELECT id, project_id, parent_id, title, description, goal, assignee, status,
+            `SELECT id, parent_id, title, description, goal, assignee, status,
                     estimate, created_at, updated_at, version
              FROM tasks
              WHERE id = ?`,
@@ -866,36 +763,10 @@ export class WBSRepository {
     }
 
     /**
-     * 成果物所属検証処理
-     * 成果物が指定プロジェクトに属するか確認する
-     * なぜ必要か: 他プロジェクトの成果物を誤って参照するのを防ぐため
-     * @param db Databaseインスタンス
-     * @param projectId プロジェクトID
-     * @param artifactId 成果物ID
-     */
-    private async ensureArtifactBelongsToProject(db: Database, projectId: string, artifactId: string): Promise<void> {
-        const artifact = await db.get<ProjectArtifact>(
-            `SELECT id, project_id, title, uri, description, created_at, updated_at, version
-             FROM project_artifacts
-             WHERE id = ?`,
-            artifactId
-        );
-
-        if (!artifact) {
-            throw new Error(`Artifact not found: ${artifactId}`);
-        }
-
-        if (artifact.project_id !== projectId) {
-            throw new Error(`Artifact ${artifactId} does not belong to project ${projectId}`);
-        }
-    }
-
-    /**
      * タスク成果物同期処理
      * 指定タスクの成果物割当を再登録する
      * なぜ必要か: タスク保存時に最新の割当内容へ置き換えるため
      * @param db Databaseインスタンス
-     * @param projectId プロジェクトID
      * @param taskId タスクID
      * @param role 成果物の役割（deliverable/prerequisite）
      * @param assignments 割当一覧
@@ -903,7 +774,6 @@ export class WBSRepository {
      */
     private async syncTaskArtifacts(
         db: Database,
-        projectId: string,
         taskId: string,
         role: TaskArtifactRole,
         assignments: TaskArtifactInput[] | undefined,
@@ -925,7 +795,14 @@ export class WBSRepository {
                 continue;
             }
 
-            await this.ensureArtifactBelongsToProject(db, projectId, assignment.artifactId);
+            // projects テーブルが存在しないため、所属チェックは行わず存在チェックのみを行う
+            const artifact = await db.get<Artifact>(
+                `SELECT id FROM artifacts WHERE id = ?`,
+                assignment.artifactId
+            );
+            if (!artifact) {
+                throw new Error(`Artifact not found: ${assignment.artifactId}`);
+            }
 
             await db.run(
                 `INSERT INTO task_artifacts (
@@ -1016,7 +893,6 @@ export class WBSRepository {
                 ta.role AS role,
                 ta.crud_operations AS crud_operations,
                 ta.order_index AS order_index,
-                pa.project_id AS artifact_project_id,
                 pa.title AS artifact_title,
                 pa.uri AS artifact_uri,
                 pa.description AS artifact_description,
@@ -1024,7 +900,7 @@ export class WBSRepository {
                 pa.updated_at AS artifact_updated_at,
                 pa.version AS artifact_version
              FROM task_artifacts ta
-             JOIN project_artifacts pa ON pa.id = ta.artifact_id
+             JOIN artifacts pa ON pa.id = ta.artifact_id
              WHERE ta.task_id IN (${placeholders})
              ORDER BY ta.task_id, ta.role, ta.order_index`,
             taskIds
@@ -1039,7 +915,6 @@ export class WBSRepository {
                 order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0),
                 artifact: {
                     id: row.artifact_id,
-                    project_id: row.artifact_project_id,
                     title: row.artifact_title,
                     uri: row.artifact_uri ?? undefined,
                     description: row.artifact_description ?? undefined,
@@ -1141,32 +1016,6 @@ export class WBSRepository {
         const result = await db.run(
             `DELETE FROM tasks WHERE id = ?`,
             taskId
-        );
-
-        return (result.changes ?? 0) > 0;
-    }
-
-    /**
-     * プロジェクト削除処理
-     * 指定されたプロジェクトと配下のタスクを削除する
-     * なぜ必要か: プロジェクト削除要求をDBへ反映し、関連タスクも一括で削除するため
-     * @param projectId プロジェクトID
-     * @returns 削除が行われたかどうか
-     */
-    async deleteProject(projectId: string): Promise<boolean> {
-        const db = await this.db();
-        const existing = await db.get<{ id: string }>(
-            `SELECT id FROM projects WHERE id = ?`,
-            projectId
-        );
-
-        if (!existing) {
-            return false;
-        }
-
-        const result = await db.run(
-            `DELETE FROM projects WHERE id = ?`,
-            projectId
         );
 
         return (result.changes ?? 0) > 0;

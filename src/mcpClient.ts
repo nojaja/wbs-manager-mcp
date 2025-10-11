@@ -25,9 +25,8 @@ interface JsonRpcResponse {
 
 export type TaskArtifactRole = 'deliverable' | 'prerequisite';
 
-export interface ProjectArtifact {
+export interface Artifact {
     id: string;
-    project_id: string;
     title: string;
     uri?: string;
     description?: string;
@@ -42,7 +41,7 @@ export interface TaskArtifactAssignment {
     role: TaskArtifactRole;
     crudOperations?: string;
     order: number;
-    artifact: ProjectArtifact;
+    artifact: Artifact;
 }
 
 export interface TaskCompletionCondition {
@@ -313,37 +312,23 @@ export class MCPClient {
 
 
     /**
-     * ワークスペース唯一のプロジェクト情報を取得
-     * @returns Promise<any|null>
-     */
-    async getWorkspaceProject(): Promise<any|null> {
-        try {
-            const result = await this.callTool('wbs.getWorkspaceProject', {});
-            const content = result.content?.[0]?.text;
-            if (content) {
-                return JSON.parse(content);
-            }
-            return null;
-        } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to get workspace project: ${error}`);
-            return null;
-        }
-    }
-
-    /**
      * タスク一覧取得処理
-     * 指定プロジェクトのタスク一覧を取得し、配列で返す
-     * なぜ必要か: プロジェクト配下のタスクツリーをUIに表示するため
-     * @param projectId プロジェクトID
+     * タスク一覧を取得し、配列で返す
+     * なぜ必要か: vタスクツリーをUIに表示するため
      * @returns Promise<any[]>
      */
-    async listTasks(projectId: string): Promise<any[]> {
+    async listTasks(): Promise<any[]> {
         try {
             // 理由: サーバAPI呼び出し・パース失敗時も空配列で安全に返す
-            const result = await this.callTool('wbs.listTasks', { projectId });
+            // server-side listTasks no longer requires projectId; call without it
+            const result = await this.callTool('wbs.listTasks', {});
             const content = result.content?.[0]?.text;
             if (content) {
-                return JSON.parse(content);
+                try {
+                    return JSON.parse(content);
+                } catch (error) {
+                    this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${error} : ${content}`);
+                }
             }
             return [];
         } catch (error) {
@@ -424,10 +409,9 @@ export class MCPClient {
 
     /**
      * タスク作成処理
-     * 指定プロジェクトに新しいタスクを作成し、結果を返す
+     * 新しいタスクを作成し、結果を返す
      * なぜ必要か: ツリー上からタスクを追加する機能を提供するため
     * @param params 作成パラメータ
-    * @param params.projectId プロジェクトID
     * @param params.title タスクタイトル
     * @param params.description タスク説明
     * @param params.parentId 親タスクID
@@ -440,7 +424,6 @@ export class MCPClient {
      * @returns 作成結果（成功時はタスクIDを含む）
      */
     async createTask(params: {
-        projectId: string;
         title?: string;
         description?: string;
         parentId?: string | null;
@@ -457,7 +440,6 @@ export class MCPClient {
             const completionConditions = this.sanitizeCompletionInputs(params.completionConditions);
 
             const toolArguments: Record<string, unknown> = {
-                projectId: params.projectId,
                 title: params.title ?? 'New Task',
                 description: params.description ?? '',
                 parentId: params.parentId ?? null,
@@ -491,18 +473,17 @@ export class MCPClient {
     }
 
     /**
-     * プロジェクト成果物一覧取得処理
-     * 指定プロジェクトの成果物一覧を取得する
+     * 成果物一覧取得処理
+     * 成果物一覧を取得する
      * なぜ必要か: 成果物ツリービューに一覧を表示するため
-     * @param projectId プロジェクトID
      * @returns 成果物配列
      */
-    async listProjectArtifacts(projectId: string): Promise<ProjectArtifact[]> {
+    async listArtifacts(): Promise<Artifact[]> {
         try {
-            const result = await this.callTool('artifacts.listProjectArtifacts', { projectId });
+            const result = await this.callTool('artifacts.listArtifacts', {});
             const content = result.content?.[0]?.text;
             if (content) {
-                return JSON.parse(content) as ProjectArtifact[];
+                return JSON.parse(content) as Artifact[];
             }
             return [];
         } catch (error) {
@@ -512,25 +493,22 @@ export class MCPClient {
     }
 
     /**
-     * プロジェクト成果物作成処理
+     * 成果物作成処理
      * 成果物を新規登録し、作成結果を返す
      * なぜ必要か: 成果物管理機能から新規登録するため
      * @param params 作成パラメータ
-     * @param params.projectId プロジェクトID
      * @param params.title 成果物タイトル
      * @param params.uri 関連URI（任意）
      * @param params.description 説明（任意）
      * @returns 作成結果
      */
-    async createProjectArtifact(params: {
-        projectId: string;
+    async createArtifact(params: {
         title: string;
         uri?: string | null;
         description?: string | null;
-    }): Promise<{ success: boolean; artifact?: ProjectArtifact; error?: string }> {
+    }): Promise<{ success: boolean; artifact?: Artifact; error?: string }> {
         try {
-            const result = await this.callTool('artifacts.createProjectArtifact', {
-                projectId: params.projectId,
+            const result = await this.callTool('artifacts.createArtifact', {
                 title: params.title,
                 uri: params.uri ?? null,
                 description: params.description ?? null
@@ -539,7 +517,7 @@ export class MCPClient {
             if (content.includes('❌')) {
                 return { success: false, error: content };
             }
-            const artifact = JSON.parse(content) as ProjectArtifact;
+            const artifact = JSON.parse(content) as Artifact;
             return { success: true, artifact };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -548,7 +526,7 @@ export class MCPClient {
     }
 
     /**
-     * プロジェクト成果物更新処理
+     * 成果物更新処理
      * 既存成果物を更新し、更新結果を返す
      * なぜ必要か: 成果物情報の編集に対応するため
      * @param params 更新パラメータ
@@ -559,15 +537,15 @@ export class MCPClient {
      * @param params.version 競合検出用バージョン（任意）
      * @returns 更新結果
      */
-    async updateProjectArtifact(params: {
+    async updateArtifact(params: {
         artifactId: string;
         title?: string;
         uri?: string | null;
         description?: string | null;
         version?: number;
-    }): Promise<{ success: boolean; artifact?: ProjectArtifact; conflict?: boolean; error?: string }> {
+    }): Promise<{ success: boolean; artifact?: Artifact; conflict?: boolean; error?: string }> {
         try {
-            const result = await this.callTool('artifacts.updateProjectArtifact', {
+            const result = await this.callTool('artifacts.updateArtifact', {
                 artifactId: params.artifactId,
                 title: params.title,
                 uri: params.uri ?? null,
@@ -581,7 +559,7 @@ export class MCPClient {
             if (content.includes('❌')) {
                 return { success: false, error: content };
             }
-            const artifact = JSON.parse(content) as ProjectArtifact;
+            const artifact = JSON.parse(content) as Artifact;
             return { success: true, artifact };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -590,15 +568,15 @@ export class MCPClient {
     }
 
     /**
-     * プロジェクト成果物取得処理
+     * 成果物取得処理
      * 指定IDの成果物を取得する
      * なぜ必要か: 成果物詳細画面で最新情報を表示するため
      * @param artifactId 成果物ID
      * @returns 成果物またはnull
      */
-    async getProjectArtifact(artifactId: string): Promise<ProjectArtifact | null> {
+    async getArtifact(artifactId: string): Promise<Artifact | null> {
         try {
-            const result = await this.callTool('artifacts.getProjectArtifact', { artifactId });
+            const result = await this.callTool('artifacts.getArtifact', { artifactId });
             const content = result.content?.[0]?.text;
             if (content && !content.includes('❌')) {
                 return JSON.parse(content);
@@ -611,15 +589,15 @@ export class MCPClient {
     }
 
     /**
-     * プロジェクト成果物削除処理
+     * 成果物削除処理
      * 指定成果物を削除する
      * なぜ必要か: 成果物管理から除去するため
      * @param artifactId 成果物ID
      * @returns 削除結果
      */
-    async deleteProjectArtifact(artifactId: string): Promise<{ success: boolean; error?: string }> {
+    async deleteArtifact(artifactId: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const result = await this.callTool('artifacts.deleteProjectArtifact', { artifactId });
+            const result = await this.callTool('artifacts.deleteArtifact', { artifactId });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };
@@ -650,8 +628,6 @@ export class MCPClient {
         }
     }
 
-
-    // プロジェクト削除は不可のため削除
 
     /**
      * タスク移動処理

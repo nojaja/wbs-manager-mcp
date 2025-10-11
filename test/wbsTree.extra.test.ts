@@ -13,13 +13,11 @@ describe('WBSTreeProvider extra tests', () => {
     jest.clearAllMocks();
   });
 
-  test('getChildren root calls getWorkspaceProject and lists tasks', async () => {
-    fakeClient.getWorkspaceProject.mockResolvedValue({ id: 'p1', title: 'P1' });
+  test('getChildren root lists tasks', async () => {
     fakeClient.listTasks.mockResolvedValue([{ id: 't1', title: 'T1', status: 'pending' }]);
     const children = await provider.getChildren();
     expect(children.length).toBe(1);
-    expect(fakeClient.getWorkspaceProject).toHaveBeenCalled();
-    expect(fakeClient.listTasks).toHaveBeenCalledWith('p1');
+    expect(fakeClient.listTasks).toHaveBeenCalledWith();
   });
 
   test('getChildren for task with children returns child nodes', async () => {

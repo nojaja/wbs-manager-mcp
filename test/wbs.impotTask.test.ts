@@ -26,8 +26,6 @@ describe('wbs.impotTask tool (repository.importTasks)', () => {
 
     it('imports multiple tasks into a project', async () => {
         const repo = new WBSRepository();
-        const project = await repo.getWorkspaceProject();
-        expect(project).toBeTruthy();
 
         const tasksToImport = [
             { title: 'Task A', description: 'First' },
@@ -35,11 +33,11 @@ describe('wbs.impotTask tool (repository.importTasks)', () => {
             { title: 'Task C', description: 'Third' }
         ];
 
-        const created = await repo.importTasks(project!.id, tasksToImport as any);
+    const created = await repo.importTasks(tasksToImport as any);
         expect(Array.isArray(created)).toBe(true);
         expect(created.length).toBe(3);
 
-        const listed = await repo.listTasks(project!.id);
+    const listed = await repo.listTasks();
         // listTasks returns roots; imported tasks have no parent so should be present
         expect(listed.length).toBeGreaterThanOrEqual(3);
         const titles = listed.map(t => t.title);

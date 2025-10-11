@@ -1,15 +1,13 @@
 import * as vscode from 'vscode';
-import { MCPClient, ProjectArtifact } from '../mcpClient';
+import { MCPClient, Artifact } from '../mcpClient';
 
 /**
  * プロジェクト成果物ツリープロバイダ
  * 成果物一覧の読み込み・操作を提供する
  */
-export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<ProjectArtifactTreeItem> {
-    private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<ProjectArtifactTreeItem | undefined | null | void>();
+export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTreeItem> {
+    private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<ArtifactTreeItem | undefined | null | void>();
     readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
-
-    private cachedProjectId: string | null = null;
 
     /**
      * コンストラクタ
@@ -19,13 +17,8 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
 
     /**
      * ツリーの再読込を通知する
-     * @param options オプション（プロジェクトIDをリセットするか）
-     * @param options.resetProject プロジェクトIDのキャッシュを無効化するか
      */
-    refresh(options?: { resetProject?: boolean }): void {
-        if (options?.resetProject) {
-            this.cachedProjectId = null;
-        }
+    refresh(): void {
         this.onDidChangeTreeDataEmitter.fire();
     }
 
@@ -34,7 +27,7 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
      * @param element ツリー項目
      * @returns 入力された項目
      */
-    getTreeItem(element: ProjectArtifactTreeItem): vscode.TreeItem {
+    getTreeItem(element: ArtifactTreeItem): vscode.TreeItem {
         return element;
     }
 
@@ -44,18 +37,13 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
      * @param element 親項目
      * @returns 子項目配列
      */
-    async getChildren(element?: ProjectArtifactTreeItem): Promise<ProjectArtifactTreeItem[]> {
+    async getChildren(element?: ArtifactTreeItem): Promise<ArtifactTreeItem[]> {
         if (element) {
             return [];
         }
 
-        const projectId = await this.resolveProjectId();
-        if (!projectId) {
-            return [];
-        }
-
-        const artifacts = await this.mcpClient.listProjectArtifacts(projectId);
-        return artifacts.map((artifact) => new ProjectArtifactTreeItem(artifact));
+        const artifacts = await this.mcpClient.listArtifacts();
+        return artifacts.map((artifact) => new ArtifactTreeItem(artifact));
     }
 
     /**
@@ -64,12 +52,6 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
     * @returns Promise<void>
      */
     async createArtifact(): Promise<void> {
-        const projectId = await this.resolveProjectId();
-        if (!projectId) {
-            vscode.window.showWarningMessage('成果物を追加するにはプロジェクトが必要です。');
-            return;
-        }
-
         const title = await vscode.window.showInputBox({
             prompt: '成果物の名称を入力してください',
             /**
@@ -93,8 +75,7 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
             placeHolder: '例: アプリの画面遷移図'
         });
 
-        const result = await this.mcpClient.createProjectArtifact({
-            projectId,
+        const result = await this.mcpClient.createArtifact({
             title: title.trim(),
             uri: uri?.trim() || null,
             description: description?.trim() || null
@@ -115,7 +96,7 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
      * @param target 編集対象項目
     * @returns Promise<void>
      */
-    async editArtifact(target?: ProjectArtifactTreeItem): Promise<void> {
+    async editArtifact(target?: ArtifactTreeItem): Promise<void> {
         if (!target) {
             vscode.window.showWarningMessage('編集する成果物を選択してください。');
             return;
@@ -147,7 +128,7 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
             value: artifact.description ?? ''
         });
 
-        const result = await this.mcpClient.updateProjectArtifact({
+        const result = await this.mcpClient.updateArtifact({
             artifactId: artifact.id,
             title: title.trim(),
             uri: uri?.trim() || null,
@@ -175,7 +156,7 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
      * @param target 削除対象項目
     * @returns Promise<void>
      */
-    async deleteArtifact(target?: ProjectArtifactTreeItem): Promise<void> {
+    async deleteArtifact(target?: ArtifactTreeItem): Promise<void> {
         if (!target) {
             vscode.window.showWarningMessage('削除する成果物を選択してください。');
             return;
@@ -191,7 +172,7 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
             return;
         }
 
-        const result = await this.mcpClient.deleteProjectArtifact(target.artifact.id);
+        const result = await this.mcpClient.deleteArtifact(target.artifact.id);
         if (!result.success) {
             vscode.window.showErrorMessage(result.error ?? '成果物の削除に失敗しました。');
             return;
@@ -201,36 +182,18 @@ export class ProjectArtifactTreeProvider implements vscode.TreeDataProvider<Proj
         this.refresh();
     }
 
-    /**
-     * プロジェクトID解決処理
-     * キャッシュを考慮しつつプロジェクトIDを取得する
-     * @returns プロジェクトIDまたはnull
-     */
-    private async resolveProjectId(): Promise<string | null> {
-        if (this.cachedProjectId) {
-            return this.cachedProjectId;
-        }
-
-        const project = await this.mcpClient.getWorkspaceProject();
-        if (!project?.id) {
-            return null;
-        }
-
-        this.cachedProjectId = project.id;
-        return project.id;
-    }
 }
 
 /**
  * 成果物ツリー項目
  * VS Codeツリーに表示される単一成果物を表現する
  */
-export class ProjectArtifactTreeItem extends vscode.TreeItem {
+export class ArtifactTreeItem extends vscode.TreeItem {
     /**
      * コンストラクタ
      * @param artifact 成果物情報
      */
-    constructor(public readonly artifact: ProjectArtifact) {
+    constructor(public readonly artifact: Artifact) {
         super(artifact.title || artifact.id, vscode.TreeItemCollapsibleState.None);
         this.description = artifact.uri ?? '';
         this.tooltip = this.buildTooltip(artifact);
@@ -244,7 +207,7 @@ export class ProjectArtifactTreeItem extends vscode.TreeItem {
      * @param artifact 成果物情報
      * @returns ツールチップ文字列
      */
-    private buildTooltip(artifact: ProjectArtifact): string {
+    private buildTooltip(artifact: Artifact): string {
         const lines = [`ID: ${artifact.id}`];
         if (artifact.uri) {
             lines.push(`URI: ${artifact.uri}`);

@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 // WBSツリープロバイダ（ツリー表示用）
 import { WBSTreeProvider, WBSTreeDragAndDropController } from './views/wbsTree';
-import { ProjectArtifactTreeProvider, ProjectArtifactTreeItem } from './views/projectArtifactTree';
+import { ArtifactTreeProvider, ArtifactTreeItem } from './views/artifactTree';
 // タスク詳細パネル（WebView表示用）
 import { TaskDetailPanel } from './panels/taskDetailPanel';
 // 成果物詳細パネル（WebView表示用）
@@ -25,7 +25,7 @@ let outputChannel: vscode.OutputChannel;
 // WBSツリープロバイダのインスタンス
 let treeProvider: WBSTreeProvider;
 // 成果物ツリープロバイダのインスタンス
-let artifactTreeProvider: ProjectArtifactTreeProvider;
+let artifactTreeProvider: ArtifactTreeProvider;
 // MCPクライアントのインスタンス
 let mcpClient: MCPClient;
 
@@ -58,8 +58,8 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     // 成果物ツリーの初期化
-    artifactTreeProvider = new ProjectArtifactTreeProvider(mcpClient);
-    const projectArtifactTreeView = vscode.window.createTreeView('projectArtifactTree', {
+    artifactTreeProvider = new ArtifactTreeProvider(mcpClient);
+    const artifactTreeView = vscode.window.createTreeView('artifactTree', {
         treeDataProvider: artifactTreeProvider,
         showCollapseAll: false
     });
@@ -68,7 +68,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         await startLocalServer(context);
         treeProvider.refresh();
-        artifactTreeProvider.refresh({ resetProject: true });
+        artifactTreeProvider.refresh();
     });
 
     // コマンド登録: ツリーリフレッシュ
@@ -83,26 +83,26 @@ export async function activate(context: vscode.ExtensionContext) {
         treeProvider.refresh();
     });
 
-    const refreshArtifactTreeCommand = vscode.commands.registerCommand('projectArtifactTree.refresh', async () => {
+    const refreshArtifactTreeCommand = vscode.commands.registerCommand('artifactTree.refresh', async () => {
         artifactTreeProvider.refresh();
     });
 
-    const createArtifactCommand = vscode.commands.registerCommand('projectArtifactTree.createArtifact', async () => {
+    const createArtifactCommand = vscode.commands.registerCommand('artifactTree.createArtifact', async () => {
         await artifactTreeProvider.createArtifact();
     });
 
-    const editArtifactCommand = vscode.commands.registerCommand('projectArtifactTree.editArtifact', async (item?: ProjectArtifactTreeItem) => {
-        const target = item ?? (projectArtifactTreeView.selection && projectArtifactTreeView.selection.length > 0
-            ? projectArtifactTreeView.selection[0]
+    const editArtifactCommand = vscode.commands.registerCommand('artifactTree.editArtifact', async (item?: ArtifactTreeItem) => {
+        const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
+            ? artifactTreeView.selection[0]
             : undefined);
         if (target) {
             ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, mcpClient);
         }
     });
 
-    const deleteArtifactCommand = vscode.commands.registerCommand('projectArtifactTree.deleteArtifact', async (item?: ProjectArtifactTreeItem) => {
-        const target = item ?? (projectArtifactTreeView.selection && projectArtifactTreeView.selection.length > 0
-            ? projectArtifactTreeView.selection[0]
+    const deleteArtifactCommand = vscode.commands.registerCommand('artifactTree.deleteArtifact', async (item?: ArtifactTreeItem) => {
+        const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
+            ? artifactTreeView.selection[0]
             : undefined);
         await artifactTreeProvider.deleteArtifact(target);
     });
@@ -154,7 +154,7 @@ export async function activate(context: vscode.ExtensionContext) {
         deleteArtifactCommand,
         dragAndDropController,
         treeView,
-        projectArtifactTreeView,
+        artifactTreeView,
         outputChannel
     );
 }

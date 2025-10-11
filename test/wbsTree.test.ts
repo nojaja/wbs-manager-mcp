@@ -20,9 +20,9 @@ describe('WBSTreeProvider', () => {
 
 
 
-  test('getTasksForProject returns tasks', async () => {
+  test('getTasks returns tasks', async () => {
     fakeClient.listTasks.mockResolvedValue([{ id: 't1', title: 'T1', status: 'pending' }]);
-    const items = await (provider as any).getTasksForProject('p1');
+    const items = await (provider as any).getTasks();
     expect(items.length).toBe(1);
     expect(items[0].label).toBe('T1');
   });
@@ -51,8 +51,8 @@ describe('WBSTreeProvider', () => {
     const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
     fakeClient.createTask.mockResolvedValue({ success: true, taskId: 'new-id' });
     const projectItem: any = { contextValue: 'project', itemId: 'p1' };
-    const result = await provider.createTask(projectItem);
-    expect(fakeClient.createTask).toHaveBeenCalledWith({ projectId: 'p1', parentId: null, title: 'New Task' });
+  const result = await provider.createTask(projectItem);
+  expect(fakeClient.createTask).toHaveBeenCalledWith({ parentId: null, title: 'New Task' });
     expect(result).toEqual({ success: true, taskId: 'new-id' });
     expect(refreshSpy).toHaveBeenCalled();
     expect(infoSpy).toHaveBeenCalled();
@@ -68,13 +68,12 @@ describe('WBSTreeProvider', () => {
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
     fakeClient.getTask.mockResolvedValue({
       id: 't1',
-      project_id: 'p1',
       parent_id: 'old',
       children: []
     });
     fakeClient.moveTask.mockResolvedValue({ success: true });
 
-    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'parentB', project_id: 'p1' } } as any);
+  await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'parentB' } } as any);
 
     expect(fakeClient.moveTask).toHaveBeenCalledWith('t1', 'parentB');
     expect(refreshSpy).toHaveBeenCalled();
@@ -87,14 +86,13 @@ describe('WBSTreeProvider', () => {
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage');
     fakeClient.getTask.mockResolvedValue({
       id: 't1',
-      project_id: 'p1',
       parent_id: 'old',
       children: [
-        { id: 'child', project_id: 'p1', children: [] }
+        { id: 'child', children: [] }
       ]
     });
 
-    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'child', project_id: 'p1' } } as any);
+  await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'child' } } as any);
 
     expect(fakeClient.moveTask).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
@@ -106,13 +104,12 @@ describe('WBSTreeProvider', () => {
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
     fakeClient.getTask.mockResolvedValue({
       id: 't1',
-      project_id: 'p1',
       parent_id: 'parentA',
       children: []
     });
     fakeClient.moveTask.mockResolvedValue({ success: true });
 
-    await provider.handleTaskDrop('t1', { contextValue: 'project', itemId: 'p1' } as any);
+  await provider.handleTaskDrop('t1', { contextValue: 'project', itemId: 'p1' } as any);
 
     expect(fakeClient.moveTask).toHaveBeenCalledWith('t1', null);
     expect(refreshSpy).toHaveBeenCalled();
@@ -125,15 +122,15 @@ describe('WBSTreeProvider', () => {
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage');
     fakeClient.getTask.mockResolvedValue({
       id: 't1',
-      project_id: 'p1',
       parent_id: 'parentA',
       children: []
     });
 
-    await provider.handleTaskDrop('t1', { contextValue: 'project', itemId: 'p2' } as any);
+  await provider.handleTaskDrop('t1', { contextValue: 'project', itemId: 'p2' } as any);
 
-    expect(fakeClient.moveTask).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalled();
+  // Projects are no longer isolated; moving to workspace root is allowed
+  expect(fakeClient.moveTask).toHaveBeenCalledWith('t1', null);
+  expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 });

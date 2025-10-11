@@ -153,20 +153,11 @@ class StdioMCPServer {
                     result: {
                         tools: [
                             {
-                                name: 'wbs.getWorkspaceProject',
-                                description: 'Get the single workspace project',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {}
-                                }
-                            },
-                            {
                                 name: 'wbs.createTask',
-                                description: 'Create a new task in a project',
+                                description: 'Create a new task',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
-                                        projectId: { type: 'string', description: 'Project ID' },
                                         title: { type: 'string', description: 'Task title' },
                                         description: { type: 'string', description: 'Task description' },
                                         assignee: { type: 'string', description: 'Assignee name' },
@@ -209,7 +200,7 @@ class StdioMCPServer {
                                             }
                                         }
                                     },
-                                    required: ['projectId', 'title']
+                                    required: ['title']
                                 }
                             },
                             {
@@ -275,13 +266,10 @@ class StdioMCPServer {
                             },
                             {
                                 name: 'wbs.listTasks',
-                                description: 'List tasks for a project',
+                                description: 'List tasks',
                                 inputSchema: {
                                     type: 'object',
-                                    properties: {
-                                        projectId: { type: 'string', description: 'Project ID' }
-                                    },
-                                    required: ['projectId']
+                                    properties: {}
                                 }
                             },
                             {
@@ -293,17 +281,6 @@ class StdioMCPServer {
                                         taskId: { type: 'string', description: 'Task ID' }
                                     },
                                     required: ['taskId']
-                                }
-                            },
-                            {
-                                name: 'wbs.deleteProject',
-                                description: 'Delete project and all its tasks',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        projectId: { type: 'string', description: 'Project ID' }
-                                    },
-                                    required: ['projectId']
                                 }
                             },
                             {
@@ -321,11 +298,10 @@ class StdioMCPServer {
                             ,
                             {
                                 name: 'wbs.impotTask',
-                                description: 'Import multiple tasks into a project',
+                                description: 'Import multiple tasks',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
-                                        projectId: { type: 'string', description: 'Project ID' },
                                         tasks: {
                                             type: 'array',
                                             description: 'Array of task objects',
@@ -379,23 +355,20 @@ class StdioMCPServer {
                                             }
                                         }
                                     },
-                                    required: ['projectId', 'tasks']
+                                    required: ['tasks']
                                 }
                             },
                             {
-                                name: 'artifacts.listProjectArtifacts',
-                                description: 'List project artifacts for the given project',
+                                name: 'artifacts.listArtifacts',
+                                description: 'List artifacts',
                                 inputSchema: {
                                     type: 'object',
-                                    properties: {
-                                        projectId: { type: 'string', description: 'Project ID' }
-                                    },
-                                    required: ['projectId']
+                                    properties: {}
                                 }
                             },
                             {
-                                name: 'artifacts.getProjectArtifact',
-                                description: 'Get a specific project artifact by ID',
+                                name: 'artifacts.getArtifact',
+                                description: 'Get a specific artifact by ID',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
@@ -405,22 +378,21 @@ class StdioMCPServer {
                                 }
                             },
                             {
-                                name: 'artifacts.createProjectArtifact',
-                                description: 'Create a new project artifact',
+                                name: 'artifacts.createArtifact',
+                                description: 'Create a new artifact',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
-                                        projectId: { type: 'string', description: 'Project ID' },
                                         title: { type: 'string', description: 'Artifact title' },
                                         uri: { type: 'string', description: 'File path or URI' },
                                         description: { type: 'string', description: 'Artifact description' }
                                     },
-                                    required: ['projectId', 'title']
+                                    required: ['title']
                                 }
                             },
                             {
-                                name: 'artifacts.updateProjectArtifact',
-                                description: 'Update an existing project artifact',
+                                name: 'artifacts.updateArtifact',
+                                description: 'Update an existing artifact',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
@@ -434,8 +406,8 @@ class StdioMCPServer {
                                 }
                             },
                             {
-                                name: 'artifacts.deleteProjectArtifact',
-                                description: 'Delete a project artifact',
+                                name: 'artifacts.deleteArtifact',
+                                description: 'Delete a artifact',
                                 inputSchema: {
                                     type: 'object',
                                     properties: {
@@ -637,7 +609,7 @@ class StdioMCPServer {
      */
     private async handleListTasks(args: any) {
         try {
-            const tasks = await this.repo.listTasks(args.projectId);
+            const tasks = await this.repo.listTasks();
             return {
                 content: [{
                     type: 'text',
@@ -656,13 +628,12 @@ class StdioMCPServer {
 
     /**
      * タスク作成処理 (ツール呼び出しから)
-     * @param args 引数 (projectId, title, description, parentId, assignee, estimate, goal)
+     * @param args 引数 (title, description, parentId, assignee, estimate, goal)
      * @returns ツールレスポンス（作成されたタスクのJSONを含む）
      */
     private async handleCreateTask(args: any) {
         try {
             const task = await this.repo.createTask(
-                args.projectId,
                 args.title,
                 args.description ?? '',
                 args.parentId ?? null,
@@ -741,40 +712,7 @@ class StdioMCPServer {
             };
         }
     }
-
-    /**
-     * プロジェクト削除処理
-     * 指定IDのプロジェクトを削除し、結果メッセージを返す
-     * なぜ必要か: クライアントからのプロジェクト削除要求をDB操作と接続するため
-     * @param args 削除引数
-     * @returns ツールレスポンス
-     */
-    private async handleDeleteProject(args: any) {
-        try {
-            const deleted = await this.repo.deleteProject(args.projectId);
-            if (!deleted) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Project not found: ${args.projectId}`
-                    }]
-                };
-            }
-            return {
-                content: [{
-                    type: 'text',
-                    text: `✅ Project deleted successfully!\n\nID: ${args.projectId}`
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to delete project: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
+    // project deletion removed: projects table/operations are no longer supported
 
 
     /**
@@ -810,9 +748,8 @@ class StdioMCPServer {
      */
     private async handleImpotTask(args: any) {
         try {
-            const projectId = args.projectId;
             const tasks = Array.isArray(args.tasks) ? args.tasks : [];
-            const created = await this.repo.importTasks(projectId, tasks);
+            const created = await this.repo.importTasks(tasks);
             return {
                 content: [{ type: 'text', text: JSON.stringify(created, null, 2) }]
             };
@@ -825,14 +762,14 @@ class StdioMCPServer {
 
     /**
      * 成果物一覧取得ハンドラ
-     * 指定プロジェクトの成果物をJSONとして返す
+     * 成果物一覧をJSONとして返す
      * なぜ必要か: ツリービュー表示用に成果物一覧を取得するため
-     * @param args 引数（projectId）
+     * @param args 引数（省略可能）
      * @returns ツールレスポンス
      */
-    private async handleListProjectArtifacts(args: any) {
+    private async handleListArtifacts(args: any) {
         try {
-            const artifacts = await this.repo.listProjectArtifacts(args.projectId);
+            const artifacts = await this.repo.listArtifacts();
             return {
                 content: [{ type: 'text', text: JSON.stringify(artifacts, null, 2) }]
             };
@@ -850,9 +787,9 @@ class StdioMCPServer {
      * @param args 引数（artifactId）
      * @returns ツールレスポンス
      */
-    private async handleGetProjectArtifact(args: any) {
+    private async handleGetArtifact(args: any) {
         try {
-            const artifact = await this.repo.getProjectArtifact(args.artifactId);
+            const artifact = await this.repo.getArtifact(args.artifactId);
             if (!artifact) {
                 return {
                     content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }]
@@ -872,13 +809,12 @@ class StdioMCPServer {
      * 成果物作成ハンドラ
      * 成果物を新規登録し、結果を返す
      * なぜ必要か: 成果物管理からの作成要求に応えるため
-     * @param args 引数（projectId, title, uri, description）
+     * @param args 引数（title, uri, description）
      * @returns ツールレスポンス
      */
-    private async handleCreateProjectArtifact(args: any) {
+    private async handleCreateArtifact(args: any) {
         try {
-            const artifact = await this.repo.createProjectArtifact(
-                args.projectId,
+            const artifact = await this.repo.createArtifact(
                 args.title,
                 args.uri ?? null,
                 args.description ?? null
@@ -900,9 +836,9 @@ class StdioMCPServer {
      * @param args 引数（artifactId, title, uri, description, ifVersion）
      * @returns ツールレスポンス
      */
-    private async handleUpdateProjectArtifact(args: any) {
+    private async handleUpdateArtifact(args: any) {
         try {
-            const artifact = await this.repo.updateProjectArtifact(args.artifactId, {
+            const artifact = await this.repo.updateArtifact(args.artifactId, {
                 title: args.title,
                 uri: args.uri ?? null,
                 description: args.description ?? null,
@@ -925,9 +861,9 @@ class StdioMCPServer {
      * @param args 引数（artifactId）
      * @returns ツールレスポンス
      */
-    private async handleDeleteProjectArtifact(args: any) {
+    private async handleDeleteArtifact(args: any) {
         try {
-            const deleted = await this.repo.deleteProjectArtifact(args.artifactId);
+            const deleted = await this.repo.deleteArtifact(args.artifactId);
             if (!deleted) {
                 return {
                     content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }]
@@ -958,8 +894,6 @@ class StdioMCPServer {
         // ツール名ごとに個別ハンドラへ分岐
         // 理由: 新規ツール追加時の拡張性・保守性向上のため
         switch (name) {
-            case 'wbs.getWorkspaceProject':
-                return this.handleGetWorkspaceProject();
             case 'wbs.createTask':
                 return this.handleCreateTask(args);
             case 'wbs.getTask':
@@ -974,32 +908,22 @@ class StdioMCPServer {
                 return this.handleMoveTask(args);
             case 'wbs.impotTask':
                 return this.handleImpotTask(args);
-            case 'artifacts.listProjectArtifacts':
-                return this.handleListProjectArtifacts(args);
-            case 'artifacts.getProjectArtifact':
-                return this.handleGetProjectArtifact(args);
-            case 'artifacts.createProjectArtifact':
-                return this.handleCreateProjectArtifact(args);
-            case 'artifacts.updateProjectArtifact':
-                return this.handleUpdateProjectArtifact(args);
-            case 'artifacts.deleteProjectArtifact':
-                return this.handleDeleteProjectArtifact(args);
+            case 'artifacts.listArtifacts':
+                return this.handleListArtifacts(args);
+            case 'artifacts.getArtifact':
+                return this.handleGetArtifact(args);
+            case 'artifacts.createArtifact':
+                return this.handleCreateArtifact(args);
+            case 'artifacts.updateArtifact':
+                return this.handleUpdateArtifact(args);
+            case 'artifacts.deleteArtifact':
+                return this.handleDeleteArtifact(args);
             default:
                 // 未知のツール名はエラー
                 throw new Error(`Unknown tool: ${name}`);
         }
     }
 
-    /**
-     * ワークスペース唯一のプロジェクト情報を返す
-     * @returns ツールレスポンス
-     */
-    private async handleGetWorkspaceProject() {
-        const project = await this.repo.getWorkspaceProject();
-        return {
-            content: [{ type: 'text', text: JSON.stringify(project) }]
-        };
-    }
 
     /**
      * レスポンス送信処理

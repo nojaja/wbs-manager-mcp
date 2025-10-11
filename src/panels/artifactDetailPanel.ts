@@ -1,7 +1,7 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import { MCPClient, ProjectArtifact } from '../mcpClient';
+import { MCPClient, Artifact } from '../mcpClient';
 
 /**
  * 成果物詳細パネルクラス
@@ -13,7 +13,7 @@ export class ArtifactDetailPanel {
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
     private _artifactId: string;
-    private _artifact: ProjectArtifact | null = null;
+    private _artifact: Artifact | null = null;
     private mcpClient: MCPClient;
 
     /**
@@ -102,7 +102,7 @@ export class ArtifactDetailPanel {
     private async loadArtifact() {
         try {
             // 理由: 成果物取得失敗時もエラー通知し、UIの不整合を防ぐ
-            this._artifact = await this.mcpClient.getProjectArtifact(this._artifactId);
+            this._artifact = await this.mcpClient.getArtifact(this._artifactId);
             if (this._artifact) {
                 this._panel.title = `Artifact: ${this._artifact.title}`;
                 this._panel.webview.html = this.getHtmlForWebview(this._artifact);
@@ -128,13 +128,13 @@ export class ArtifactDetailPanel {
                 description: data.description || null,
                 version: this._artifact?.version
             };
-            const result = await this.mcpClient.updateProjectArtifact(updates);
+            const result = await this.mcpClient.updateArtifact(updates);
 
             // 更新成功時
             if (result.success) {
                 vscode.window.showInformationMessage('Artifact updated successfully');
                 this.loadArtifact();
-                vscode.commands.executeCommand('projectArtifactTree.refresh');
+                vscode.commands.executeCommand('artifactTree.refresh');
                 // 楽観ロック競合時
             } else if (result.conflict) {
                 const choice = await vscode.window.showWarningMessage(
@@ -163,7 +163,7 @@ export class ArtifactDetailPanel {
      * @param artifact 成果物情報
      * @returns HTML文字列
      */
-    private getHtmlForWebview(artifact: ProjectArtifact): string {
+    private getHtmlForWebview(artifact: Artifact): string {
         const safeTitle = this.escapeHtml(artifact.title ?? '');
         const safeUri = this.escapeHtml(artifact.uri ?? '');
         const safeDescription = this.escapeHtml(artifact.description ?? '');

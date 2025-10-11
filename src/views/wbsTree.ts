@@ -11,7 +11,6 @@ import { MCPClient } from '../mcpClient';
  */
 interface Task {
     id: string; // タスクID
-    project_id: string; // 所属プロジェクトID
     parent_id?: string; // 親タスクID（サブタスクの場合）
     title: string; // タイトル
     description?: string; // 詳細説明
@@ -93,12 +92,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns Promise<TreeItem[]>
      */
     async getChildren(element?: TreeItem): Promise<TreeItem[]> {
-        // ルートレベル: プロジェクト階層を表示せず、1プロジェクト配下のタスクのみ表示
+        // ルートレベル: 全タスクを表示
         if (!element) {
-            // プロジェクトIDを取得（1ワークスペース1プロジェクト前提）
-            const project = await this.mcpClient.getWorkspaceProject();
-            if (!project) return [];
-            return this.getTasksForProject(project.id);
+            return this.getTasks();
         } else if (element.contextValue === 'task') {
             // タスク配下: サブタスク一覧を表示
             if (element.task && element.task.children && element.task.children.length > 0) {
@@ -128,15 +124,14 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     /**
      * タスク一覧取得処理
-     * 指定プロジェクトIDのタスク一覧を取得し、TreeItem配列で返す
-     * なぜ必要か: プロジェクト配下にタスクを表示するため
-     * @param projectId プロジェクトID
+     * 全タスクを取得し、TreeItem配列で返す
+     * なぜ必要か: ツリーにタスクを表示するため
      * @returns Promise<TreeItem[]>
      */
-    private async getTasksForProject(projectId: string): Promise<TreeItem[]> {
+    private async getTasks(): Promise<TreeItem[]> {
         try {
             // タスク一覧をAPIから取得
-            const tasks = await this.mcpClient.listTasks(projectId);
+            const tasks = await this.mcpClient.listTasks();
             // 各タスクをTreeItemに変換
             return tasks.map(task => new TreeItem(
                 this.getTaskLabel(task),
@@ -161,18 +156,18 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 作成結果（成功時はタスクIDを含む）
      */
     async createTask(target?: TreeItem): Promise<{ success: boolean; taskId?: string }> {
-        const { projectId, parentId } = this.resolveCreationContext(target);
-
-        if (!projectId) {
-            vscode.window.showWarningMessage('新しいタスクを追加するには、プロジェクトまたはタスクを選択してください。');
+        // When no target is provided, warn the user and do not create a task.
+        if (!target) {
+            vscode.window.showWarningMessage('作成先のプロジェクトまたはタスクを選択してください。');
             return { success: false };
         }
 
+        const { parentId } = this.resolveCreationContext(target);
+
         try {
             const response = await this.mcpClient.createTask({
-                projectId,
                 parentId: parentId ?? null,
-                title: 'New Task',
+                title: 'New Task'
             });
             if (!response.success) {
                 if (response.error) {
@@ -241,20 +236,20 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
     /**
      * タスク作成先の解決処理
-     * 選択ノードに基づきプロジェクトIDと親タスクIDを特定する
+     * 選択ノードに基づき親タスクIDを特定する
      * なぜ必要か: タスク作成時の分岐ロジックを整理し、複雑度を下げるため
      * @param target 選択中のツリーアイテム
-     * @returns プロジェクトIDと親タスクID
+     * @returns 親タスクID
      */
-    private resolveCreationContext(target?: TreeItem): { projectId?: string; parentId?: string } {
+    private resolveCreationContext(target?: TreeItem): { parentId?: string } {
         if (!target) {
             return {};
         }
         if (target.contextValue === 'project') {
-            return { projectId: target.itemId, parentId: undefined };
+            return { parentId: undefined };
         }
         if (target.contextValue === 'task' && target.task) {
-            return { projectId: target.task.project_id, parentId: target.task.id };
+            return { parentId: target.task.id };
         }
         return {};
     }
@@ -350,10 +345,6 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 判定結果
      */
     private evaluateProjectDrop(draggedTask: Task, target: TreeItem): DropDecision {
-        if (draggedTask.project_id !== target.itemId) {
-            return { kind: 'warning', message: '別プロジェクトへのタスク移動はサポートされていません。' };
-        }
-
         const currentParentId = draggedTask.parent_id ?? null;
         if (currentParentId === null) {
             return { kind: 'noop' };
@@ -369,9 +360,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 判定結果
      */
     private evaluateTaskDrop(draggedTask: Task, targetTask: Task): DropDecision {
-        if (draggedTask.project_id !== targetTask.project_id) {
-            return { kind: 'warning', message: '別プロジェクトへのタスク移動はサポートされていません。' };
-        }
+        // プロジェクト分離は行わないためチェックしない
 
         if (draggedTask.id === targetTask.id || draggedTask.parent_id === targetTask.id) {
             return { kind: 'noop' };

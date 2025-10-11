@@ -31,7 +31,7 @@
   "activationEvents": [
     "onCommand:mcpWbs.start",
     "onView:wbsTree",
-    "onView:projectArtifactTree"
+    "onView:artifactTree"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -67,21 +67,21 @@
         "title": "プロジェクト削除"
       },
       {
-        "command": "projectArtifactTree.refresh",
+        "command": "artifactTree.refresh",
         "title": "成果物を再読み込み",
         "icon": "$(refresh)"
       },
       {
-        "command": "projectArtifactTree.createArtifact",
+        "command": "artifactTree.createArtifact",
         "title": "成果物を追加",
         "icon": "$(add)"
       },
       {
-        "command": "projectArtifactTree.editArtifact",
+        "command": "artifactTree.editArtifact",
         "title": "成果物を編集"
       },
       {
-        "command": "projectArtifactTree.deleteArtifact",
+        "command": "artifactTree.deleteArtifact",
         "title": "成果物を削除"
       }
     ],
@@ -92,8 +92,8 @@
           "name": "WBS Projects"
         },
         {
-          "id": "projectArtifactTree",
-          "name": "Project Artifacts"
+          "id": "artifactTree",
+          "name": "Artifacts"
         }
       ]
     },
@@ -110,13 +110,13 @@
           "group": "navigation"
         },
         {
-          "command": "projectArtifactTree.refresh",
-          "when": "view == projectArtifactTree",
+          "command": "artifactTree.refresh",
+          "when": "view == artifactTree",
           "group": "navigation"
         },
         {
-          "command": "projectArtifactTree.createArtifact",
-          "when": "view == projectArtifactTree",
+          "command": "artifactTree.createArtifact",
+          "when": "view == artifactTree",
           "group": "navigation"
         }
       ],
@@ -137,18 +137,13 @@
           "group": "inline@2"
         },
         {
-          "command": "wbsTree.deleteProject",
-          "when": "view == wbsTree && viewItem == project",
+          "command": "artifactTree.editArtifact",
+          "when": "view == artifactTree && viewItem == artifact",
           "group": "inline"
         },
         {
-          "command": "projectArtifactTree.editArtifact",
-          "when": "view == projectArtifactTree && viewItem == projectArtifact",
-          "group": "inline"
-        },
-        {
-          "command": "projectArtifactTree.deleteArtifact",
-          "when": "view == projectArtifactTree && viewItem == projectArtifact",
+          "command": "artifactTree.deleteArtifact",
+          "when": "view == artifactTree && viewItem == artifact",
           "group": "inline@1"
         }
       ]
