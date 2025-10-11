@@ -15,5 +15,19 @@ module.exports = {
   },
   moduleNameMapper: {
     '^vscode$': '<rootDir>/__mocks__/vscode.ts'
-  }
+  },
+  coverageThreshold: {
+    global: {
+      branches: 50,
+      functions: 77,
+      lines: 71,
+      statements: 71,
+    },
+    './src/panels/taskDetailPanel.ts': {
+      branches: 45,
+      functions: 66,
+      lines: 83,
+      statements: 79,
+    },
+  },
 };

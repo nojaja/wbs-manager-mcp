@@ -152,7 +152,6 @@
   "scripts": {
     "vscode:prepublish": "npm run build",
     "build": "npm run test && tsc -p ./",
-    "watch": "tsc -watch -p ./",
     "test": "npm run lint && jest --config=jest.config.js --coverage",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
