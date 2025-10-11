@@ -63,10 +63,6 @@
         "title": "子タスク追加"
       },
       {
-        "command": "wbsTree.deleteProject",
-        "title": "プロジェクト削除"
-      },
-      {
         "command": "artifactTree.refresh",
         "title": "成果物を再読み込み",
         "icon": "$(refresh)"

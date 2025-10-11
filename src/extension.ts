@@ -102,7 +102,9 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     });
 
+
     const deleteArtifactCommand = vscode.commands.registerCommand('artifactTree.deleteArtifact', async (item?: ArtifactTreeItem) => {
+    outputChannel.appendLine(`artifactTree.deleteArtifact: ${item ? item.label : 'no item'}`);
         const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
             ? artifactTreeView.selection[0]
             : undefined);
@@ -114,9 +116,10 @@ export async function activate(context: vscode.ExtensionContext) {
     // コマンド登録: タスク詳細パネルを開く
 
     const openTaskCommand = vscode.commands.registerCommand('wbsTree.openTask', (item) => {
+        outputChannel.appendLine(`wbsTree.openTask: ${item ? item.label : 'no item'}`);
         // タスクノードのみ詳細パネルを開く
         // 理由: プロジェクトノードや他ノードで誤動作しないように分岐
-        if (item && item.contextValue === 'task') {
+        if (item) {
             TaskDetailPanel.createOrShow(context.extensionUri, item.itemId, mcpClient);
         }
     });

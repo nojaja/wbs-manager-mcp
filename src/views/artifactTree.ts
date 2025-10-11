@@ -227,6 +227,13 @@ export class ArtifactTreeItem extends vscode.TreeItem {
         this.contextValue = 'projectArtifact';
         this.id = artifact.id;
         this.iconPath = new vscode.ThemeIcon('file-code');
+        // クリック時の動作: 成果物の編集（詳細パネルを開く）
+        // なぜ必要か: アイテムクリックのみでは選択に留まり動作しないため、明示的にコマンドを割り当てる
+        this.command = {
+            command: 'artifactTree.editArtifact',
+            title: 'Open Artifact',
+            arguments: [this]
+        };
     }
 
     /**
