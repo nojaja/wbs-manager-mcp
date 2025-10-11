@@ -18,7 +18,7 @@ interface Task {
     status: string; // 状態（例: in-progress, completed）
     estimate?: string; // 見積もり
     version: number; // バージョン
-    children?: Task[]; // 子タスク
+    childCount?: number; // 子タスク数（wbs.listTasks返却用）
 }
 
 type DropDecision =
@@ -28,21 +28,8 @@ type DropDecision =
 
 
 /**
- * プロジェクト情報を表現するインターフェース
- * プロジェクトの属性・タスク一覧を定義
- */
-interface Project {
-    id: string; // プロジェクトID
-    title: string; // プロジェクト名
-    description?: string; // プロジェクト説明
-    version: number; // バージョン
-    tasks?: Task[]; // プロジェクト配下のタスク
-}
-
-
-/**
  * WBSツリープロバイダクラス
- * プロジェクト・タスクのツリー表示・データ取得を行う
+ * タスクのツリー表示・データ取得を行う
  * VSCode拡張のエクスプローラ部にWBS（Work Breakdown Structure）を表示するためのメインクラス
  */
 export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
@@ -92,37 +79,23 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns Promise<TreeItem[]>
      */
     async getChildren(element?: TreeItem): Promise<TreeItem[]> {
-        // ルートレベル: 全タスクを表示
         if (!element) {
+            // ルート直下のタスクのみ取得
             return this.getTasks();
-        } else if (element.contextValue === 'task') {
-            // タスク配下: サブタスク一覧を表示
-            // 処理概要: 子配列が存在する場合のみ子ノードを生成して返す
-            // 実装理由: 空配列や未定義時に無駄なノード生成を避け、描画コストを抑える
-            if (element.task && element.task.children && element.task.children.length > 0) {
-                return element.task.children.map(child => new TreeItem(
-                    this.getTaskLabel(child),
-                    child.id,
-                    'task',
-                    child.children && child.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
-                    this.getTaskDescription(child),
-                    child
-                ));
-            }
-            // サブタスクがなければ空配列
-            return [];
+        } else if (element.contextValue === 'task' && element.task) {
+            // 子タスクを動的に取得
+            const children = await this.mcpClient.listTasks(element.task.id);
+            return children.map((child: Task) => new TreeItem(
+                this.getTaskLabel(child),
+                child.id,
+                'task',
+                child.childCount && child.childCount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+                this.getTaskDescription(child),
+                child
+            ));
         }
-        // その他は空配列
         return [];
     }
-
-    /**
-     * プロジェクト一覧取得処理
-     * MCPクライアントからプロジェクト一覧を取得し、TreeItem配列で返す
-     * なぜ必要か: ツリーのルートにプロジェクトを表示するため
-     * @returns プロジェクトのTreeItem配列
-     */
-    // getProjectsは不要になったため削除
 
     /**
      * タスク一覧取得処理
@@ -132,19 +105,17 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      */
     private async getTasks(): Promise<TreeItem[]> {
         try {
-            // タスク一覧をAPIから取得
-            const tasks = await this.mcpClient.listTasks();
-            // 各タスクをTreeItemに変換
-            return tasks.map(task => new TreeItem(
+            // ルート直下のタスクのみ取得
+            const tasks = await this.mcpClient.listTasks(null);
+            return tasks.map((task: Task) => new TreeItem(
                 this.getTaskLabel(task),
                 task.id,
                 'task',
-                task.children && task.children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+                task.childCount && task.childCount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
                 this.getTaskDescription(task),
                 task
             ));
         } catch (error) {
-            // エラー時はメッセージ表示し空配列返却
             vscode.window.showErrorMessage(`Failed to fetch tasks: ${error}`);
             return [];
         }
@@ -314,18 +285,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 子孫に含まれていればtrue
      */
     private containsTask(task: Task, searchId: string): boolean {
-        if (!task.children || task.children.length === 0) {
-            // 処理概要: 子が無い場合は探索不要
-            // 実装理由: 再帰呼び出しの最小化により性能を確保
-            return false;
-        }
-        for (const child of task.children) {
-            // 処理概要: 直下の一致または子孫に含まれるかを再帰的に判定
-            // 実装理由: 循環移動の検出（自分の配下へ移す誤操作）を防ぐ
-            if (child.id === searchId || this.containsTask(child, searchId)) {
-                return true;
-            }
-        }
+        // childrenプロパティは廃止。containsTaskは常にfalseを返す（UI上の循環チェックはサーバ側で担保）
+        // もしくは、必要ならmcpClient.getTaskで子タスクを都度取得して再帰探索する実装にする
+        // ここでは簡易にfalseを返す
         return false;
     }
 

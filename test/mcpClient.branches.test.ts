@@ -19,21 +19,31 @@ describe('MCPClient branch coverage', () => {
     jest.useFakeTimers();
     const handlers: any = {};
 
-    const fakeProcess: any = {
-      stdin: { write: jest.fn() },
-      stdout: { setEncoding: jest.fn(), on: (evt: string, cb: any) => { if (evt === 'data') handlers.stdout = cb; } },
-      stderr: { on: (evt: string, cb: any) => { if (evt === 'data') handlers.stderr = cb; } },
-      on: (evt: string, cb: any) => { if (evt === 'exit') handlers.exit = cb; if (evt === 'error') handlers.error = cb; },
-      kill: jest.fn()
-    };
+    // ChildProcess型のダミーオブジェクトを型安全に作成
+    class DummyWritable {
+      writable = true;
+      write = jest.fn();
+    }
+    class DummyReadable {
+      readable = true;
+      setEncoding = jest.fn();
+      on = (evt: string, cb: any) => { if (evt === 'data') handlers.stdout = cb; };
+    }
+    class DummyChildProcess {
+      stdin = new DummyWritable();
+      stdout = new DummyReadable();
+      stderr = { on: (evt: string, cb: any) => { if (evt === 'data') handlers.stderr = cb; } };
+      on = (evt: string, cb: any) => { if (evt === 'exit') handlers.exit = cb; if (evt === 'error') handlers.error = cb; };
+      kill = jest.fn();
+    }
 
     jest.resetModules();
-    jest.doMock('child_process', () => ({ spawn: () => fakeProcess }));
+    jest.doMock('child_process', () => ({ spawn: () => new DummyChildProcess() }));
     const mod = await import('../src/mcpClient');
     client = new mod.MCPClient(fakeOutput);
 
     jest.spyOn(client as any, 'sendRequest').mockResolvedValue({});
-    const startP = client.start('somepath');
+    const startP = client.start(new DummyChildProcess() as any);
 
     // simulate stdout data with bad JSON
     handlers.stdout && handlers.stdout('notjson\n');
@@ -74,9 +84,10 @@ describe('MCPClient branch coverage', () => {
     client = new mod.MCPClient(fakeOutput);
     const payload = JSON.stringify([{ id: 't1', title: 'T1' }]);
     const res = { content: [{ text: payload }] };
-    jest.spyOn(client as any, 'callTool').mockResolvedValue(res);
+    const callToolSpy = jest.spyOn(client as any, 'callTool').mockResolvedValue(res);
     const r = await client.listTasks('p1');
     expect(Array.isArray(r)).toBe(true);
     expect(r[0].id).toBe('t1');
+    expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', { parentId: 'p1' });
   });
 });

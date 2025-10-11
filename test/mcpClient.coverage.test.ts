@@ -20,7 +20,23 @@ describe('MCPClient additional coverage tests', () => {
       client['serverProcess'] = { mock: 'process' };
 
       const spawnSpy = jest.spyOn(require('child_process'), 'spawn');
-      await client.start('test-server.js');
+      // ChildProcess型のダミーオブジェクトを型安全に作成
+      class DummyWritable {
+        writable = true;
+        write = jest.fn();
+      }
+      class DummyReadable {
+        readable = true;
+        setEncoding = jest.fn();
+        on = jest.fn();
+      }
+      class DummyChildProcess {
+        stdin = new DummyWritable();
+        stdout = new DummyReadable();
+        stderr = new DummyReadable();
+        on = jest.fn();
+      }
+      await client.start(new DummyChildProcess() as any);
 
       expect(spawnSpy).not.toHaveBeenCalled();
     });
@@ -47,6 +63,7 @@ describe('MCPClient additional coverage tests', () => {
 
       const result = await client.listTasks();
       expect(result).toEqual([]);
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', {});
 
       callToolSpy.mockRestore();
     });
@@ -60,6 +77,7 @@ describe('MCPClient additional coverage tests', () => {
       expect(fakeOutput.appendLine).toHaveBeenCalledWith(
         expect.stringContaining('[MCP Client] Failed to parse task list:')
       );
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', {});
 
       callToolSpy.mockRestore();
     });
@@ -73,6 +91,20 @@ describe('MCPClient additional coverage tests', () => {
       expect(fakeOutput.appendLine).toHaveBeenCalledWith(
         '[MCP Client] Failed to list tasks: Error: Network error'
       );
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', {});
+
+      callToolSpy.mockRestore();
+    });
+
+    test('listTasks passes parentId parameter correctly', async () => {
+      const callToolSpy = jest.spyOn(client, 'callTool')
+        .mockResolvedValue({ content: [{ text: '[]' }] });
+
+      await client.listTasks('parent123');
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', { parentId: 'parent123' });
+
+      await client.listTasks(null);
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', { parentId: null });
 
       callToolSpy.mockRestore();
     });

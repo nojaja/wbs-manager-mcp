@@ -74,12 +74,19 @@ class StdioMCPServer {
         });
 
         process.stdin.on('end', () => {
+            console.error('[MCP Server] Stdin ended, exiting...');
             process.exit(0);
         });
 
         // Handle process termination
-        process.on('SIGINT', () => process.exit(0));
-        process.on('SIGTERM', () => process.exit(0));
+        process.on('SIGINT', () => {
+            console.error('[MCP Server] Received SIGINT, exiting...');
+            process.exit(0);    
+        });
+        process.on('SIGTERM', () => {
+            console.error('[MCP Server] Received SIGTERM, exiting...');
+            process.exit(0)
+        });
     }
 
     /**
@@ -97,7 +104,7 @@ class StdioMCPServer {
             if ('id' in message) {
                 // Request - needs response
                 const response = await this.handleRequest(message as JsonRpcRequest);
-                this.sendResponse(response);
+                this.sendResponse(message.method, response);
             } else {
                 // Notification - no response needed
                 await this.handleNotification(message as JsonRpcNotification);
@@ -107,7 +114,7 @@ class StdioMCPServer {
             // idプロパティがある場合のみエラー応答を返す
             // 理由: 通知には応答不要、リクエストのみエラー返却
             if ('id' in message) {
-                this.sendResponse({
+                this.sendResponse(message.method,{
                     jsonrpc: '2.0',
                     id: message.id,
                     error: {
@@ -164,7 +171,17 @@ class StdioMCPServer {
                                         description: { type: 'string', description: 'Task description' },
                                         assignee: { type: 'string', description: 'Assignee name' },
                                         estimate: { type: 'string', description: 'Time estimate' },
-                                        goal: { type: 'string', description: 'Task goal' },
+                                        completionConditions: {
+                                            type: 'array',
+                                            description: 'Conditions that define task completion',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    description: { type: 'string' }
+                                                },
+                                                required: ['description']
+                                            }
+                                        },
                                         parentId: { type: 'string', description: 'Parent task ID' },
                                         deliverables: {
                                             type: 'array',
@@ -188,17 +205,6 @@ class StdioMCPServer {
                                                     crudOperations: { type: 'string', description: 'Access pattern' }
                                                 },
                                                 required: ['artifactId']
-                                            }
-                                        },
-                                        completionConditions: {
-                                            type: 'array',
-                                            description: 'Conditions that define task completion',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    description: { type: 'string' }
-                                                },
-                                                required: ['description']
                                             }
                                         }
                                     },
@@ -228,7 +234,16 @@ class StdioMCPServer {
                                         assignee: { type: 'string', description: 'Assignee name' },
                                         status: { type: 'string', description: 'Task status' },
                                         estimate: { type: 'string', description: 'Time estimate' },
-                                        goal: { type: 'string', description: 'Task goal' },
+                                        completionConditions: {
+                                            type: 'array',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    description: { type: 'string' }
+                                                },
+                                                required: ['description']
+                                            }
+                                        },
                                         deliverables: {
                                             type: 'array',
                                             items: {
@@ -251,16 +266,6 @@ class StdioMCPServer {
                                                 required: ['artifactId']
                                             }
                                         },
-                                        completionConditions: {
-                                            type: 'array',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    description: { type: 'string' }
-                                                },
-                                                required: ['description']
-                                            }
-                                        },
                                         ifVersion: { type: 'number', description: 'Expected version for optimistic locking' }
                                     },
                                     required: ['taskId']
@@ -268,10 +273,12 @@ class StdioMCPServer {
                             },
                             {
                                 name: 'wbs.listTasks',
-                                description: 'List tasks',
+                                description: 'List tasks — if a parentId is specified, show its subtasks; otherwise, show top-level tasks.',
                                 inputSchema: {
                                     type: 'object',
-                                    properties: {}
+                                    properties: {
+                                        parentId: { type: 'string', description: 'Parent task ID' }
+                                    }
                                 }
                             },
                             {
@@ -315,7 +322,6 @@ class StdioMCPServer {
                                                     parentId: { type: 'string', description: 'Parent task ID (omit for root task)' },
                                                     assignee: { type: 'string', description: 'Assignee user name' },
                                                     estimate: { type: 'string', description: 'Estimated effort (text)' },
-                                                    goal: { type: 'string', description: 'Goal or intent for the task' },
                                                     deliverables: {
                                                         type: 'array',
                                                         description: 'Deliverable artifact links',
@@ -544,7 +550,6 @@ class StdioMCPServer {
             assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
             status: args.status !== undefined ? args.status : currentTask.status,
             estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,
-            goal: args.goal !== undefined ? args.goal : currentTask.goal,
             deliverables: Array.isArray(args.deliverables)
                 ? args.deliverables.map((item: any) => ({
                     artifactId: item?.artifactId,
@@ -607,14 +612,15 @@ class StdioMCPServer {
 
     /**
      * タスク一覧取得処理
-     * 指定プロジェクトIDのタスク一覧をDBから取得し、ツールレスポンスで返す
+     * 指定parentIdのタスク一覧をDBから取得し、ツールレスポンスで返す
      * なぜ必要か: クライアントからのタスク一覧表示要求に応えるため
-     * @param args タスクリスト引数
+     * @param args タスクリスト引数 (parentId: 親タスクID、省略時はトップレベル)
      * @returns ツールレスポンス
      */
     private async handleListTasks(args: any) {
         try {
-            const tasks = await this.repo.listTasks();
+            const tasks = await this.repo.listTasks(args.parentId);
+            // childCount（子要素数）が必ず含まれるようになった
             return {
                 content: [{
                     type: 'text',
@@ -622,6 +628,7 @@ class StdioMCPServer {
                 }]
             };
         } catch (error) {
+            console.error(`[MCP Server] handleListTasks error: ${error instanceof Error ? error.message : String(error)}`);
             return {
                 content: [{
                     type: 'text',
@@ -633,7 +640,7 @@ class StdioMCPServer {
 
     /**
      * タスク作成処理 (ツール呼び出しから)
-     * @param args 引数 (title, description, parentId, assignee, estimate, goal)
+    * @param args 引数 (title, description, parentId, assignee, estimate)
      * @returns ツールレスポンス（作成されたタスクのJSONを含む）
      */
     private async handleCreateTask(args: any) {
@@ -644,7 +651,6 @@ class StdioMCPServer {
                 args.parentId ?? null,
                 args.assignee ?? null,
                 args.estimate ?? null,
-                args.goal ?? null,
                 {
                     deliverables: Array.isArray(args.deliverables) ? args.deliverables.map((item: any) => ({
                         artifactId: item?.artifactId,
@@ -926,6 +932,7 @@ class StdioMCPServer {
             default:
                 // 未知のツール名はエラー
                 // 理由: ツール一覧に無い呼び出しを検出し、デバッグ容易性を高める
+                console.error(`[MCP Server] Unknown tool: ${name}`);
                 throw new Error(`Unknown tool: ${name}`);
         }
     }
@@ -935,9 +942,10 @@ class StdioMCPServer {
      * レスポンス送信処理
      * JSON-RPCレスポンスを標準出力へ送信する
      * なぜ必要か: クライアントへAPI応答を返し、UIを更新させるため
+     * @param method メソッド名
      * @param response レスポンスオブジェクト
      */
-    private sendResponse(response: JsonRpcResponse) {
+    private sendResponse(method: string, response: JsonRpcResponse) {
         const responseStr = JSON.stringify(response);
         console.error(`[MCP Server] Sending: ${responseStr}`);
         process.stdout.write(responseStr + '\n');
@@ -946,7 +954,8 @@ class StdioMCPServer {
 
 // Start the MCP server once the database is ready
 (async () => {
-    console.error('[MCP Server] Starting stdio MCP server...');
+    //console.errorでPIDを返す
+    console.error('[MCP Server] Starting stdio MCP server... PID:', process.pid);
     // 理由: DB初期化・サーバ起動失敗時もエラー通知し、異常終了させる
     try {
         await initializeDatabase();

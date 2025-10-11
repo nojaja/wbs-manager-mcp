@@ -47,7 +47,6 @@ export interface Task {
     parent_id?: string;
     title: string;
     description?: string;
-    goal?: string;
     assignee?: string;
     status: string;
     estimate?: string;
@@ -66,6 +65,12 @@ let dbPromise: Promise<Database> | null = null;
  * データベースパス解決処理
  * データディレクトリの絶対パスを生成し返す
  * なぜ必要か: ワークスペースごとに独立したDBファイルを安全に配置するため
+ * 
+ * WBS_MCP_DATA_DIRが設定されていれば、それを基準ディレクトリとして使用
+ * - 絶対パスの場合：そのまま使用
+ * - 相対パスの場合：プロセスの作業ディレクトリ（通常はワークスペースルート）からの相対パスとして解釈
+ * - 未設定の場合：プロセスの作業ディレクトリを使用
+ * 
  * @returns データベースファイルパス
  */
 function resolveDatabasePath(): string {
@@ -73,12 +78,14 @@ function resolveDatabasePath(): string {
         ? process.env.WBS_MCP_DATA_DIR
         : process.cwd();
 
+    // path.resolve()により、相対パスの場合は現在の作業ディレクトリからの相対パスとして解釈される
     const resolvedBase = path.resolve(baseDir);
     return path.join(resolvedBase, 'data', 'wbs.db');
 }
 
 const DB_PATH = resolveDatabasePath();
 const DB_DIR = path.dirname(DB_PATH);
+console.error(`[WBSRepository] DB_PATH resolved to: ${DB_PATH}`);
 
 /**
  * データベース取得処理
@@ -129,7 +136,6 @@ export async function initializeDatabase(): Promise<void> {
             parent_id TEXT,
             title TEXT NOT NULL,
             description TEXT,
-            goal TEXT,
             assignee TEXT,
             status TEXT DEFAULT 'pending',
             estimate TEXT,
@@ -237,7 +243,6 @@ export class WBSRepository {
      * @param parentId 親タスクID
      * @param assignee 担当者
      * @param estimate 見積もり
-     * @param goal ゴール
      * @param options 付随情報（成果物・前提条件・完了条件）
      * @param options.deliverables 成果物割当一覧
      * @param options.prerequisites 前提条件の成果物割当一覧
@@ -250,7 +255,6 @@ export class WBSRepository {
         parentId: string | null = null,
         assignee: string | null = null,
         estimate: string | null = null,
-        goal: string | null = null,
         options?: {
             deliverables?: TaskArtifactInput[];
             prerequisites?: TaskArtifactInput[];
@@ -267,14 +271,13 @@ export class WBSRepository {
             // INSERT 文から project_id を削除して登録する
             await db.run(
                 `INSERT INTO tasks (
-                    id, parent_id, title, description, goal, assignee,
+                    id, parent_id, title, description, assignee,
                     status, estimate, created_at, updated_at, version
-                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 1)`,
+                ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, 1)`,
                 id,
                 parentId || null,
                 title,
                 description || null,
-                goal || null,
                 assignee || null,
                 estimate || null,
                 now,
@@ -314,7 +317,6 @@ export class WBSRepository {
                 t.parentId ?? null,
                 t.assignee ?? null,
                 t.estimate ?? null,
-                t.goal ?? null,
                 {
                     deliverables: Array.isArray(t.deliverables) ? t.deliverables.map((d: any) => ({
                         artifactId: d.artifactId,
@@ -476,53 +478,50 @@ export class WBSRepository {
     }
 
     /**
-     * タスク一覧取得処理
-     * タスクをDBから取得し、階層構造で返す
-     * なぜ必要か: プロジェクト配下のタスクツリーをUIに表示するため
-     * @returns Promise<Task[]>
+    * タスク一覧取得処理
+    * 指定parentIdの直下のタスクを取得する。parentIdがnullまたはundefinedの場合はトップレベルタスクを返す
+    * なぜ必要か: 階層構造に応じたタスク一覧をUIに表示するため
+    * @param parentId 親タスクID（null/undefined=トップレベル）
+    * @returns Promise<Task[]>
      */
-    async listTasks(): Promise<Task[]> {
+    async listTasks(parentId?: string | null): Promise<Task[]> {
         const db = await this.db();
-        const rows = await db.all<Task[]>(
-            `SELECT id, parent_id, title, description, goal, assignee, status,
-            estimate, created_at, updated_at, version
-         FROM tasks
-         ORDER BY created_at ASC`
-        );
 
-        const taskMap = new Map<string, Task>();
-        const roots: Task[] = [];
+        // parentIdがundefinedまたはnullの場合はトップレベルタスク
+        const isTopLevel = parentId === undefined || parentId === null;
+        const whereClause = isTopLevel
+            ? 'WHERE parent_id IS NULL'
+            : 'WHERE parent_id = ?';
+        const params = isTopLevel ? [] : [parentId];
+
+        // 各タスクの子要素数も取得
+        const rows = await db.all<any[]>(
+            `SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status,
+                t.estimate, t.created_at, t.updated_at, t.version,
+                (
+                    SELECT COUNT(1) FROM tasks c WHERE c.parent_id = t.id
+                ) AS childCount
+             FROM tasks t
+             ${whereClause}
+             ORDER BY t.created_at ASC`,
+            ...params
+        );
 
         const taskIds = rows.map((row) => row.id);
         const artifacts = await this.collectTaskArtifacts(db, taskIds);
         const completionConditions = await this.collectCompletionConditions(db, taskIds);
 
-        rows.forEach((row) => {
-            // 処理概要: 取得済みの成果物/完了条件をマージしてノード化
-            // 実装理由: 一度の問い合わせ結果を元に木構造を構築するため
+        return rows.map((row) => {
             const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
-            taskMap.set(row.id, {
+            return {
                 ...row,
+                childCount: typeof row.childCount === 'number' ? row.childCount : Number(row.childCount ?? 0),
                 children: [],
                 deliverables: artifactInfo.deliverables,
                 prerequisites: artifactInfo.prerequisites,
                 completionConditions: completionConditions.get(row.id) ?? []
-            });
+            };
         });
-
-        rows.forEach((row) => {
-            const node = taskMap.get(row.id)!;
-            // 親タスクが存在すれば親のchildrenに追加、なければルートに追加
-            // 理由: タスクツリー構造を正しく再現するため
-            if (row.parent_id && taskMap.has(row.parent_id)) {
-                const parent = taskMap.get(row.parent_id)!;
-                parent.children!.push(node);
-            } else {
-                roots.push(node);
-            }
-        });
-
-        return roots;
     }
 
     /**
@@ -535,7 +534,7 @@ export class WBSRepository {
     async getTask(taskId: string): Promise<Task | null> {
         const db = await this.db();
         const task = await db.get<Task>(
-            `SELECT id, parent_id, title, description, goal, assignee, status,
+            `SELECT id, parent_id, title, description, assignee, status,
                     estimate, created_at, updated_at, version
              FROM tasks
              WHERE id = ?`,
@@ -545,12 +544,12 @@ export class WBSRepository {
             return null;
         }
 
-        const rows = await db.all<Task[]>(
-            `SELECT id, parent_id, title, description, goal, assignee, status,
-                    estimate, created_at, updated_at, version
-             FROM tasks
-             ORDER BY created_at ASC`
-        );
+    const rows = await db.all<Task[]>(
+        `SELECT id, parent_id, title, description, assignee, status,
+            estimate, created_at, updated_at, version
+         FROM tasks
+         ORDER BY created_at ASC`
+    );
 
         const taskMap = new Map<string, Task>();
 
@@ -627,7 +626,6 @@ export class WBSRepository {
                 `UPDATE tasks
                  SET title = ?,
                      description = ?,
-                     goal = ?,
                      assignee = ?,
                      status = ?,
                      estimate = ?,
@@ -636,7 +634,6 @@ export class WBSRepository {
                  WHERE id = ?`,
                 updates.title ?? current.title,
                 updates.description ?? current.description ?? null,
-                updates.goal ?? current.goal ?? null,
                 updates.assignee ?? current.assignee ?? null,
                 updates.status ?? current.status,
                 updates.estimate ?? current.estimate ?? null,
@@ -789,7 +786,7 @@ export class WBSRepository {
      */
     private async fetchTaskRow(db: Database, taskId: string): Promise<Task | null> {
         const row = await db.get<Task>(
-            `SELECT id, parent_id, title, description, goal, assignee, status,
+            `SELECT id, parent_id, title, description, assignee, status,
                     estimate, created_at, updated_at, version
              FROM tasks
              WHERE id = ?`,

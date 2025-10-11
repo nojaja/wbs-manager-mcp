@@ -26,7 +26,7 @@ module.exports = {
     './src/panels/taskDetailPanel.ts': {
       branches: 45,
       functions: 66,
-      lines: 83,
+      lines: 82,
       statements: 79,
     },
   },

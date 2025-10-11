@@ -191,6 +191,10 @@ export function deactivate() {
  * MCP設定ファイル作成処理
  * .vscode/mcp.jsonを生成し、サーバ起動設定を保存する
  * なぜ必要か: サーバ起動・クライアント接続の自動化、再起動時の設定復元のため
+ * 
+ * WBS_MCP_DATA_DIRは相対パス"."で設定し、ワークスペースルートを基準とする
+ * 理由: 環境に依存しない相対パス指定により、異なる環境でも動作するようにするため
+ * 
  * @param workspaceRoot ワークスペースルートパス
  * @param serverPath サーバ実行ファイルのパス
  */
@@ -215,7 +219,7 @@ function createMcpConfig(workspaceRoot: string, serverPath: string): void {
                 ],
                 "type": "stdio",
                 "env": {
-                    "WBS_MCP_DATA_DIR": workspaceRoot
+                    "WBS_MCP_DATA_DIR": "${workspaceFolder}"
                 }
             }
         }
@@ -249,7 +253,6 @@ function setupServerProcessHandlers(serverProcess: child_process.ChildProcess): 
         const error = data.toString().trim();
         outputChannel.appendLine(`[Server Error] ${error}`);
         outputChannel.show();
-        console.error('Server Error:', error);
     });
 
     // サーバプロセス終了時の処理
@@ -299,10 +302,11 @@ function validateServerPath(serverPath: string): boolean {
  */
 async function startMcpClient(serverPath: string, serverEnv: any): Promise<void> {
     outputChannel.appendLine('Starting MCP client connection...');
-    await mcpClient.start(serverPath, {
-        cwd: path.dirname(serverPath),
-        env: serverEnv
-    });
+    // 既存のサーバプロセスを渡す形に修正（serverProcessはグローバル変数）
+    if (!serverProcess) {
+        throw new Error('Server process is not running');
+    }
+    await mcpClient.start(serverProcess);
     outputChannel.appendLine('MCP client connected successfully');
 }
 
@@ -319,9 +323,10 @@ function spawnServerProcess(serverPath: string, workspaceRoot: string) {
     outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
 
     // サーバ用環境変数を設定
+    // WBS_MCP_DATA_DIRは相対パス"."で設定（サーバはcwd: workspaceRootで起動されるため）
     const serverEnv = {
         ...process.env,
-        WBS_MCP_DATA_DIR: workspaceRoot
+        WBS_MCP_DATA_DIR: "."
     };
 
     // サーバプロセスをspawnで起動
@@ -385,13 +390,11 @@ async function startLocalServer(context: vscode.ExtensionContext) {
         const serverEnv = spawnServerProcess(serverPath, workspaceRoot);
         // サーバプロセスのイベントハンドラ設定
         setupServerProcessHandlers(serverProcess!);
-        // MCPクライアント起動・接続
+        // MCPクライアント起動・接続（サーバプロセスを直接渡す）
         await startMcpClient(serverPath, serverEnv);
         // MCP設定ファイル作成
         handleMcpConfigCreation(workspaceFolders, workspaceRoot, serverPath);
-
     } catch (error) {
-        // 理由: サーバ起動・接続・設定作成のいずれかで例外発生時に詳細ログ・通知し、リソースをクリーンアップするため
         const errorMessage = error instanceof Error ? error.message : String(error);
         outputChannel.appendLine(`Failed to start server: ${errorMessage}`);
         vscode.window.showErrorMessage(`Failed to start MCP server: ${errorMessage}`);

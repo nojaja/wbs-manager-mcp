@@ -52,11 +52,10 @@ describe('db-simple', () => {
     test('should create and retrieve a task', async () => {
       const title = 'Test Task';
       const description = 'Test Description';
-      const goal = 'Test Goal';
       const assignee = 'Test Assignee';
       const estimate = '2 hours';
 
-      const createdTask = await repository.createTask(title, description, null, assignee, estimate, goal);
+  const createdTask = await repository.createTask(title, description, null, assignee, estimate);
       expect(createdTask).toBeDefined();
       expect(createdTask.title).toBe(title);
       expect(createdTask.description).toBe(description);
@@ -184,15 +183,13 @@ describe('db-simple', () => {
         'Detailed description',
         null,
         'John Doe',
-        '4 hours',
-        'Complete the feature'
+        '4 hours'
       );
 
       expect(task.title).toBe('Complex Task');
       expect(task.description).toBe('Detailed description');
       expect(task.assignee).toBe('John Doe');
       expect(task.estimate).toBe('4 hours');
-      expect(task.goal).toBe('Complete the feature');
       expect(task.status).toBe('pending');
     });
 
@@ -255,6 +252,80 @@ describe('db-simple', () => {
       // initializeDatabase is called in beforeEach, this test ensures it works
       const tasks = await repository.listTasks();
       expect(Array.isArray(tasks)).toBe(true);
+    });
+  });
+
+  describe('listTasks with parentId parameter', () => {
+    test('should return top-level tasks when parentId is null', async () => {
+      const parentTask = await repository.createTask('Parent Task', 'Parent Description');
+      const childTask = await repository.createTask('Child Task', 'Child Description', parentTask.id);
+
+      const topLevelTasks = await repository.listTasks(null);
+      
+      expect(Array.isArray(topLevelTasks)).toBe(true);
+      expect(topLevelTasks.some(task => task.id === parentTask.id)).toBe(true);
+      expect(topLevelTasks.some(task => task.id === childTask.id)).toBe(false);
+    });
+
+    test('should return child tasks when parentId is specified', async () => {
+      const parentTask = await repository.createTask('Parent Task', 'Parent Description');
+      const childTask1 = await repository.createTask('Child Task 1', 'Child Description 1', parentTask.id);
+      const childTask2 = await repository.createTask('Child Task 2', 'Child Description 2', parentTask.id);
+
+      const childTasks = await repository.listTasks(parentTask.id);
+      
+      expect(Array.isArray(childTasks)).toBe(true);
+      expect(childTasks.length).toBe(2);
+      expect(childTasks.some(task => task.id === childTask1.id)).toBe(true);
+      expect(childTasks.some(task => task.id === childTask2.id)).toBe(true);
+    });
+
+    test('should return empty array when no child tasks exist', async () => {
+      const parentTask = await repository.createTask('Parent Task', 'Parent Description');
+
+      const childTasks = await repository.listTasks(parentTask.id);
+      
+      expect(Array.isArray(childTasks)).toBe(true);
+      expect(childTasks.length).toBe(0);
+    });
+
+    test('should return hierarchical structure when parentId is undefined', async () => {
+  // 仕様変更: parentIdがundefinedの場合はトップレベルのみ返す
+  const parentTask = await repository.createTask('Parent Task', 'Parent Description');
+  const childTask = await repository.createTask('Child Task', 'Child Description', parentTask.id);
+
+  const topLevelTasks = await repository.listTasks(undefined);
+
+  expect(Array.isArray(topLevelTasks)).toBe(true);
+  // トップレベルに親タスクのみが含まれる
+  expect(topLevelTasks.some(task => task.id === parentTask.id)).toBe(true);
+  // 子タスクはトップレベルには含まれない
+  expect(topLevelTasks.some(task => task.id === childTask.id)).toBe(false);
+    });
+  });
+
+  describe('Relative path support', () => {
+    test('should resolve relative path correctly', () => {
+      const originalEnv = process.env.WBS_MCP_DATA_DIR;
+      const originalCwd = process.cwd();
+      
+      try {
+        // 相対パス "." を設定
+        process.env.WBS_MCP_DATA_DIR = '.';
+        
+        // db-simpleモジュールを再ロードして新しい環境変数を反映
+        delete require.cache[require.resolve('../src/server/db-simple')];
+        const { WBSRepository: TestRepository } = require('../src/server/db-simple');
+        
+        // 相対パスが正しく現在の作業ディレクトリを基準に解決されることを確認
+        // 実際のパス解決はresolveDatabasePath内で行われるため、
+        // ここではエラーなくRepositoryが作成できることを確認
+        expect(() => new TestRepository()).not.toThrow();
+        
+      } finally {
+        // 環境変数を元に戻す
+        process.env.WBS_MCP_DATA_DIR = originalEnv;
+      }
     });
   });
 });

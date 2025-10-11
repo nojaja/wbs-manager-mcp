@@ -223,7 +223,7 @@ Start a new work session for project X with user @john, then add @mary and @alic
   "parent_id": "uuid-v4 or null",
   "title": "Task Title",
   "description": "Description",
-  "goal": "Task goal",
+  
   "assignee": "username",
   "status": "pending|in-progress|completed|blocked",
   "estimate": "3d",

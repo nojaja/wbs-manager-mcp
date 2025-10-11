@@ -89,8 +89,7 @@ describe('MCPClient', () => {
       description: '',
       parentId: null,
       assignee: null,
-      estimate: null,
-      goal: null
+      estimate: null
     });
     spy.mockRestore();
   });
@@ -105,8 +104,7 @@ describe('MCPClient', () => {
       description: '',
       parentId: 't1',
       assignee: null,
-      estimate: null,
-      goal: null
+      estimate: null
     });
     spy.mockRestore();
   });

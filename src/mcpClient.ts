@@ -92,81 +92,54 @@ export class MCPClient {
      * @param options.cwd
      * @param options.env
      */
-    async start(serverPath: string, options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<void> {
-        // サーバプロセスが既に起動済みなら何もしない
-        // 理由: 多重起動による競合・リソース浪費を防ぐため
+    /**
+     * サーバプロセス接続処理
+     * 既存のサーバプロセスに接続し、初期化・通信を行う
+     * @param serverProcess 既に起動済みのサーバプロセス
+     */
+    async start(serverProcess: child_process.ChildProcess): Promise<void> {
         if (this.serverProcess) {
             return;
         }
-
-        return new Promise((resolve, reject) => {
-            // サーバプロセスをspawnで起動
-            this.serverProcess = child_process.spawn(process.execPath, [serverPath], {
-                stdio: ['pipe', 'pipe', 'pipe'],
-                cwd: options?.cwd,
-                env: options?.env
-            });
-
-            let buffer = '';
-
-            // サーバ標準出力の受信・パース
-            this.serverProcess.stdout?.setEncoding('utf8');
-            this.serverProcess.stdout?.on('data', (chunk) => {
-                buffer += chunk;
-                let lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                // 1行ずつJSON-RPCレスポンスとして処理
-                // 処理概要: 受信済みの行を1件ずつJSONとしてパースし、対応する保留中リクエストへ応答する
-                // 実装理由: JSON-RPCは1メッセージ=1行で送られるため、改行単位での処理が堅牢（部分受信や結合を考慮）
-                for (const line of lines) {
-                    // 空行はスキップ
-                    // 理由: 心ならずも出力された空行でパース失敗を起こさないため
-                    if (line.trim()) {
-                        // 理由: サーバからのレスポンスを安全にパースし、失敗時はログ出力
-                        try {
-                            const response = JSON.parse(line.trim()) as JsonRpcResponse;
-                            this.handleResponse(response);
-                        } catch (error) {
-                            this.outputChannel.appendLine(`[MCP Client] Failed to parse response: ${error}`);
-                        }
+        this.serverProcess = serverProcess;
+        let buffer = '';
+        this.serverProcess.stdout?.setEncoding('utf8');
+        this.serverProcess.stdout?.on('data', (chunk) => {
+            buffer += chunk;
+            let lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (line.trim()) {
+                    try {
+                        const response = JSON.parse(line.trim()) as JsonRpcResponse;
+                        this.handleResponse(response);
+                    } catch (error) {
+                        this.outputChannel.appendLine(`[MCP Client] Failed to parse response: ${error}`);
                     }
                 }
-            });
-
-            // サーバ標準エラー出力の受信
-            this.serverProcess.stderr?.on('data', (data) => {
-                // 理由: サーバ側のエラーを即時にユーザー・開発者へ通知するため
-                const error = data.toString().trim();
-                this.outputChannel.appendLine(`[MCP Server] ${error}`);
-            });
-
-            // サーバプロセス終了時の処理
-            this.serverProcess.on('exit', (code, signal) => {
-                // 理由: サーバ異常終了時にユーザーへ通知し、リソースをクリーンアップするため
-                this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
-                this.serverProcess = null;
-                // 保留中リクエストを全てreject
-                // 理由: 未解決のリクエストがぶら下がらないように、待機側へ即時エラー通知して整合性を保つ
-                for (const [id, { reject }] of this.pendingRequests) {
-                    reject(new Error('Server process exited'));
-                }
-                this.pendingRequests.clear();
-            });
-
-            // サーバプロセスエラー時の処理
-            this.serverProcess.on('error', (err) => {
-                // 理由: サーバ起動失敗や予期せぬ例外を即時通知し、リソースリークを防ぐため
-                this.outputChannel.appendLine(`[MCP Client] Server process error: ${err.message}`);
-                reject(err);
-            });
-
-            // サーバ初期化リクエスト送信（遅延）
+            }
+        });
+        this.serverProcess.stderr?.on('data', (data) => {
+            const error = data.toString().trim();
+            this.outputChannel.appendLine(`[MCP Server] ${error}`);
+        });
+        this.serverProcess.on('exit', (code, signal) => {
+            this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
+            this.serverProcess = null;
+            for (const [id, { reject }] of this.pendingRequests) {
+                reject(new Error('Server process exited'));
+            }
+            this.pendingRequests.clear();
+        });
+        this.serverProcess.on('error', (err) => {
+            this.outputChannel.appendLine(`[MCP Client] Server process error: ${err.message}`);
+        });
+        // サーバ初期化リクエスト送信（遅延）
+        await new Promise((resolve, reject) => {
             setTimeout(async () => {
-                // 理由: サーバ起動直後の初期化リクエスト送信（遅延）
                 try {
                     await this.initialize();
-                    resolve();
+                    resolve(undefined);
                 } catch (error) {
                     reject(error);
                 }
@@ -318,18 +291,20 @@ export class MCPClient {
 
     /**
      * タスク一覧取得処理
-     * タスク一覧を取得し、配列で返す
-     * なぜ必要か: vタスクツリーをUIに表示するため
+     * 指定parentIdの直下のタスク一覧を取得し、配列で返す
+     * なぜ必要か: 階層構造に応じたタスクツリーをUIに表示するため
+     * @param parentId 親タスクID（省略時はトップレベル）
      * @returns Promise<any[]>
      */
-    async listTasks(): Promise<any[]> {
+    async listTasks(parentId?: string | null): Promise<any[]> {
         try {
             // 理由: サーバAPI呼び出し・パース失敗時も空配列で安全に返す
-            // server-side listTasks no longer requires projectId; call without it
-            const result = await this.callTool('wbs.listTasks', {});
+            const args = parentId !== undefined ? { parentId } : {};
+            const result = await this.callTool('wbs.listTasks', args);
             const content = result.content?.[0]?.text;
             if (content) {
                 try {
+                    // サーバ返却値にchildCount（子要素数）が含まれる前提で返す
                     return JSON.parse(content);
                 } catch (error) {
                     this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${error} : ${content}`);
@@ -422,7 +397,6 @@ export class MCPClient {
     * @param params.parentId 親タスクID
     * @param params.assignee 担当者
     * @param params.estimate 見積もり
-    * @param params.goal ゴール
     * @param params.deliverables 成果物の割当一覧（任意）
     * @param params.prerequisites 前提条件の成果物割当一覧（任意）
     * @param params.completionConditions 完了条件の一覧（任意）
@@ -434,7 +408,6 @@ export class MCPClient {
         parentId?: string | null;
         assignee?: string | null;
         estimate?: string | null;
-        goal?: string | null;
         deliverables?: ArtifactReferenceInput[];
         prerequisites?: ArtifactReferenceInput[];
         completionConditions?: CompletionConditionInput[];
@@ -449,8 +422,7 @@ export class MCPClient {
                 description: params.description ?? '',
                 parentId: params.parentId ?? null,
                 assignee: params.assignee ?? null,
-                estimate: params.estimate ?? null,
-                goal: params.goal ?? null
+                estimate: params.estimate ?? null
             };
 
             if (deliverables !== undefined) {

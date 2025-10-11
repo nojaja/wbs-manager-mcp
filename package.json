@@ -150,8 +150,8 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
-    "build": "npm run test && tsc -p ./",
+    "vscode:prepublish": "npm run test && npm run build",
+    "build": "tsc -p ./",
     "test": "npm run lint && jest --config=jest.config.js --coverage",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",

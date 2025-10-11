@@ -14,7 +14,7 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
     const fakeMcp: any = { getTask: jest.fn() };
     const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
 
-    const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', goal: 'G', assignee: 'A', estimate: '3d' };
+  const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', assignee: 'A', estimate: '3d' };
     const html = (panel as any).getHtmlForWebview(task);
 
     // status option 'in-progress' should be selected

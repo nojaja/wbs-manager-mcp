@@ -55,7 +55,7 @@ The server will start at `http://127.0.0.1:8000`
 ### Task Details
 
 - Click any task in the tree to open the details panel
-- Edit fields: title, description, goal, assignee, status, estimate
+- Edit fields: title, description, assignee, status, estimate
 - Click "Save" to update the task
 - Changes are synced in real-time via SSE
 

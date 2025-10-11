@@ -73,7 +73,7 @@ wbs-mcp/
 - Create tasks with parent-child hierarchy
 - Update task properties (title, description, status, assignee, estimate)
 - Delete tasks (cascades to children)
-- Rich task metadata (goal, assignee, status, estimate)
+- Rich task metadata (assignee, status, estimate)
 
 ### 3. Version Control
 - Optimistic locking with version numbers

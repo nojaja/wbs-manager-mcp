@@ -133,7 +133,7 @@ CREATE TABLE tasks (
     parent_id TEXT,  -- NULL for root tasks
     title TEXT NOT NULL,
     description TEXT,
-    goal TEXT,
+    
     assignee TEXT,
     status TEXT DEFAULT 'pending',
     estimate TEXT,

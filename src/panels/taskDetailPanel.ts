@@ -9,7 +9,6 @@ interface Task {
     parent_id?: string;
     title: string;
     description?: string;
-    goal?: string;
     assignee?: string;
     status: string;
     estimate?: string;
@@ -152,7 +151,6 @@ export class TaskDetailPanel {
         // 理由: サーバAPIに不要なフィールド送信を防ぐ
         if (data.title !== undefined) updates.title = data.title;
         if (data.description !== undefined) updates.description = data.description;
-        if (data.goal !== undefined) updates.goal = data.goal;
         if (data.assignee !== undefined) updates.assignee = data.assignee;
         if (data.status !== undefined) updates.status = data.status;
         if (data.estimate !== undefined) updates.estimate = data.estimate;
@@ -304,7 +302,6 @@ export class TaskDetailPanel {
         const prerequisitesSummary = this.summarizeArtifactAssignments(task.prerequisites);
         const safeTitle = this.escapeHtml(task.title ?? '');
         const safeDescription = this.escapeHtml(task.description ?? '');
-        const safeGoal = this.escapeHtml(task.goal ?? '');
         const safeAssignee = this.escapeHtml(task.assignee ?? '');
         const safeEstimate = this.escapeHtml(task.estimate ?? '');
         const safeDeliverablesText = this.escapeHtml(deliverablesText);
@@ -401,10 +398,7 @@ export class TaskDetailPanel {
             <textarea id="description" name="description">${safeDescription}</textarea>
         </div>
 
-        <div class="form-group">
-            <label for="goal">Goal</label>
-            <textarea id="goal" name="goal">${safeGoal}</textarea>
-        </div>
+        
 
         <div class="form-group">
             <label for="assignee">Assignee</label>
@@ -503,7 +497,6 @@ export class TaskDetailPanel {
             console.log('Task Detail Webview loaded2');
             document.getElementById('title').value = taskData.title || '';
             document.getElementById('description').value = taskData.description || '';
-            document.getElementById('goal').value = taskData.goal || '';
             document.getElementById('assignee').value = taskData.assignee || '';
             document.getElementById('status').value = taskData.status || 'pending';
             document.getElementById('estimate').value = taskData.estimate || '';
@@ -600,7 +593,6 @@ export class TaskDetailPanel {
             const formData = {
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
-                goal: document.getElementById('goal').value,
                 assignee: document.getElementById('assignee').value,
                 status: document.getElementById('status').value,
                 estimate: document.getElementById('estimate').value,
