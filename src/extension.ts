@@ -1,15 +1,15 @@
-
 // VSCode API本体のインポート
 import * as vscode from 'vscode';
 // 子プロセス操作用モジュール
 import * as child_process from 'child_process';
 // パス操作ユーティリティ
 import * as path from 'path';
-// ファイルシステム操作ユーティリティ
-import * as fs from 'fs';
 // WBSツリープロバイダ（ツリー表示用）
-import { WBSTreeProvider, WBSTreeDragAndDropController } from './views/wbsTree';
-import { ArtifactTreeProvider, ArtifactTreeItem } from './views/artifactTree';
+import { WBSTreeDragAndDropController } from './views/wbsTree';
+import { ArtifactTreeItem } from './views/artifactTree';
+// サービス層
+import { ServerService } from './server/ServerService';
+import { WBSService } from './services/WBSService';
 // タスク詳細パネル（WebView表示用）
 import { TaskDetailPanel } from './panels/taskDetailPanel';
 // 成果物詳細パネル（WebView表示用）
@@ -18,22 +18,19 @@ import { ArtifactDetailPanel } from './panels/artifactDetailPanel';
 import { MCPClient } from './mcpClient';
 
 
-// サーバプロセスの参照（起動・停止管理用）
-let serverProcess: child_process.ChildProcess | null = null;
+
+
 // 拡張機能用の出力チャネル（ログ表示用）
 let outputChannel: vscode.OutputChannel;
-// WBSツリープロバイダのインスタンス
-let treeProvider: WBSTreeProvider;
-// 成果物ツリープロバイダのインスタンス
-let artifactTreeProvider: ArtifactTreeProvider;
+
 // MCPクライアントのインスタンス
 let mcpClient: MCPClient;
-
+let serverService: ServerService;
+let wbsService: WBSService;
 
 /**
- * アクティベート処理
+ * VSCode拡張機能のアクティベート処理
  * 拡張機能の初期化、MCPクライアント・サーバ起動、ツリービュー・コマンド登録を行う
- * なぜ必要か: 拡張機能のエントリポイントとして、初期化・UI・コマンド・サーバ連携を一括でセットアップするため
  * @param context VSCode拡張機能のコンテキスト
  */
 export async function activate(context: vscode.ExtensionContext) {
@@ -43,52 +40,49 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // MCPクライアントの初期化（API通信のため）
     mcpClient = new MCPClient(outputChannel);
+    serverService = new ServerService(outputChannel);
+    wbsService = new WBSService(mcpClient);
 
-    // サーバ・クライアント自動起動（ローカルサーバと接続）
+    // サーバ・クライアント自動起動
     await startLocalServer(context);
 
-    // MCPクライアントを使ってWBSツリープロバイダを初期化
-    treeProvider = new WBSTreeProvider(mcpClient);
-    // ツリービューを作成し、エクスプローラ部に表示
-    const dragAndDropController = new WBSTreeDragAndDropController(treeProvider);
+    // ツリービュー初期化
+    const dragAndDropController = new WBSTreeDragAndDropController(wbsService.wbsProvider);
     const treeView = vscode.window.createTreeView('wbsTree', {
-        treeDataProvider: treeProvider,
+        treeDataProvider: wbsService.wbsProvider,
         showCollapseAll: true,
         dragAndDropController
     });
-
-    // 成果物ツリーの初期化
-    artifactTreeProvider = new ArtifactTreeProvider(mcpClient);
     const artifactTreeView = vscode.window.createTreeView('artifactTree', {
-        treeDataProvider: artifactTreeProvider,
+        treeDataProvider: wbsService.artifactProvider,
         showCollapseAll: false
     });
 
     // コマンド登録: サーバ起動
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         await startLocalServer(context);
-        treeProvider.refresh();
-        artifactTreeProvider.refresh();
+        wbsService.refreshWbsTree();
+        wbsService.refreshArtifactTree();
     });
 
     // コマンド登録: ツリーリフレッシュ
-
     const refreshTreeCommand = vscode.commands.registerCommand('wbsTree.refresh', async () => {
+
         // MCPClientが未接続なら再接続を試みる
         // 理由: サーバ再起動や初回起動時にクライアントが未初期化の場合でもUIリフレッシュを正常化するため
         if (!mcpClient) {
             mcpClient = new MCPClient(outputChannel);
             await startLocalServer(context);
         }
-        treeProvider.refresh();
+        wbsService.refreshWbsTree();
     });
 
     const refreshArtifactTreeCommand = vscode.commands.registerCommand('artifactTree.refresh', async () => {
-        artifactTreeProvider.refresh();
+        wbsService.refreshArtifactTree();
     });
 
     const createArtifactCommand = vscode.commands.registerCommand('artifactTree.createArtifact', async () => {
-        await artifactTreeProvider.createArtifact();
+        await wbsService.createArtifact();
     });
 
     const editArtifactCommand = vscode.commands.registerCommand('artifactTree.editArtifact', async (item?: ArtifactTreeItem) => {
@@ -101,20 +95,17 @@ export async function activate(context: vscode.ExtensionContext) {
             ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, mcpClient);
         }
     });
-
-
     const deleteArtifactCommand = vscode.commands.registerCommand('artifactTree.deleteArtifact', async (item?: ArtifactTreeItem) => {
-    outputChannel.appendLine(`artifactTree.deleteArtifact: ${item ? item.label : 'no item'}`);
+        outputChannel.appendLine(`artifactTree.deleteArtifact: ${item ? item.label : 'no item'}`);
         const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
             ? artifactTreeView.selection[0]
             : undefined);
         // 処理概要: 明示指定がなければ選択中の成果物を削除
         // 実装理由: 操作性を統一し、誤削除を避けるため選択が無い場合は何もしない
-        await artifactTreeProvider.deleteArtifact(target);
+        await wbsService.deleteArtifact(target);
     });
 
     // コマンド登録: タスク詳細パネルを開く
-
     const openTaskCommand = vscode.commands.registerCommand('wbsTree.openTask', (item) => {
         outputChannel.appendLine(`wbsTree.openTask: ${item ? item.label : 'no item'}`);
         // タスクノードのみ詳細パネルを開く
@@ -126,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const createTaskCommand = vscode.commands.registerCommand('wbsTree.createTask', async () => {
         const selected = treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined;
-        const result = await treeProvider.createTask(selected as any);
+        const result = await wbsService.createTask(selected as any);
         if (result?.taskId) {
             TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, mcpClient);
         }
@@ -134,7 +125,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const addChildTaskCommand = vscode.commands.registerCommand('wbsTree.addChildTask', async (item) => {
         const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
-        const result = await treeProvider.createTask(target as any);
+        const result = await wbsService.addChildTask(target as any);
         // 処理概要: 作成成功時のみ詳細パネルを開く
         // 実装理由: 失敗時に空のパネルを開かないためのガード
         if (result?.taskId) {
@@ -144,7 +135,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const deleteTaskCommand = vscode.commands.registerCommand('wbsTree.deleteTask', async (item) => {
         const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
-        await treeProvider.deleteTask(target as any);
+        await wbsService.deleteTask(target as any);
     });
 
 
@@ -170,7 +161,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 /**
- * デアクティベート処理
+ * VSCode拡張機能のデアクティベート処理
  * 拡張機能の終了時にMCPクライアント・サーバプロセスを停止する
  * なぜ必要か: プロセス・リソースリーク防止、正常な終了処理のため
  */
@@ -182,194 +173,22 @@ export function deactivate() {
     }
     // サーバプロセスの停止
     // 理由: サーバプロセスが残存しないように明示的にkill
-    if (serverProcess) {
-        outputChannel.appendLine('Stopping MCP server...');
-        serverProcess.kill();
-        (serverProcess as child_process.ChildProcess | null) = null;
-    }
-}
-
-
-/**
- * MCP設定ファイル作成処理
- * .vscode/mcp.jsonを生成し、サーバ起動設定を保存する
- * なぜ必要か: サーバ起動・クライアント接続の自動化、再起動時の設定復元のため
- * 
- * WBS_MCP_DATA_DIRは相対パス"."で設定し、ワークスペースルートを基準とする
- * 理由: 環境に依存しない相対パス指定により、異なる環境でも動作するようにするため
- * 
- * @param workspaceRoot ワークスペースルートパス
- * @param serverPath サーバ実行ファイルのパス
- */
-function createMcpConfig(workspaceRoot: string, serverPath: string): void {
-    // .vscodeディレクトリ・設定ファイルパスを決定
-    const vscodeDir = path.join(workspaceRoot, '.vscode');
-    const mcpConfigPath = path.join(vscodeDir, 'mcp.json');
-
-    // .vscodeディレクトリがなければ作成
-    // 理由: 初回起動時や手動削除時でも自動で安全にディレクトリ生成するため
-    if (!fs.existsSync(vscodeDir)) {
-        fs.mkdirSync(vscodeDir, { recursive: true });
-    }
-
-    // MCPサーバ設定オブジェクトを作成
-    const mcpConfig = {
-        servers: {
-            "wbs-mcp": {
-                "command": process.execPath,
-                "args": [
-                    serverPath
-                ],
-                "type": "stdio",
-                "env": {
-                    "WBS_MCP_DATA_DIR": "${workspaceFolder}"
-                }
-            }
-        }
-    };
-
-    // 設定ファイルを書き出し
-    fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-    outputChannel.appendLine(`Created MCP configuration at: ${mcpConfigPath}`);
-    vscode.window.showInformationMessage('MCP server started successfully');
-}
-
-
-/**
- * サーバプロセスイベントハンドラ設定処理
- * サーバプロセスの標準出力・エラー・終了イベントを監視し、ログ出力やエラー通知を行う
- * なぜ必要か: サーバの状態監視・障害検知・ユーザー通知のため
- * @param serverProcess サーバプロセス
- */
-function setupServerProcessHandlers(serverProcess: child_process.ChildProcess): void {
-    // サーバの標準出力をログに出力
-    serverProcess.stdout?.on('data', (data) => {
-        // 理由: サーバからの出力を即時に拡張機能ログへ反映し、デバッグ・監視性を高めるため
-        const output = data.toString().trim();
-        outputChannel.appendLine(`[Server] ${output}`);
-        outputChannel.show();
-    });
-
-    // サーバの標準エラー出力をログ・コンソールに出力
-    serverProcess.stderr?.on('data', (data) => {
-        // 理由: サーバ側のエラーを即時にユーザー・開発者へ通知するため
-        const error = data.toString().trim();
-        outputChannel.appendLine(`[Server Error] ${error}`);
-        outputChannel.show();
-    });
-
-    // サーバプロセス終了時の処理
-    serverProcess.on('exit', (code, signal) => {
-        // 理由: サーバ異常終了時にユーザーへ通知し、リソースをクリーンアップするため
-        outputChannel.appendLine(`Server process exited with code ${code}, signal: ${signal}`);
-        if (code !== 0) {
-            vscode.window.showErrorMessage(`MCP server exited unexpectedly with code ${code}`);
-        }
-        (serverProcess as child_process.ChildProcess | null) = null;
-    });
-
-    // サーバプロセスエラー時の処理
-    serverProcess.on('error', (err) => {
-        // 理由: サーバ起動失敗や予期せぬ例外を即時通知し、リソースリークを防ぐため
-        outputChannel.appendLine(`Server process error: ${err.message}`);
-        vscode.window.showErrorMessage(`Failed to start MCP server: ${err.message}`);
-        (serverProcess as child_process.ChildProcess | null) = null;
-    });
-}
-
-
-/**
- * サーバパス検証処理
- * サーバ実行ファイルの存在を確認し、なければエラー通知する
- * なぜ必要か: サーバ起動失敗時の早期検知・ユーザー通知のため
- * @param serverPath サーバ実行ファイルのパス
- * @returns 存在すればtrue、なければfalse
- */
-function validateServerPath(serverPath: string): boolean {
-    // 理由: サーバファイルが存在しない場合は即時エラー通知し、無駄な起動処理を防ぐ
-    if (!fs.existsSync(serverPath)) {
-        vscode.window.showErrorMessage(`Server file not found: ${serverPath}`);
-        outputChannel.appendLine(`Error: Server file not found at ${serverPath}`);
-        return false;
-    }
-    return true;
-}
-
-
-/**
- * MCPクライアント起動・接続処理
- * MCPクライアントを起動し、サーバへ接続する
- * なぜ必要か: サーバプロセスとクライアント間の通信を確立するため
- * @param serverPath サーバ実行ファイルのパス
- * @param serverEnv サーバ用環境変数
- */
-async function startMcpClient(serverPath: string, serverEnv: any): Promise<void> {
-    outputChannel.appendLine('Starting MCP client connection...');
-    // 既存のサーバプロセスを渡す形に修正（serverProcessはグローバル変数）
-    if (!serverProcess) {
-        throw new Error('Server process is not running');
-    }
-    await mcpClient.start(serverProcess);
-    outputChannel.appendLine('MCP client connected successfully');
-}
-
-
-/**
- * サーバプロセス起動処理
- * MCPサーバプロセスを新規に起動し、環境変数を返す
- * なぜ必要か: サーバの独立起動・環境変数制御・プロセス管理のため
- * @param serverPath サーバ実行ファイルのパス
- * @param workspaceRoot ワークスペースルートパス
- * @returns サーバ用環境変数
- */
-function spawnServerProcess(serverPath: string, workspaceRoot: string) {
-    outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
-
-    // サーバ用環境変数を設定
-    // WBS_MCP_DATA_DIRは相対パス"."で設定（サーバはcwd: workspaceRootで起動されるため）
-    const serverEnv = {
-        ...process.env,
-        WBS_MCP_DATA_DIR: "."
-    };
-
-    // サーバプロセスをspawnで起動
-    serverProcess = child_process.spawn(process.execPath, [serverPath], {
-        cwd: workspaceRoot,
-        env: serverEnv,
-        stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    return serverEnv;
-}
-
-
-/**
- * MCP設定作成ハンドラ
- * ワークスペースが存在する場合のみMCP設定ファイルを作成する
- * なぜ必要か: ワークスペース未選択時の誤動作防止・ユーザー通知のため
- * @param workspaceFolders ワークスペースフォルダ一覧
- * @param workspaceRoot ワークスペースルートパス
- * @param serverPath サーバ実行ファイルのパス
- */
-function handleMcpConfigCreation(workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined, workspaceRoot: string, serverPath: string): void {
-    if (workspaceFolders && workspaceFolders.length > 0) {
-        createMcpConfig(workspaceRoot, serverPath);
-    } else {
-        vscode.window.showWarningMessage('No workspace folder found. MCP configuration not created.');
+    if (serverService) {
+        serverService.stopServerProcess();
     }
 }
 
 
 /**
  * ローカルサーバ起動処理
- * MCPサーバプロセスを起動し、クライアント接続・設定作成を行う
+ * サーバ起動・クライアント接続・設定生成をServerService経由で行う
  * なぜ必要か: サーバ・クライアント・設定の一括起動/初期化を自動化し、ユーザー操作を簡略化するため
  * @param context VSCode拡張機能のコンテキスト
  */
 async function startLocalServer(context: vscode.ExtensionContext) {
     // 既にサーバが起動していれば何もしない
     // 理由: 多重起動による競合・リソース浪費を防ぐため
-    if (serverProcess) {
+    if (serverService.getServerProcess()) {
         vscode.window.showInformationMessage('MCP server is already running');
         return;
     }
@@ -384,25 +203,25 @@ async function startLocalServer(context: vscode.ExtensionContext) {
 
     // サーバファイル存在チェック
     // 理由: ファイルがなければ以降の処理をスキップし、エラー通知のみ行う
-    if (!validateServerPath(serverPath)) {
+    if (!serverService.validateServerPath(serverPath)) {
         return;
     }
 
     try {
         // サーバプロセス起動
-        const serverEnv = spawnServerProcess(serverPath, workspaceRoot);
+        serverService.spawnServerProcess(serverPath, workspaceRoot);
         // サーバプロセスのイベントハンドラ設定
-        setupServerProcessHandlers(serverProcess!);
-        // MCPクライアント起動・接続（サーバプロセスを直接渡す）
-        await startMcpClient(serverPath, serverEnv);
+        serverService.setupServerProcessHandlers();
+        const proc = serverService.getServerProcess();
+        if (proc) {
+            // MCPクライアント起動・接続（サーバプロセスを直接渡す）
+            await mcpClient.start(proc);
+        }
         // MCP設定ファイル作成
-        handleMcpConfigCreation(workspaceFolders, workspaceRoot, serverPath);
+        serverService.createMcpConfig(workspaceRoot, serverPath);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         outputChannel.appendLine(`Failed to start server: ${errorMessage}`);
         vscode.window.showErrorMessage(`Failed to start MCP server: ${errorMessage}`);
-        if (serverProcess) {
-            (serverProcess as child_process.ChildProcess | null) = null;
-        }
     }
 }
