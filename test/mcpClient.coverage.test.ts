@@ -16,9 +16,6 @@ describe('MCPClient additional coverage tests', () => {
 
   describe('Start and initialization', () => {
     test('start method does nothing if server is already started', async () => {
-      // @ts-ignore
-      client['serverProcess'] = { mock: 'process' };
-
       const spawnSpy = jest.spyOn(require('child_process'), 'spawn');
       // ChildProcess型のダミーオブジェクトを型安全に作成
       class DummyWritable {
@@ -36,7 +33,17 @@ describe('MCPClient additional coverage tests', () => {
         stderr = new DummyReadable();
         on = jest.fn();
       }
-      await client.start(new DummyChildProcess() as any);
+      // provide a writer that immediately responds to the initialize request
+      (client as any).setWriter((s: string) => {
+        try {
+          const parsed = JSON.parse(s);
+          (client as any).handleResponse({ jsonrpc: '2.0', id: parsed.id, result: { content: [{ text: '[]' }] } });
+        } catch (e) {
+          // ignore malformed
+        }
+      });
+
+      await client.start();
 
       expect(spawnSpy).not.toHaveBeenCalled();
     });
@@ -171,16 +178,10 @@ describe('MCPClient additional coverage tests', () => {
 
   describe('Request handling edge cases', () => {
     test('sendRequest handles write errors', async () => {
-      const mockProcess = {
-        stdin: {
-          write: jest.fn((data, callback) => {
-            callback(new Error('Write failed'));
-          })
-        }
-      };
-      // @ts-ignore
-      client['serverProcess'] = mockProcess;
-
+      // inject a writer that simulates write error via throwing
+      (client as any).setWriter((s: string) => {
+        throw new Error('Write failed');
+      });
       await expect((client as any).sendRequest('test.method', {}))
         .rejects.toThrow('Write failed');
     });

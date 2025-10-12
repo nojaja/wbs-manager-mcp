@@ -14,16 +14,15 @@ describe('MCPClient extra tests', () => {
     jest.restoreAllMocks();
   });
 
-  test('stop kills process and clears pending requests', () => {
-    const kill = jest.fn();
-    // @ts-ignore
-    client['serverProcess'] = { kill };
+  test('stop clears pending requests', () => {
+    // set a fake writer and pending request
+    (client as any).setWriter(() => {});
     // @ts-ignore
     client['pendingRequests'].set(1, { resolve: () => {}, reject: () => {} });
 
     client.stop();
 
-    expect(kill).toHaveBeenCalled();
+    // pendingRequests cleared
     // @ts-ignore
     expect((client as any).pendingRequests.size).toBe(0);
   });
@@ -33,10 +32,8 @@ describe('MCPClient extra tests', () => {
   });
 
   test('sendRequest times out after 10 seconds', async () => {
-    const fakeStdout: any = { setEncoding: () => {}, on: () => {} };
-    const fakeStdin = { write: jest.fn((s, cb) => cb && cb()) };
-    // @ts-ignore
-    client['serverProcess'] = { stdin: fakeStdin, stdout: fakeStdout, stderr: null };
+    const fakeWrites: string[] = [];
+    (client as any).setWriter((s: string) => { fakeWrites.push(s); });
 
     const p = (client as any).sendRequest('tools/call', { name: 'x' });
 

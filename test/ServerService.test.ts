@@ -114,10 +114,11 @@ describe('ServerService', () => {
       expect(mockChildProcess.stdout.on).toHaveBeenCalledWith('data', expect.any(Function));
       
       // テスト用のデータを作成
-      const stdoutCallback = mockChildProcess.stdout.on.mock.calls.find(call => call[0] === 'data')[1];
-      stdoutCallback(Buffer.from('test output'));
-      
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('[Server] test output');
+  const stdoutCallback = mockChildProcess.stdout.on.mock.calls.find(call => call[0] === 'data')[1];
+  // simulate Buffer input
+  stdoutCallback(Buffer.from('test output\n'));
+
+  expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('[Server] test output');
       expect(mockOutputChannel.show).toHaveBeenCalled();
     });
 

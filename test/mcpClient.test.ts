@@ -22,12 +22,13 @@ describe('MCPClient', () => {
   });
 
   test('handleResponse resolves pending request', async () => {
-    // simulate serverProcess with stdin write
+    // inject writer instead of mocking private serverProcess
     const fakeStdout: any = { setEncoding: () => {}, on: () => {} };
     const fakeStdin = { write: jest.fn((s, cb) => cb && cb()) };
-
-    // @ts-ignore
-    client['serverProcess'] = { stdin: fakeStdin, stdout: fakeStdout, stderr: null };
+    (client as any).setWriter((s: string) => {
+      // emulate async write callback success
+      fakeStdin.write(s, () => {});
+    });
 
     const p = (client as any).sendRequest('tools/call', { name: 'x' });
 

@@ -8,6 +8,8 @@ import * as path from 'path';
 export class ServerService {
   /** サーバプロセス */
   private serverProcess: child_process.ChildProcess | null = null;
+  /** 登録された MCPClient への参照（オプション） */
+  private registeredClient: { handleResponse?: (resp: any) => void; onServerExit?: (code: number | null, signal: NodeJS.Signals | null) => void; setWriter?: (w: (s: string) => void) => void } | null = null;
   /** 出力チャネル */
   private outputChannel: { appendLine: (msg: string) => void; show?: () => void };
 
@@ -69,12 +71,23 @@ export class ServerService {
    */
   setupServerProcessHandlers(onExit?: (code: number|null, signal: NodeJS.Signals|null) => void) {
     if (!this.serverProcess) return;
-    // サーバの標準出力をログに出力
-    // 理由: サーバからの出力を即時に拡張機能ログへ反映し、デバッグ・監視性を高めるため
+    // サーバの標準出力を処理
+    // サーバのstdoutはJSON-RPCレスポンスのフレーム（改行区切り）を含むため、行単位で解析して登録されたクライアントへ通知する
+    let buffer = '';
+    if (this.serverProcess.stdout && typeof (this.serverProcess.stdout as any).setEncoding === 'function') {
+      (this.serverProcess.stdout as any).setEncoding('utf8');
+    }
     this.serverProcess.stdout?.on('data', (data) => {
-      const output = data.toString().trim();
-      this.outputChannel.appendLine(`[Server] ${output}`);
-      this.outputChannel.show?.();
+      buffer += data.toString();
+      let lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      // If there were no newline splits but we have content, process that as a single line
+      if (lines.length === 0 && buffer === '') {
+        lines = [buffer];
+      }
+      for (const line of lines) {
+        this.processServerLine(line);
+      }
     });
     // サーバの標準エラー出力をログ・コンソールに出力
     // 理由: サーバ側のエラーを即時にユーザー・開発者へ通知するため
@@ -91,6 +104,10 @@ export class ServerService {
         this.outputChannel.appendLine(`MCP server exited unexpectedly with code ${code}`);
       }
       this.serverProcess = null;
+      // クライアントへ終了通知
+      if (this.registeredClient && typeof this.registeredClient.onServerExit === 'function') {
+        this.registeredClient.onServerExit(code, signal);
+      }
       if (onExit) onExit(code, signal);
     });
     // サーバプロセスエラー時の処理
@@ -102,6 +119,30 @@ export class ServerService {
   }
 
   /**
+   * 単一の stdout 行を処理するヘルパー
+   * @param line stdout から受け取った1行の文字列
+   */
+  private processServerLine(line: string) {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    this.outputChannel.appendLine(`[Server] ${trimmed}`);
+    this.outputChannel.show?.();
+    // クライアントが raw string を処理できる場合はそのまま渡す（互換性保持）
+    if (this.registeredClient && typeof (this.registeredClient as any).handleResponseFromServer === 'function') {
+      (this.registeredClient as any).handleResponseFromServer(trimmed);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (this.registeredClient && typeof (this.registeredClient as any).handleResponse === 'function') {
+        (this.registeredClient as any).handleResponse(parsed);
+      }
+    } catch (err) {
+      this.outputChannel.appendLine(`[Server] Non-JSON output: ${trimmed}`);
+    }
+  }
+
+  /**
    * サーバプロセスを停止
    */
   stopServerProcess() {
@@ -110,6 +151,34 @@ export class ServerService {
       this.serverProcess.kill();
       this.serverProcess = null;
     }
+  }
+
+  /**
+   * MCPClient を登録し、必要ならば書き込み関数を渡す
+   * ServerService はプロセスの stdin/stdout を管理し、stdout の parsed JSON をクライアントに渡す
+   * @param client MCPClient 相当のオブジェクト
+   */
+  /**
+   * MCPClient を登録し、必要ならば書き込み関数を渡す
+   * ServerService はプロセスの stdin/stdout を管理し、stdout の parsed JSON をクライアントに渡す
+   * @param client.handleResponse サーバからの parsed JSON を受け取るコールバック
+   * @param client.onServerExit サーバ終了を通知するコールバック
+   * @param client.setWriter サーバへ文字列を書き込む関数を受け取る setter
+   * @param client MCPClient 相当のオブジェクト
+   */
+  registerClient(client: { handleResponse?: (resp: any) => void; onServerExit?: (code: number | null, signal: NodeJS.Signals | null) => void; setWriter?: (w: (s: string) => void) => void }) {
+    this.registeredClient = client;
+    // サーバの stdin へ書き込むラッパーを渡す
+    if (this.registeredClient && typeof this.registeredClient.setWriter === 'function') {
+      this.registeredClient.setWriter((s: string) => {
+        this.serverProcess?.stdin?.write(s);
+      });
+    }
+  }
+
+  /** 登録解除 */
+  unregisterClient() {
+    this.registeredClient = null;
   }
 
   /**
@@ -153,5 +222,35 @@ export class ServerService {
    */
   getServerProcess() {
     return this.serverProcess;
+  }
+
+  /**
+   * サーバプロセスを開始して MCPClient を接続するユーティリティ
+  * @param mcpClient MCPClient インスタンス（start(proc) を提供すること）
+  * @param mcpClient.start MCPClient の start メソッド。サーバプロセスを引数に取り Promise を返すこと。
+   * @param serverPath サーバ実行ファイルパス
+   * @param workspaceRoot ワークスペースルート
+   */
+  async startAndAttachClient(mcpClient: { start: (proc: child_process.ChildProcess) => Promise<void> }, serverPath: string, workspaceRoot: string): Promise<void> {
+    try {
+      if (!this.validateServerPath(serverPath)) {
+        return;
+      }
+
+      this.spawnServerProcess(serverPath, workspaceRoot);
+      this.setupServerProcessHandlers();
+
+      // 登録して writer を渡す
+      this.registerClient(mcpClient as any);
+
+      // クライアントの初期化開始
+      if (typeof (mcpClient as any).start === 'function') {
+        await (mcpClient as any).start();
+      }
+      this.createMcpConfig(workspaceRoot, serverPath);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.outputChannel.appendLine(`Failed to start and attach MCP client: ${message}`);
+    }
   }
 }

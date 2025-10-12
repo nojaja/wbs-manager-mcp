@@ -37,34 +37,39 @@ describe('MCPClient branch coverage', () => {
       kill = jest.fn();
     }
 
-    jest.resetModules();
-    jest.doMock('child_process', () => ({ spawn: () => new DummyChildProcess() }));
-    const mod = await import('../src/extension/mcpClient');
-    client = new mod.MCPClient(fakeOutput);
+  jest.resetModules();
+  jest.doMock('child_process', () => ({ spawn: () => new DummyChildProcess() }));
+  const mod = await import('../src/extension/mcpClient');
+  client = new mod.MCPClient(fakeOutput);
 
-    jest.spyOn(client as any, 'sendRequest').mockResolvedValue({});
-    const startP = client.start(new DummyChildProcess() as any);
+  // provide a writer so sendRequest can work
+  client.setWriter((s: string) => {});
 
-    // simulate stdout data with bad JSON
-    handlers.stdout && handlers.stdout('notjson\n');
+  jest.spyOn(client as any, 'sendRequest').mockResolvedValue({});
+  const startP = client.start();
 
-    // simulate exit after start initialized
-    jest.advanceTimersByTime(1000);
-    await startP;
+  // simulate ServerService passing a bad JSON line
+  // The client should log parse error when handleResponseFromServer is called with bad input wrapped
+  client.handleResponseFromServer('notjson' as any);
 
-    expect(fakeOutput.appendLine).toHaveBeenCalled();
-    // now set a pending request and trigger exit
-    const rejectMock = jest.fn();
-    (client as any).pendingRequests.set(99, { resolve: () => {}, reject: rejectMock });
-    handlers.exit && handlers.exit(1, null);
-    expect(rejectMock).toHaveBeenCalled();
+  // simulate exit after start initialized
+  jest.advanceTimersByTime(1000);
+  await startP;
+
+  expect(fakeOutput.appendLine).toHaveBeenCalled();
+  // now set a pending request and trigger exit by calling client's onServerExit
+  const rejectMock = jest.fn();
+  (client as any).pendingRequests.set(99, { resolve: () => {}, reject: rejectMock });
+  // call client's onServerExit to simulate ServerService notification
+  (client as any).onServerExit(1, null);
+  expect(rejectMock).toHaveBeenCalled();
   });
 
   test('sendRequest rejects when stdin.write callback errors', async () => {
     const mod = await import('../src/extension/mcpClient');
     client = new mod.MCPClient(fakeOutput);
-    const fakeStdin = { write: (_: string, cb: any) => cb && cb(new Error('writefail')) };
-    client['serverProcess'] = { stdin: fakeStdin } as any;
+    // simulate writer that throws via callback
+    client.setWriter((_: string) => { throw new Error('writefail'); });
 
     await expect((client as any).sendRequest('m', {})).rejects.toThrow('writefail');
     expect((client as any).pendingRequests.size).toBe(0);

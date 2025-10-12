@@ -1,10 +1,7 @@
 
-// 子プロセス操作用モジュール
-import * as child_process from 'child_process';
-// パス操作ユーティリティ
-import * as path from 'path';
 // VSCode API
 import * as vscode from 'vscode';
+// (注) サーバプロセスの起動・管理は ServerService に委譲されています。
 
 interface JsonRpcRequest {
     jsonrpc: string;
@@ -68,10 +65,12 @@ type SanitizedArtifactInput = { artifactId: string; crudOperations?: string | nu
  * なぜ必要か: VSCode拡張とMCPサーバ間の通信・API呼び出しを抽象化し、UI層から独立して管理するため
  */
 export class MCPClient {
-    private serverProcess: child_process.ChildProcess | null = null;
+    // serverProcess は ServerService が管理するため直接保持しない
     private requestId = 0;
     private pendingRequests: Map<number, { resolve: (value: any) => void; reject: (error: any) => void }> = new Map();
     private outputChannel: vscode.OutputChannel;
+    // サーバへの書き込み用関数（ServerService から提供される）
+    private writer: ((s: string) => void) | null = null;
 
     /**
      * コンストラクタ
@@ -97,54 +96,74 @@ export class MCPClient {
      * 既存のサーバプロセスに接続し、初期化・通信を行う
      * @param serverProcess 既に起動済みのサーバプロセス
      */
-    async start(serverProcess: child_process.ChildProcess): Promise<void> {
-        if (this.serverProcess) {
-            return;
+    /**
+     * MCPClient を初期化する。
+     * 以前は ChildProcess を受け取り stdout を直接監視していたが、ServerService がプロセスを管理するため
+     * start は引数なしで呼び出され、ServerService から writer と parsed responses が渡されることを期待する。
+     */
+    async start(): Promise<void> {
+        // ServerService が先に registerClient を呼んで writer をセットする想定です。
+        // writer が設定されるまで短時間待機してから初期化を行います。
+        const startAt = Date.now();
+        const timeout = 5000; // 5秒待つ
+        while (!this.writer && Date.now() - startAt < timeout) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
         }
-        this.serverProcess = serverProcess;
-        let buffer = '';
-        this.serverProcess.stdout?.setEncoding('utf8');
-        this.serverProcess.stdout?.on('data', (chunk) => {
-            buffer += chunk;
-            let lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-                if (line.trim()) {
-                    try {
-                        const response = JSON.parse(line.trim()) as JsonRpcResponse;
-                        this.handleResponse(response);
-                    } catch (error) {
-                        this.outputChannel.appendLine(`[MCP Client] Failed to parse response: ${error}`);
-                    }
-                }
-            }
-        });
-        this.serverProcess.stderr?.on('data', (data) => {
-            const error = data.toString().trim();
-            this.outputChannel.appendLine(`[MCP Server] ${error}`);
-        });
-        this.serverProcess.on('exit', (code, signal) => {
-            this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
-            this.serverProcess = null;
-            for (const [id, { reject }] of this.pendingRequests) {
-                reject(new Error('Server process exited'));
-            }
-            this.pendingRequests.clear();
-        });
-        this.serverProcess.on('error', (err) => {
-            this.outputChannel.appendLine(`[MCP Client] Server process error: ${err.message}`);
-        });
-        // サーバ初期化リクエスト送信（遅延）
-        await new Promise((resolve, reject) => {
-            setTimeout(async () => {
-                try {
-                    await this.initialize();
-                    resolve(undefined);
-                } catch (error) {
-                    reject(error);
-                }
-            }, 1000);
-        });
+        if (!this.writer) {
+            throw new Error('MCPClient.start: writer not set by ServerService');
+        }
+        await this.initialize();
+    }
+
+    /**
+     * ServerService から書き込み関数を受け取る
+     * @param w サーバへ書き込む関数（例: stdin.write をラップしたもの）
+     */
+    setWriter(w: (s: string) => void) {
+        this.writer = w;
+    }
+
+    /**
+     * 互換用: ServerService から渡される raw line を受け取る
+     * @param rawLine サーバの stdout 行（文字列）
+     */
+    handleResponseFromServer(rawLine: string) {
+        try {
+            const parsed = JSON.parse(rawLine);
+            this.handleResponseInternal(parsed as JsonRpcResponse);
+        } catch (err) {
+            this.outputChannel.appendLine(`[MCP Client] Failed to parse response: ${err}`);
+        }
+    }
+
+    /**
+     * ServerService から受け取った JSON-RPC オブジェクトを処理する
+     * @param parsed サーバからパース済みの JSON-RPC オブジェクト
+     */
+    /**
+     * ServerService から受け取った JSON-RPC オブジェクトを処理する
+     * @param parsed サーバからパース済みの JSON-RPC オブジェクト
+     */
+    handleResponse(parsed: any) {
+        try {
+            const response = parsed as JsonRpcResponse;
+            this.handleResponseInternal(response);
+        } catch (err) {
+            this.outputChannel.appendLine(`[MCP Client] handleResponse error: ${err}`);
+        }
+    }
+
+    /**
+     * サーバ終了通知ハンドラ（ServerService が呼び出す）
+     * @param code 終了コード
+     * @param signal シグナル
+     */
+    onServerExit(code: number | null, signal: NodeJS.Signals | null) {
+        this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
+        for (const [id, { reject }] of this.pendingRequests) {
+            reject(new Error('Server process exited'));
+        }
+        this.pendingRequests.clear();
     }
 
     /**
@@ -179,9 +198,8 @@ export class MCPClient {
      * @returns Promise<JsonRpcResponse>
      */
     private sendRequest(method: string, params?: any): Promise<JsonRpcResponse> {
-        // サーバプロセスが未起動なら即時エラー
-        // 理由: サーバ未起動時のリクエスト送信を防ぐ
-        if (!this.serverProcess) {
+        // サーバプロセスが未接続（writer未設定）なら即時エラー（writer が現行の一意の送信手段）
+        if (!this.writer) {
             return Promise.reject(new Error('MCP server not started'));
         }
 
@@ -200,14 +218,14 @@ export class MCPClient {
             const requestStr = JSON.stringify(request) + '\n';
             this.outputChannel.appendLine(`[MCP Client] Sending: ${method}`);
 
-            // サーバへリクエスト送信
-            this.serverProcess!.stdin?.write(requestStr, (error) => {
-                // 理由: 書き込み失敗時は即時エラー通知
-                if (error) {
-                    this.pendingRequests.delete(id);
-                    reject(error);
-                }
-            });
+            // サーバへリクエスト送信（必ず writer が存在する前提）
+            try {
+                // writer が必須になったため、ここは単純に writer を呼ぶ
+                this.writer!(requestStr);
+            } catch (error) {
+                this.pendingRequests.delete(id);
+                reject(error);
+            }
 
             // 10秒タイムアウトで未応答リクエストを自動エラー化
             // 理由: サーバハング・通信断で待ち続けることを避け、UIの応答性を保つ
@@ -229,8 +247,7 @@ export class MCPClient {
      */
     private sendNotification(method: string, params?: any): void {
         // サーバプロセスが未起動なら何もしない
-        // 理由: 通知送信時の無駄なエラー発生を防ぐ
-        if (!this.serverProcess) {
+        if (!this.writer) {
             return;
         }
 
@@ -241,7 +258,7 @@ export class MCPClient {
         };
 
         const notificationStr = JSON.stringify(notification) + '\n';
-        this.serverProcess.stdin?.write(notificationStr);
+        this.writer(notificationStr);
     }
 
     /**
@@ -250,7 +267,7 @@ export class MCPClient {
      * なぜ必要か: 非同期リクエストの結果を正しくUI層に返すため
      * @param response サーバからのレスポンス
      */
-    private handleResponse(response: JsonRpcResponse): void {
+    private handleResponseInternal(response: JsonRpcResponse): void {
         // レスポンスIDが存在する場合のみ対応するPromiseを解決/拒否
         if (response.id !== undefined) {
             const pending = this.pendingRequests.get(response.id as number);
@@ -635,13 +652,13 @@ export class MCPClient {
      * なぜ必要か: プロセスリーク・リソース消費を防ぎ、拡張機能終了時に安全に停止するため
      */
     stop(): void {
-        // サーバプロセスが起動中ならkill
-        // 理由: プロセスリーク・リソース消費を防ぐ
-        if (this.serverProcess) {
-            this.serverProcess.kill();
-            this.serverProcess = null;
-        }
+        // ServerService がプロセスのライフサイクルを管理するため、ここでは接続解除と保留リクエストのクリーンアップのみを行う
+        this.outputChannel.appendLine('[MCP Client] Detaching from server (clearing writer and pending requests)');
+        this.writer = null;
         // 保留中リクエストを全てクリア
+        for (const [id, { reject }] of this.pendingRequests) {
+            reject(new Error('MCP client stopped'));
+        }
         this.pendingRequests.clear();
     }
 

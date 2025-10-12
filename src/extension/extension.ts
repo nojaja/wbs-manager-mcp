@@ -1,7 +1,6 @@
 // VSCode API本体のインポート
 import * as vscode from 'vscode';
 // 子プロセス操作用モジュール
-import * as child_process from 'child_process';
 // パス操作ユーティリティ
 import * as path from 'path';
 // WBSツリープロバイダ（ツリー表示用）
@@ -209,16 +208,8 @@ async function startLocalServer(context: vscode.ExtensionContext) {
 
     try {
         // サーバプロセス起動
-        serverService.spawnServerProcess(serverPath, workspaceRoot);
-        // サーバプロセスのイベントハンドラ設定
-        serverService.setupServerProcessHandlers();
-        const proc = serverService.getServerProcess();
-        if (proc) {
-            // MCPクライアント起動・接続（サーバプロセスを直接渡す）
-            await mcpClient.start(proc);
-        }
-        // MCP設定ファイル作成
-        serverService.createMcpConfig(workspaceRoot, serverPath);
+        // ServerService に起動と MCPClient の接続を委譲
+        await serverService.startAndAttachClient(mcpClient, serverPath, workspaceRoot);
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         outputChannel.appendLine(`Failed to start server: ${errorMessage}`);
