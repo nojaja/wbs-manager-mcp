@@ -1,274 +1,135 @@
-# Quick Start Guide
+  # Quick Start Guide
 
-Get started with WBS MCP in 5 minutes!
+  最短5分でWBS MCPを動かすための手順です。現在の実装（VS Code拡張 + stdio/JSON-RPC MCP サーバ）に基づいて更新済みです。
 
-## Installation
+  ## インストール
 
-```bash
-# Clone the repository
-git clone https://github.com/nojaja/wbs-mcp.git
-cd wbs-mcp
+  ```powershell
+  # リポジトリを取得
+  git clone https://github.com/nojaja/wbs-mcp.git ; cd wbs-mcp
 
-# Install dependencies
-npm install
+  # 依存をインストール
+  npm install
 
-# Build the project
-npm run build
-```
+  # ビルド（TypeScript → out/）
+  npm run build
+  ```
 
-## Running the Server
+  ## 立ち上げ（推奨: VS Code拡張から）
 
-### Option 1: Via VS Code Extension (Recommended)
+  1) VS Codeでフォルダを開く
+  ```powershell
+  code .
+  ```
 
-1. Open VS Code in the project directory:
-   ```bash
-   code .
-   ```
+  2) F5でExtension Development Hostを起動
 
-2. Press `F5` to launch the Extension Development Host
+  3) 立ち上がったVS Codeウィンドウでコマンドパレットを開く（Ctrl+Shift+P）→「MCP WBS: Start Local Server」を実行
 
-3. In the new VS Code window:
-   - Open Command Palette: `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (Mac)
-   - Type: `MCP WBS: Start Local Server`
-   - Press Enter
+  4) 出力ウィンドウ（表示 → 出力 → 「MCP-WBS」）で「MCP client connected successfully」などのログを確認
 
-4. Check the Output panel (View → Output → "MCP-WBS") to verify server started
+  この手順により、拡張がローカルMCPサーバ（`out/server/index.js`）を子プロセスとしてspawnし、stdio経由でJSON-RPC通信を開始します。併せて `.vscode/mcp.json` が作成され、次のようにstdio型で設定されます（`src/extension.ts`の`createMcpConfig`参照）。
 
-### Option 2: Standalone Server
-
-```bash
-npm run start-server-dev
-```
-
-The server will start at `http://127.0.0.1:8000`
-
-## Using the UI
-
-### TreeView
-
-1. Open the Explorer sidebar in VS Code
-2. Look for the "WBS Projects" section
-3. Click the refresh icon to load projects
-4. Expand projects to see tasks
-5. Click on a task to open its details
-
-### Task Details
-
-- Click any task in the tree to open the details panel
-- Edit fields: title, description, assignee, status, estimate
-- Click "Save" to update the task
-- Changes are synced in real-time via SSE
-
-## Quick API Examples
-
-### Create a Project
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/wbs/createProject \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My First Project","description":"Getting started with WBS"}'
-```
-
-### Create a Task
-
-```bash
-# Replace <PROJECT_ID> with the ID from the previous command
-curl -X POST http://127.0.0.1:8000/api/wbs/createTask \
-  -H "Content-Type: application/json" \
-  -d '{
-    "projectId":"<PROJECT_ID>",
-    "title":"Setup development environment",
-    "assignee":"developer",
-    "estimate":"2d"
-  }'
-```
-
-### View Project Structure
-
-```bash
-curl http://127.0.0.1:8000/api/wbs/getProject/<PROJECT_ID> | jq .
-```
-
-## Using with GitHub Copilot
-
-Once the server is running and `.vscode/mcp.json` is created, you can use natural language with Copilot:
-
-```
-"Create a project 'E-commerce Platform' with tasks for frontend, backend, and testing"
-
-"Add a task 'Implement user authentication' assigned to @john with estimate 5d"
-
-"Show me all pending tasks in project X"
-
-"Mark task Y as completed"
-```
-
-See [docs/copilot_examples.md](docs/copilot_examples.md) for more examples.
-
-## Common Tasks
-
-### Start a Collaboration Session
-
-```bash
-# Start session
-SESSION_ID=$(curl -s -X POST http://127.0.0.1:8000/api/wbs/startSession \
-  -H "Content-Type: application/json" \
-  -d '{"projectId":"<PROJECT_ID>","userId":"alice"}' | jq -r '.id')
-
-# Others join
-curl -X POST http://127.0.0.1:8000/api/wbs/joinSession \
-  -H "Content-Type: application/json" \
-  -d "{\"sessionId\":\"$SESSION_ID\",\"userId\":\"bob\"}"
-```
-
-### Add Task Dependencies
-
-```bash
-# Task B depends on Task A
-curl -X POST http://127.0.0.1:8000/api/wbs/addDependency \
-  -H "Content-Type: application/json" \
-  -d '{"fromTaskId":"<TASK_B_ID>","toTaskId":"<TASK_A_ID>"}'
-```
-
-### Subscribe to Real-time Updates
-
-```bash
-# Open in a terminal and leave running
-curl -N http://127.0.0.1:8000/mcp/stream?projectId=<PROJECT_ID>
-
-# You'll see events as tasks are created/updated/deleted
-```
-
-## Troubleshooting
-
-### Server Won't Start
-
-**Issue**: `EADDRINUSE: address already in use`
-
-**Solution**: Another process is using port 8000. Kill it or change the port in `src/server/index.ts`
-
-```bash
-# Find process using port 8000
-lsof -i :8000
-
-# Kill it
-kill -9 <PID>
-```
-
-### TreeView is Empty
-
-**Issue**: No projects shown in WBS Projects view
-
-**Solutions**:
-1. Click the refresh icon
-2. Ensure server is running (check Output panel)
-3. Create a project using API or Copilot
-
-### Build Errors
-
-**Issue**: `better-sqlite3` build fails
-
-**Solution**: Install build tools
-
-**macOS**:
-```bash
-xcode-select --install
-```
-
-**Ubuntu/Debian**:
-```bash
-sudo apt-get install build-essential python3
-```
-
-**Windows**:
-```bash
-npm install --global windows-build-tools
-```
-
-### Database Errors
-
-**Issue**: Corrupted database
-
-**Solution**: Delete and restart
-```bash
-rm -rf data/wbs.db
-# Server will recreate on next start
-```
-
-## Next Steps
-
-- Read the [Architecture Overview](docs/architecture.md) to understand the system design
-- Check [Copilot Examples](docs/copilot_examples.md) for integration patterns
-- Review [Testing Procedures](TESTING.md) for comprehensive testing
-- Explore the API at `http://127.0.0.1:8000/mcp/discover`
-
-## Key Endpoints
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/mcp/discover` | GET | MCP tool discovery |
-| `/mcp/stream` | GET | SSE real-time updates |
-| `/api/wbs/createProject` | POST | Create project |
-| `/api/wbs/listProjects` | GET | List all projects |
-| `/api/wbs/createTask` | POST | Create task |
-| `/api/wbs/updateTask` | POST | Update task |
-| `/api/wbs/getProject/:id` | GET | Get project with tasks |
-| `/api/wbs/addDependency` | POST | Add task dependency |
-| `/api/wbs/startSession` | POST | Start collaboration session |
-
-## Configuration
-
-The server creates a `.vscode/mcp.json` file in your workspace:
-
-```json
-{
-  "servers": [
-    {
-      "id": "local-wbs",
-      "name": "Local WBS (MCP)",
-      "type": "http",
-      "url": "http://127.0.0.1:8000/mcp"
+  ```json
+  {
+    "servers": {
+      "wbs-mcp": {
+        "command": "${execPath}",
+        "args": ["${workspaceFolder}/out/server/index.js"],
+        "type": "stdio",
+        "env": {
+          "WBS_MCP_DATA_DIR": "${workspaceFolder}"
+        }
+      }
     }
-  ]
-}
-```
+  }
+  ```
 
-This enables MCP clients (like Copilot) to discover the tools automatically.
+  補足: 開発・デバッグ目的でサーバ単体を起動するスクリプト（`npm run start-server-dev`）もありますが、現在の標準運用は「拡張→stdio/JSON-RPC」であり、HTTPでの待受は前提としていません。
 
-## Data Location
+  ## UIの使い方（VS Code内）
 
-All data is stored in SQLite database at `./data/wbs.db`
+  - エクスプローラに「WBS Projects」「Artifacts」ビューが表示されます。
+  - 「WBS Projects」
+    - リフレッシュ（タイトルバーの再読み込み）でタスク一覧を取得（`wbs.listTasks`）。
+    - 右クリックまたはインラインの「開く/削除/子タスク追加」で操作。
+    - ノードのドラッグ&ドロップで親子関係を変更（`wbs.moveTask`）。
+  - 「Artifacts」
+    - 追加/編集/削除が可能（`artifacts.*`ツール）。
+  - タスクをクリックすると詳細Webviewが開き、Ctrl+Sで保存（`wbs.updateTask` with ifVersion）。楽観ロック不一致の場合は❌メッセージで通知されます。
 
-To backup your data:
-```bash
-cp data/wbs.db data/wbs.db.backup
-```
+  ## Copilotで使う（MCP連携）
 
-## Support
+  上記の起動で`.vscode/mcp.json`が用意されるため、Copilot等のMCPクライアントからツールが自動検出されます。応答は `result.content[0].text` にJSONまたは✅/❌付きテキストで返ります。
 
-For issues, feature requests, or questions:
-- Open an issue on GitHub
-- Check existing documentation in the `docs/` folder
-- Review the `TESTING.md` for testing procedures
+  例:
+  - 「ルートに『設計』タスクを作成して」→ `wbs.createTask { title }`
+  - 「子タスク『画面設計』を『設計』の下に追加して」→ `wbs.createTask { title, parentId }`
+  - 「成果物『仕様書.md』を登録して」→ `artifacts.createArtifact { title: "仕様書.md" }`
 
-## Development Mode
+  より多くの例は `docs/copilot_examples.md` を参照してください。
 
-For active development:
+  ## データ保存先
 
-1. Terminal 1 - Watch mode:
-   ```bash
-   npm run watch
-   ```
+  - SQLiteデータベースは `./data/wbs.db` に保存されます。
+  - 保存先は環境変数 `WBS_MCP_DATA_DIR` を基準に解決されます（`src/server/db-simple.ts`の`resolveDatabasePath`）。拡張からは `${workspaceFolder}` が設定されます。
 
-2. Terminal 2 - Server:
-   ```bash
-   npm run start-server-dev
-   ```
+  バックアップ例（PowerShell）:
+  ```powershell
+  Copy-Item -Path .\data\wbs.db -Destination .\data\wbs.db.backup -Force
+  ```
 
-3. VS Code - Press `F5` to launch extension
+  DBを初期化したい場合（再生成されます）:
+  ```powershell
+  Remove-Item -Path .\data\wbs.db -Force
+  ```
 
-Changes to TypeScript files will auto-compile in watch mode.
+  ## テスト
 
----
+  Jestでユニットテストを実行できます（`jest.config.js`）。
 
-**Enjoy building structured work breakdowns with WBS MCP!** 🚀
+  ```powershell
+  npm test
+  ```
+
+  カバレッジは `coverage/` 配下に出力されます。VS Codeモック（`__mocks__/vscode.ts`）を使うため、外部サーバやブラウザは不要です。
+
+  ## よくある質問（Troubleshooting）
+
+  - サーバが起動しない／ツリーが空
+    - コマンドパレットで「MCP WBS: Start Local Server」を実行。
+    - 出力ウィンドウ「MCP-WBS」のログにエラーがないか確認。
+    - ルートタスクが無い場合は、まず `wbs.createTask` で作成してください。
+
+  - バージョン不一致で保存できない
+    - 他の操作で`version`が進んでいる可能性があります。最新を再読込し、`ifVersion`に現在値が入る状態で保存してください（UIは自動で処理します）。
+
+  - DBの場所を変えたい
+    - `.vscode/mcp.json`の`env.WBS_MCP_DATA_DIR`を編集し、拡張を再起動してください。
+
+  ## 開発モードのヒント
+
+  - tscウォッチを回す場合:
+  ```powershell
+  npm run watch
+  ```
+
+  - 拡張だけ再起動したい場合:
+  ```powershell
+  npm run start-extension-dev
+  ```
+
+  - サーバ単体での動作確認（stdio出力を確認したい等）:
+  ```powershell
+  npm run build ; node .\out\server\index.js
+  ```
+
+  ## 次に読む
+
+  - `docs/architecture.md` 現行アーキテクチャ（stdio JSON-RPC / データモデル）
+  - `docs/copilot_examples.md` MCPツール一覧と実例
+  - `PROJECT_SUMMARY.md` 全体像と開発メモ
+
+  ---
+
+  WBS MCPで、タスク管理をもっと軽やかに。🚀

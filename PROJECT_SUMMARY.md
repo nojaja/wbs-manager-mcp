@@ -2,307 +2,172 @@
 
 ## Overview
 
-This project implements a complete VS Code extension for Work Breakdown Structure (WBS) management with Model Context Protocol (MCP) support for GitHub Copilot integration.
+VS Code で WBS（Work Breakdown Structure）を管理する拡張機能です。Model Context Protocol (MCP) による GitHub Copilot 連携を備え、ローカルの MCP サーバ（stdio/JSON-RPC）と通信してタスク/成果物を操作します。
 
-## Implementation Status
+## Current Status
 
-All 15 planned tasks have been completed successfully! ✅
+コア機能（タスクの作成/更新/移動/削除、成果物の作成/更新/削除、楽観ロック、ツリー UI、Webview 編集、MCP ツール公開）は実装済みです。詳細は `docs/architecture.md` を参照してください。
 
-### Completed Tasks
-
-1. ✅ **Repository Initialization** - Project structure, TypeScript configuration, build scripts
-2. ✅ **Extension Skeleton** - VS Code extension activation and command registration
-3. ✅ **Local MCP Server** - Express-based HTTP server with discovery endpoints
-4. ✅ **Server Spawning** - Extension spawns server and creates MCP configuration
-5. ✅ **Data Layer** - SQLite database with comprehensive schema
-6. ✅ **API Endpoints** - REST API for all WBS operations
-7. ✅ **SSE Streaming** - Real-time updates via Server-Sent Events
-8. ✅ **VS Code UI** - TreeView and Webview for task management
-9. ✅ **Session Management** - Multi-user collaboration support
-10. ✅ **Dependency Management** - Task dependencies with cycle detection
-11. ✅ **Version Control** - Optimistic locking with conflict detection
-12. ✅ **Copilot Integration** - MCP tool metadata for AI assistance
-13. ✅ **Tests and CI** - Test structure and GitHub Actions workflow
-14. ✅ **Documentation** - Comprehensive docs including architecture
-15. ✅ **Testing Procedures** - Manual acceptance test guide
-
-## Project Structure
+## Project Structure (excerpt)
 
 ```
 wbs-mcp/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                 # GitHub Actions CI workflow
-├── .vscode/
-│   ├── launch.json               # VS Code debug configuration
-│   └── tasks.json                # Build tasks
 ├── docs/
-│   ├── architecture.md           # System architecture documentation
-│   └── copilot_examples.md       # Copilot integration examples
+│   ├── architecture.md
+│   └── copilot_examples.md
 ├── src/
+│   ├── extension.ts                # VS Code extension entry point (spawn server, register views/commands)
+│   ├── mcpClient.ts                # VS Code extension JSON-RPC client (stdio) + tool wrappers
 │   ├── panels/
-│   │   └── taskDetailPanel.ts    # Webview for task editing
+│   │   ├── taskDetailPanel.ts      # Task detail webview (edit/save)
+│   │   └── artifactDetailPanel.ts  # Artifact detail webview
 │   ├── server/
-│   │   ├── api.ts                # REST API endpoints
-│   │   ├── db.ts                 # Database initialization
-│   │   ├── index.ts              # Express server entry point
-│   │   ├── repository.ts         # Data access layer
-│   │   ├── session.ts            # Session management
-│   │   └── stream.ts             # SSE event management
-│   ├── test/
-│   │   └── repository.test.ts    # Unit test structure
-│   ├── views/
-│   │   └── wbsTree.ts           # TreeView provider
-│   └── extension.ts              # Extension entry point
-├── LICENSE                       # MIT License
-├── QUICKSTART.md                # 5-minute setup guide
-├── README.md                    # Main documentation
-├── TESTING.md                   # Testing procedures
-├── package.json                 # NPM configuration
-└── tsconfig.json                # TypeScript configuration
+│   │   ├── index.ts                # Stdio JSON-RPC MCP server (initialize/tools.list/tools.call)
+│   │   └── db-simple.ts            # SQLite repository and schema
+│   └── views/
+│       ├── wbsTree.ts              # WBS tree view (drag&drop move)
+│       └── artifactTree.ts         # Artifact list view
+├── test/                           # Jest tests (unit/integration)
+├── __mocks__/vscode.ts             # VS Code API mock for tests
+├── coverage/                       # Jest coverage reports
+├── jest.config.js
+├── package.json
+├── tsconfig.json
+└── README.md / QUICKSTART.md
 ```
 
 ## Key Features
 
-### 1. Project Management
-- Create and manage multiple WBS projects
-- List all projects
-- Get project details with full task tree
+1) Task Management
+- 親子階層タスクの作成/更新/削除
+- 担当者/状態/見積などの属性編集
+- ツリー上のドラッグ＆ドロップで親子変更（循環はサーバ側で拒否）
 
-### 2. Task Management
-- Create tasks with parent-child hierarchy
-- Update task properties (title, description, status, assignee, estimate)
-- Delete tasks (cascades to children)
-- Rich task metadata (assignee, status, estimate)
+2) Artifact Management
+- 成果物の作成/更新/削除
+- タスクへの割当（deliverable/prerequisite, CRUD指定）
+- Webview でのサジェスト（datalist）
 
-### 3. Version Control
-- Optimistic locking with version numbers
-- Conflict detection on concurrent updates
-- Returns current state on version mismatch (HTTP 409)
-- Task history tracking
+3) Version Control (Optimistic Locking)
+- tasks / artifacts は version を保持
+- `ifVersion` による競合検出（競合時は❌メッセージ）
 
-### 4. Dependency Management
-- Add dependencies between tasks
-- Breadth-first search for cycle detection
-- Prevents circular dependencies
-- Remove dependencies
+4) VS Code Integration
+- Explorer に WBS/Artifacts の TreeView
+- タスク詳細は Webview で編集（Ctrl+S 保存）
 
-### 5. Real-time Collaboration
-- Server-Sent Events (SSE) for live updates
-- Events: taskCreated, taskUpdated, taskDeleted, etc.
-- Multiple clients can subscribe to project streams
-- Automatic dead connection cleanup
-
-### 6. Session Management
-- Create collaboration sessions
-- Users can join/leave sessions
-- Track session members with timestamps
-- Session-based notifications
-
-### 7. VS Code Integration
-- TreeView in Explorer sidebar
-- Shows project/task hierarchy
-- Expandable/collapsible nodes
-- Status-based icons
-- Webview panel for task editing
-- Rich form with all task properties
-- Save with version checking
-
-### 8. MCP/Copilot Support
-- Tool discovery at `/mcp/discover`
-- 5 MCP tools: createProject, listProjects, getProject, createTask, updateTask
-- JSON Schema for inputs/outputs
-- Natural language command support
+5) MCP / Copilot
+- stdio の JSON-RPC（`initialize` / `tools/list` / `tools/call`）
+- 公開ツール: `wbs.*`, `artifacts.*`（一覧は docs 参照）
 
 ## Technology Stack
 
-- **Language**: TypeScript
-- **Runtime**: Node.js 20.x
-- **Framework**: Express 4.x
-- **Database**: SQLite (better-sqlite3)
-- **VS Code API**: 1.85.0+
-- **Testing**: Mocha
-- **CI/CD**: GitHub Actions
+- Language: TypeScript
+- Runtime: Node.js
+- DB: SQLite（`sqlite3` + `sqlite`）
+- VS Code API（拡張開発）
+- Testing: Jest（カバレッジ有）
 
-## API Endpoints
+## JSON-RPC Interface (MCP over stdio)
 
-### MCP Endpoints
-- `GET /mcp/discover` - Tool discovery for MCP clients
-- `GET /mcp/stream?projectId=<id>` - SSE stream for updates
+- `initialize` … 初期化
+- `tools/list` … 利用可能ツール一覧
+- `tools/call` … ツール呼び出し（例: `wbs.createTask`, `wbs.updateTask`, `wbs.listTasks`, `wbs.moveTask`, `wbs.deleteTask`, `wbs.impotTask`, `artifacts.*`）
 
-### Project Endpoints
-- `POST /api/wbs/createProject` - Create project
-- `GET /api/wbs/listProjects` - List all projects
-- `GET /api/wbs/getProject/:projectId` - Get project with tasks
+各ツールの返却は `result.content[0].text` に JSON 文字列またはメッセージが入ります（✅/❌ 表示を含む）。
 
-### Task Endpoints
-- `POST /api/wbs/createTask` - Create task
-- `GET /api/wbs/getTask/:taskId` - Get single task
-- `POST /api/wbs/updateTask` - Update task (with version check)
-- `DELETE /api/wbs/deleteTask/:taskId` - Delete task
+## Database Schema (current)
 
-### Dependency Endpoints
-- `POST /api/wbs/addDependency` - Add task dependency
-- `DELETE /api/wbs/removeDependency/:id` - Remove dependency
-- `GET /api/wbs/dependencies/:taskId` - List dependencies
+Tables（抜粋）:
+- `tasks` … 階層タスク（parent_id, status, estimate, version など）
+- `artifacts` … 成果物（title, uri, description, version）
+- `task_artifacts` … タスクと成果物の割当（role='deliverable'/'prerequisite', crud_operations, order_index）
+- `task_completion_conditions` … 完了条件
+- `dependencies` … タスク間依存（テーブルは存在、ロジックは未使用）
+- `task_history` … タスク変更履歴
 
-### Session Endpoints
-- `POST /api/wbs/startSession` - Create session
-- `POST /api/wbs/joinSession` - Join session
-- `POST /api/wbs/leaveSession` - Leave session
-- `GET /api/wbs/listSessions` - List sessions
-- `GET /api/wbs/getSession/:sessionId` - Get session details
-
-## Database Schema
-
-### Tables
-- **projects** - WBS projects with versioning
-- **tasks** - Tasks with hierarchy and metadata
-- **dependencies** - Task dependencies with constraints
-- **sessions** - Collaboration sessions
-- **session_members** - Session membership
-- **task_history** - Task change history
-
-### Key Features
-- Foreign key constraints for referential integrity
-- Cascade delete for cleanup
-- Unique constraints on dependencies
-- Version tracking for optimistic locking
+Notes: 外部キー制約 ON、基本操作はトランザクションで整合性を確保。
 
 ## Testing
 
-### Integration Tests
-Comprehensive integration test verifies:
-- MCP discovery (5 tools)
-- Project creation
-- Task hierarchy (parent-child)
-- Version conflict detection
-- Dependency cycle prevention
-- Session management (multi-user)
-- Project tree structure
-- All list operations
-
-All tests pass! ✅
-
-### CI/CD
-GitHub Actions workflow:
-- Runs on push/PR to main and develop branches
-- Node.js 20.x matrix
-- Steps: checkout, install, build, test, verify artifacts
+- Jest によるユニット/統合テストを多数実装（`test/` ディレクトリ）。
+- モック（`__mocks__/vscode.ts`）とカバレッジ（`coverage/`）あり。
 
 ## Documentation
 
-### User Documentation
-- **README.md** - Main documentation with features, setup, usage
-- **QUICKSTART.md** - 5-minute getting started guide
-- **TESTING.md** - Comprehensive manual test procedures
-
-### Developer Documentation
-- **docs/architecture.md** - System design, data model, algorithms
-- **docs/copilot_examples.md** - Copilot integration patterns
+- README.md / QUICKSTART.md … セットアップ・概要
+- docs/architecture.md … 実装アーキテクチャ・データモデル
+- docs/copilot_examples.md … MCP ツールの使い方サンプル
 
 ## Performance Characteristics
 
-- **Database**: SQLite for local use, handles thousands of tasks
-- **SSE**: Efficient event streaming with connection pooling
-- **Version Control**: O(1) version checking
-- **Cycle Detection**: O(V+E) BFS algorithm
-- **Tree Building**: O(n) with hash map
+- DB: SQLite（ローカル用途、数千タスク規模を想定）
+- Version Control: O(1) 版数検査
+- Move Constraints: 親チェーンの遡り検査
+- Tree Building: O(n)（ハッシュと配列で構築）
 
 ## Security Considerations
 
-- Server binds to 127.0.0.1 (localhost only)
-- Parameterized SQL queries (no SQL injection)
-- Foreign key constraints for data integrity
-- Input validation on all endpoints
-- No authentication (suitable for local dev)
+- child_process + stdio（ネットワーク非公開）
+- パラメタライズド SQL / 外部キー制約
+- 入力検証
+- 認証なし（ローカル開発前提）
 
 ## Known Limitations
 
-1. Single server instance (no horizontal scaling)
-2. SQLite (not suitable for concurrent writes at scale)
-3. No authentication/authorization
-4. Local only (not network accessible)
-5. Tests are structural placeholders (need implementation)
+1. 単一プロセスのローカルサーバ（水平スケールなし）
+2. SQLite（高い同時書き込みには不向き）
+3. 認証/認可なし
+4. SSE/WS 等のプッシュ配信なし（手動リロード/操作後更新で反映）
+5. 依存関係（dependencies）の編集 UI/ツールは未提供
 
 ## Future Enhancements
 
-Potential improvements:
-- [ ] Implement full test suite
-- [ ] Add user authentication
-- [ ] Support PostgreSQL for production
-- [ ] Add Gantt chart visualization
-- [ ] Export to MS Project format
-- [ ] Add risk and resource tracking
-- [ ] Implement CRDT for conflict-free merges
-- [ ] Add metrics dashboard
-- [ ] Support custom fields
-- [ ] Add role-based permissions
+- [ ] 依存関係編集・可視化（dependencies の活用）
+- [ ] 認証/認可の追加
+- [ ] RDB（PostgreSQL 等）対応
+- [ ] ガントチャート表示
+- [ ] エクスポート（MS Project など）
+- [ ] リソース/リスク管理
+- [ ] 競合解消支援（CRDT 等の検討）
+- [ ] 指標ダッシュボード/分析
+- [ ] カスタムフィールド/権限管理
 
-## Quick Start
+## Quick Start (Windows / PowerShell)
 
-```bash
-# Install
-git clone https://github.com/nojaja/wbs-mcp.git
-cd wbs-mcp
+```
+# 初期化
 npm install
 npm run build
 
-# Run
+# 開発
 code .
-# Press F5 in VS Code
-# Command Palette: "MCP WBS: Start Local Server"
-
-# Or standalone:
-npm run start-server-dev
+# VS Code で F5（Extension Development Host 起動）
+# サーバは拡張起動時に自動 spawn されます（必要に応じてコマンドパレットから再起動も可）。
 ```
 
 ## Build and Package
 
-```bash
-# Development build
+```
+# Build
 npm run build
 
-# Watch mode
-npm run watch
-
-# Package for distribution
-npm install -g vsce
+# Package (optional)
+# vsce が導入済みの場合
 vsce package
-# Creates wbs-mcp-0.1.0.vsix
+# => .vsix を生成
 ```
 
-## Success Metrics
+## Success Notes
 
-✅ All 15 planned tasks completed
-✅ 19 source files created
-✅ 6 documentation files
-✅ 8+ integration tests passing
-✅ CI/CD pipeline configured
-✅ Zero build errors
-✅ Complete API coverage
-✅ Full UI implementation
-✅ Comprehensive documentation
+✅ WBS/Artifacts UI と編集フローを実装
+✅ MCP（stdio/JSON-RPC）ツール群を実装
+✅ 楽観ロック・移動制約・基本 CRUD を実装
+✅ Jest によるテスト/カバレッジ
 
 ## Conclusion
 
-This project successfully implements a full-featured WBS management extension for VS Code with MCP support. The implementation follows best practices for VS Code extension development, provides a clean separation of concerns, includes comprehensive documentation, and is ready for both local use and distribution.
+本プロジェクトは、VS Code 上での WBS 管理に必要な UI とサーバ機能を、MCP（stdio/JSON-RPC）でシンプルに統合しています。楽観ロックや親子移動制約、成果物割当など、日常運用に必要なコア機能を備え、Copilot からのツール呼び出しにも対応しています。
 
-The extension demonstrates:
-- Modern TypeScript development
-- Express REST API design
-- SQLite database usage
-- Real-time communication with SSE
-- VS Code extension APIs
-- MCP protocol integration
-- Optimistic concurrency control
-- Graph algorithms (cycle detection)
-- Collaborative features
+License: MIT
 
-**Status**: Production-ready for local use ✅
-**License**: MIT
-**Repository**: https://github.com/nojaja/wbs-mcp
-
----
-
-Built with ❤️ for GitHub Copilot integration

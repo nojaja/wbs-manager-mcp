@@ -2,54 +2,36 @@
 
 ## System Architecture
 
-The WBS MCP extension consists of two main components:
+WBS MCP 拡張は、拡張本体とローカル MCP サーバ（stdio/JSON-RPC）の2コンポーネントで構成されます。
 
-1. **VS Code Extension** - Client-side UI and MCP integration
-2. **Local MCP Server** - HTTP server with REST API and SSE streaming
+1. VS Code Extension — UI（TreeView/Webview）と MCP クライアント
+2. Local MCP Server — 標準入出力(JSON-RPC 2.0)でツールを公開する Node.js プロセス
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      VS Code Extension                       │
 │  ┌────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │ Extension  │  │  TreeView    │  │  Webview Panel   │   │
-│  │  (main)    │→→│  Provider    │  │  (Task Details)  │   │
+│  │ extension  │  │  WBS Tree    │  │  Task/Artifact   │   │
+│  │ (activate) │→→│ Provider     │  │  Webview Panel   │   │
 │  └────────────┘  └──────────────┘  └──────────────────┘   │
 │        │                                                     │
-│        │ spawn                                               │
+│        │ spawn + stdio (JSON-RPC 2.0)                        │
 │        ↓                                                     │
 └────────┼─────────────────────────────────────────────────────┘
-         │
-         │ child_process.spawn
+         │ child_process.spawn(process.execPath, [out/server/index.js])
          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                    Local MCP Server (Node.js)                │
+│                 Local MCP Server (stdio JSON-RPC)            │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │                   Express HTTP Server                 │  │
-│  │  ┌──────────┐  ┌─────────┐  ┌──────────┐  ┌──────┐ │  │
-│  │  │   MCP    │  │   API   │  │  Stream  │  │ Auth │ │  │
-│  │  │ Discover │  │ Routes  │  │  (SSE)   │  │      │ │  │
-│  │  └──────────┘  └─────────┘  └──────────┘  └──────┘ │  │
+│  │            Stdio MCP Server (src/server/index.ts)    │  │
+│  │  methods: initialize | tools/list | tools/call ...   │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                            │                                 │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │              Business Logic Layer                     │  │
-│  │  ┌────────────┐  ┌──────────┐  ┌──────────────────┐ │  │
-│  │  │Repository  │  │ Session  │  │     Stream       │ │  │
-│  │  │ (CRUD)     │  │ Manager  │  │   Management     │ │  │
-│  │  └────────────┘  └──────────┘  └──────────────────┘ │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                            │                                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │                   Data Layer                          │  │
-│  │  ┌───────────────────────────────────────────────┐   │  │
-│  │  │          SQLite Database (wbs.db)             │   │  │
-│  │  │  • projects                                   │   │  │
-│  │  │  • tasks                                      │   │  │
-│  │  │  • dependencies                               │   │  │
-│  │  │  • sessions                                   │   │  │
-│  │  │  • session_members                            │   │  │
-│  │  │  • task_history                               │   │  │
-│  │  └───────────────────────────────────────────────┘   │  │
+│  │                   Repository Layer                   │  │
+│  │            (src/server/db-simple.ts)                 │  │
+│  │   • SQLite (data/wbs.db)                             │  │
+│  │   • CRUD/queries for tasks & artifacts               │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -59,93 +41,100 @@ The WBS MCP extension consists of two main components:
 ### VS Code Extension
 
 #### extension.ts
-- Entry point for the extension
-- Manages server lifecycle (spawn/kill)
-- Creates `.vscode/mcp.json` configuration
-- Registers commands and views
+- 拡張のエントリポイント（activate/deactivate）
+- ローカル MCP サーバ（out/server/index.js）を child_process.spawn で起動・監視
+- `.vscode/mcp.json` を作成（WBS_MCP_DATA_DIR="${workspaceFolder}" を設定し、汎用 MCP クライアントとの互換を確保）
+- TreeView（WBS/Artifacts）・Webview（Task/Artifact 詳細）を登録
 
 #### views/wbsTree.ts
-- Implements `TreeDataProvider` interface
-- Fetches projects and tasks from the server
-- Displays hierarchical task tree
-- Handles refresh and navigation
+- `TreeDataProvider` 実装
+- ルート直下（parent_id IS NULL）のタスクリストと、各ノード直下の子タスクを `wbs.listTasks` で取得
+- ノードクリックで `TaskDetailPanel` を開く、ドラッグ&ドロップで `wbs.moveTask` を呼び出し親子変更
 
 #### panels/taskDetailPanel.ts
-- Creates Webview for task editing
-- Handles form submissions
-- Manages version conflicts
-- Communicates with server API
+- タスク詳細 Webview の生成・編集フォーム（Ctrl+S で保存）
+- 保存時に `wbs.updateTask` を呼び出し、`ifVersion` による楽観ロック競合を解決（競合時は再読込を促す）
+- 成果物の候補は `artifacts.listArtifacts` の結果から datalist で提示
 
-### Local MCP Server
+### Local MCP Server（stdio JSON-RPC）
 
 #### server/index.ts
-- Express server initialization
-- MCP discovery endpoint (`/mcp/discover`)
-- SSE streaming endpoint (`/mcp/stream`)
-- Route registration
+- 標準入出力で JSON-RPC 2.0 を処理するシンプルな MCP サーバ
+- 実装メソッド例：
+    - `initialize`（初期化）
+    - `tools/list`（利用可能ツール一覧）
+    - `tools/call`（ツール呼び出し分岐: wbs.* / artifacts.*）
 
-#### server/db.ts
-- SQLite database initialization
-- Schema creation and migration
-- Foreign key constraints
+#### server/db-simple.ts
+- SQLite 初期化・スキーマ定義（PRAGMA foreign_keys = ON）
+- `WBSRepository` に CRUD/クエリを集約
+- DB ファイルは `${WBS_MCP_DATA_DIR || process.cwd()}/data/wbs.db`
 
-#### server/repository.ts
-- Data access layer (DAO pattern)
-- CRUD operations for all entities
-- Business logic (cycle detection, version control)
-- Transaction management
+（注）HTTP ルータ／SSE／セッションの実装は現行コードにはありません。
 
-#### server/api.ts
-- REST API route handlers
-- Request validation
-- Error handling
-- Event emission after mutations
+## Data Model（現行スキーマ）
 
-#### server/stream.ts
-- SSE client management
-- Event broadcasting
-- Connection lifecycle management
-
-#### server/session.ts
-- Session creation and management
-- Member join/leave operations
-- Session state tracking
-
-## Data Model
-
-### Projects Table
-```sql
-CREATE TABLE projects (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    description TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    version INTEGER NOT NULL DEFAULT 1
-);
-```
-
-### Tasks Table
+### tasks
 ```sql
 CREATE TABLE tasks (
     id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    parent_id TEXT,  -- NULL for root tasks
+    parent_id TEXT,  -- NULL = root
     title TEXT NOT NULL,
     description TEXT,
-    
     assignee TEXT,
     status TEXT DEFAULT 'pending',
     estimate TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 ```
 
-### Dependencies Table
+### artifacts
+```sql
+CREATE TABLE artifacts (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    uri TEXT,
+    description TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(title)
+);
+```
+
+### task_artifacts（タスクと成果物の割当）
+```sql
+CREATE TABLE task_artifacts (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    artifact_id TEXT NOT NULL,
+    role TEXT NOT NULL,                -- 'deliverable' | 'prerequisite'
+    crud_operations TEXT,              -- 'C','R','U','D' の組合せ等
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+);
+```
+
+### task_completion_conditions（完了条件）
+```sql
+CREATE TABLE task_completion_conditions (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    description TEXT NOT NULL,
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+```
+
+### dependencies
 ```sql
 CREATE TABLE dependencies (
     id TEXT PRIMARY KEY,
@@ -158,29 +147,7 @@ CREATE TABLE dependencies (
 );
 ```
 
-### Sessions Table
-```sql
-CREATE TABLE sessions (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-```
-
-### Session Members Table
-```sql
-CREATE TABLE session_members (
-    session_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    joined_at TEXT NOT NULL,
-    PRIMARY KEY (session_id, user_id),
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-```
-
-### Task History Table
+### task_history
 ```sql
 CREATE TABLE task_history (
     id TEXT PRIMARY KEY,
@@ -196,229 +163,103 @@ CREATE TABLE task_history (
 );
 ```
 
-## Event System
+## Realtime/Event
 
-The system uses Server-Sent Events (SSE) for real-time updates.
+現行実装にサーバー側のプッシュ配信（SSE/WebSocket）はありません。UI 更新はユーザー操作（保存・移動後の refresh、手動リロード）で反映します。
 
-### Event Types
+## Version Control（楽観ロック）
 
-1. **projectCreated** - New project created
-2. **taskCreated** - New task created
-3. **taskUpdated** - Task modified
-4. **taskDeleted** - Task removed
-5. **dependencyAdded** - New dependency created
-6. **dependencyRemoved** - Dependency removed
-7. **sessionStarted** - New session started
-8. **userJoined** - User joined session
-9. **userLeft** - User left session
+- エンティティ（tasks, artifacts）は `version` を持ちます。
+- 更新時に `ifVersion` を指定し、サーバ側が一致を検証します。
+- 一致: 更新成功し version をインクリメント。結果は tool の text に JSON で返却。
+- 不一致: `❌ Task has been modified by another user ...` などのメッセージを返却（HTTP ステータスは存在せず、JSON-RPC 応答内テキストで表現）。
 
-### Event Format
-```json
-{
-  "eventType": "taskCreated",
-  "payload": { /* entity data */ },
-  "eventId": "evt-1234567890",
-  "version": 1,
-  "timestamp": "2025-10-06T04:00:00.000Z"
-}
+更新フロー（JSON-RPC / tools/call）:
+```
+Client (extension)                      Server (tools/call)
+    │                                           │
+    │ send: { name: 'wbs.getTask', ... }        │
+    │──────────────────────────────────────────▶│
+    │ ◀─────────────────────────────────────────│
+    │   result.content[0].text = JSON(task)     │
+    │                                           │
+    │ send: { name: 'wbs.updateTask',           │
+    │         arguments: { taskId, ifVersion }} │
+    │──────────────────────────────────────────▶│
+    │ ◀─────────────────────────────────────────│
+    │   ✅ or ❌ メッセージ/JSON を含む text     │
 ```
 
-## Version Control
+## Dependency / Move Constraints
 
-The system implements **optimistic locking** using version numbers:
-
-1. Each entity (project, task) has a `version` field
-2. When updating, client sends `ifVersion` parameter
-3. Server checks if current version matches
-4. If match: update succeeds, version incremented
-5. If mismatch: returns HTTP 409 with current state
-6. Client must handle conflict (merge or reload)
-
-### Update Flow
-```
-Client                          Server
-  │                               │
-  │  GET /api/wbs/getTask/:id    │
-  │─────────────────────────────→│
-  │←─────────────────────────────│
-  │  { id, version: 1, ... }     │
-  │                               │
-  │  POST /api/wbs/updateTask    │
-  │  { taskId, ifVersion: 1 }    │
-  │─────────────────────────────→│
-  │                               │
-  │         (if version OK)       │
-  │←─────────────────────────────│
-  │  200 OK { version: 2, ... }  │
-  │                               │
-  │       (if conflict)           │
-  │←─────────────────────────────│
-  │  409 Conflict                │
-  │  { error, currentTask }      │
-```
-
-## Dependency Management
-
-### Cycle Detection Algorithm
-
-Uses **Breadth-First Search (BFS)** to detect cycles:
-
-```typescript
-function canReach(startTaskId, targetTaskId) {
-    visited = new Set()
-    queue = [startTaskId]
-    
-    while (queue.length > 0) {
-        current = queue.shift()
-        
-        if (current === targetTaskId) {
-            return true  // Cycle detected!
-        }
-        
-        if (visited.has(current)) {
-            continue
-        }
-        
-        visited.add(current)
-        
-        // Add all tasks that current depends on
-        dependencies = getDependencies(current)
-        queue.push(...dependencies)
-    }
-    
-    return false  // No cycle
-}
-```
-
-Before adding dependency `A → B`, check if `canReach(B, A)`. If true, reject.
+現行コードでは、タスク移動（`wbs.moveTask`）において「自分自身を親にする」「子孫配下へ移動する」といった循環を DB 側で親チェーンを遡って検出し拒否します（`Cannot move task into its descendant`）。
+dependencies テーブルは存在しますが、依存関係の検証ロジックは未実装です。
 
 ## Security Considerations
 
-1. **Local-only server**: Binds to 127.0.0.1, not accessible remotely
-2. **No authentication** (current implementation): Suitable for local development only
-3. **Input validation**: All API endpoints validate required parameters
-4. **SQL injection prevention**: Uses parameterized queries
-5. **Foreign key constraints**: Ensures referential integrity
+1. ローカル専用: child_process + stdio 接続。ネットワークに露出しません。
+2. 認証なし（ローカル開発向け）。
+3. 入力検証とパラメタライズドクエリで SQL インジェクションを抑止。
+4. 外部キー制約を有効化して参照整合性を担保。
 
-### Future Security Enhancements
-
-- Add authentication tokens
-- Implement user authorization (project ownership, task permissions)
-- Use `vscode.SecretStorage` for sensitive data
-- Add HTTPS support for production deployments
-- Rate limiting for API endpoints
+将来の拡張候補:
+- 認証/認可の導入、SecretStorage 利用
+- 依存関係管理の厳格化・ルール化
 
 ## Performance Considerations
 
-1. **Database indices**: Consider adding indices on frequently queried columns
-2. **Connection pooling**: SQLite uses single connection (sufficient for local use)
-3. **SSE cleanup**: Dead connections are removed when client disconnects
-4. **Tree building**: Uses in-memory map for O(n) task tree construction
+1. 頻出列へのインデックス検討
+2. SQLite 単一接続（ローカル用途では十分）
+3. ツリー構築は map を用いた O(n) で実装（`getTask`）
 
 ## Scalability Notes
 
-Current implementation is designed for:
-- Single user or small team
-- Local development environment
-- Projects with up to 1000 tasks
+現行はローカル・小中規模向け（～数千タスク目安）。
+大規模化する場合:
+- SQLite→RDB（PostgreSQL/MySQL 等）への移行
+- 認証/認可、監査ログ
+- キャッシュ導入
 
-For larger scale:
-- Replace SQLite with PostgreSQL or MySQL
-- Add Redis for SSE client management
-- Implement proper authentication/authorization
-- Consider microservices architecture
-- Add caching layer (Redis)
+## MCP Integration（JSON-RPC over stdio）
 
-## MCP Integration
+- initialize / tools/list / tools/call を実装。
+- 利用可能ツール例（tools/list より）:
+    - wbs.createTask / wbs.getTask / wbs.updateTask / wbs.listTasks / wbs.deleteTask / wbs.moveTask / wbs.impotTask
+    - artifacts.listArtifacts / artifacts.getArtifact / artifacts.createArtifact / artifacts.updateArtifact / artifacts.deleteArtifact
 
-### Discovery Endpoint
-```
-GET /mcp/discover
-```
-
-Returns tool metadata that enables Copilot to understand available operations:
-- Tool ID and name
-- Input parameters (JSON Schema)
-- Output format (JSON Schema)
-- Description for AI interpretation
-
-### Tool Invocation Flow
-```
-Copilot                    Extension                Server
-   │                          │                        │
-   │  Interpret user prompt   │                        │
-   │──────────────────────────→                        │
-   │                          │                        │
-   │                          │  Discover tools        │
-   │                          │──────────────────────→│
-   │                          │←──────────────────────│
-   │                          │  Tool metadata         │
-   │                          │                        │
-   │  Execute tool            │                        │
-   │  (wbs.createTask)        │                        │
-   │──────────────────────────→                        │
-   │                          │  POST /api/wbs/...    │
-   │                          │──────────────────────→│
-   │                          │←──────────────────────│
-   │                          │  Result                │
-   │←──────────────────────────                        │
-   │  Display result          │                        │
-```
+ツール呼び出しは `tools/call` 経由で `name` と `arguments` を渡します。結果は `result.content[0].text` に JSON 文字列またはメッセージとして返ります。
 
 ## Error Handling
 
-### Client-side (Extension)
-- Network errors: Show user-friendly messages
-- Timeout: Retry with exponential backoff
-- Invalid responses: Log and notify user
+クライアント（拡張）側
+- 送受信のパース失敗やタイムアウトは OutputChannel に記録し、UI に通知
 
-### Server-side (API)
-- 400 Bad Request: Invalid parameters
-- 404 Not Found: Entity doesn't exist
-- 409 Conflict: Version mismatch or cycle detected
-- 500 Internal Server Error: Unexpected errors
-
-All errors return JSON:
-```json
-{
-  "error": "Human-readable error message"
-}
-```
+サーバ側
+- JSON-RPC エラーは `error` に格納
+- ツール結果の論理エラーは `content[0].text` に `❌` プレフィックス付きのメッセージで返却
 
 ## Testing Strategy
 
-### Unit Tests
-- Repository layer (CRUD operations)
-- Cycle detection algorithm
-- Version control logic
+ユニットテスト
+- リポジトリ CRUD、タスク移動の検証（循環防止）、楽観ロック
 
-### Integration Tests
-- API endpoints (request/response)
-- SSE streaming
-- Database transactions
-
-### E2E Tests
-- Extension activation
-- Server spawning
-- TreeView population
-- Webview interaction
+統合/E2E
+- 拡張の起動・サーバ spawn・TreeView 描画・Webview 編集/保存
 
 ## Development Workflow
 
-1. Make changes to TypeScript files
-2. Run `npm run build` to compile
-3. Press F5 in VS Code to launch Extension Development Host
-4. Test in the development environment
-5. Use Output channel "MCP-WBS" for debugging
-6. Check server logs in the terminal
+1. TypeScript を編集
+2. `npm run build` でコンパイル
+3. VS Code で F5（Extension Development Host を起動）
+4. Extension 側 Output channel「MCP-WBS」でログ確認
+5. サーバ側ログは stderr（同 Output に転送）
 
 ## Deployment
 
-The extension is designed to be packaged as a `.vsix` file:
+拡張は `.vsix` としてパッケージ可能です。
 
-```bash
-npm install -g vsce
+（参考）vsce でのパッケージング:
+```
 vsce package
 ```
-
-This creates a `.vsix` file that can be installed in VS Code or published to the marketplace.
+生成された `.vsix` を VS Code にインストールするか、マーケットプレースに公開します。
