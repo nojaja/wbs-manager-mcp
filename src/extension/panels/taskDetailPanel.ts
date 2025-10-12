@@ -32,6 +32,7 @@ export class TaskDetailPanel {
     private _task: Task | null = null;
     private wbsService?: WBSService;
     private mcpClient?: MCPClient;
+    private _extensionUri?: vscode.Uri;
 
     /**
      * パネル生成・表示処理
@@ -63,7 +64,10 @@ export class TaskDetailPanel {
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
-                localResourceRoots: [extensionUri]
+                localResourceRoots: [
+                    extensionUri,
+                    vscode.Uri.joinPath(extensionUri, 'dist', 'webview')
+                ]
             }
         );
 
@@ -81,6 +85,7 @@ export class TaskDetailPanel {
      */
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, serviceOrClient: WBSService | MCPClient) {
         this._panel = panel;
+        this._extensionUri = extensionUri;
         this._taskId = taskId;
         // 処理概要: 注入オブジェクトが MCPClient か WBSService かを判定して保持
         // 実装理由: 互換性を保つためにどちらの API もサポートする
@@ -153,7 +158,7 @@ export class TaskDetailPanel {
                 } catch (e) {
                     // サジェスト取得失敗時はログを残さず処理を続行
                 }
-                this._panel.webview.html = this.getHtmlForWebview(this._task, artifacts);
+                this._panel.webview.html = this.getHtmlForWebview(this._task, artifacts, this._extensionUri);
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load task: ${error}`);
@@ -248,72 +253,7 @@ export class TaskDetailPanel {
 
 
 
-    /**
-     * 成果物割当のテキスト整形
-    * 割当配列をartifactTitle[:CRUD]形式の改行区切り文字列へ変換する
-    * なぜ必要か: Webviewフォームへの初期値表示と編集容易性を両立させるため
-     * @param assignments 成果物割当
-     * @returns 改行区切り文字列
-     */
-    private formatArtifactAssignments(assignments?: TaskArtifactAssignment[]): string {
-        if (!Array.isArray(assignments) || assignments.length === 0) {
-            return '';
-        }
-
-        return assignments
-            .slice()
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            .map((assignment) => {
-                const artifactTitle = assignment.artifact?.title || assignment.artifact_id || assignment.artifact?.id || '';
-                const crud = assignment.crudOperations ? `:${assignment.crudOperations}` : '';
-                return `${artifactTitle}${crud}`;
-            })
-            .join('\n');
-    }
-
-    /**
-     * 成果物割当のサマリー生成
-    * 割当のID/CRUD/タイトル/URIを人が読みやすい1行文字列の配列にする
-    * なぜ必要か: 詳細入力欄とは別に、視認性の高い概要表示を提供するため
-     * @param assignments 成果物割当
-     * @returns 人が読みやすいサマリー
-     */
-    private summarizeArtifactAssignments(assignments?: TaskArtifactAssignment[]): string[] {
-        if (!Array.isArray(assignments) || assignments.length === 0) {
-            return [];
-        }
-
-        return assignments
-            .slice()
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            .map((assignment) => {
-                const artifactId = assignment.artifact_id || assignment.artifact?.id || '';
-                const crud = assignment.crudOperations ? ` | CRUD: ${assignment.crudOperations}` : '';
-                const title = assignment.artifact?.title ? ` | ${assignment.artifact.title}` : '';
-                const uri = assignment.artifact?.uri ? ` | ${assignment.artifact.uri}` : '';
-                return `${artifactId}${crud}${title}${uri}`.trim();
-            });
-    }
-
-    /**
-     * 完了条件の整形
-    * 完了条件配列を改行区切りのテキストに変換する
-    * なぜ必要か: Webviewフォームへの初期表示・編集を簡便にするため
-     * @param conditions 完了条件
-     * @returns 改行区切り文字列
-     */
-    private formatCompletionConditions(conditions?: TaskCompletionCondition[]): string {
-        if (!Array.isArray(conditions) || conditions.length === 0) {
-            return '';
-        }
-
-        return conditions
-            .slice()
-            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-            .map((condition) => condition.description ?? '')
-            .filter((description) => description.length > 0)
-            .join('\n');
-    }
+    // NOTE: formatting and summary helpers removed — webview bundle implements UI parsing/formatting.
 
     /**
      * Webview用HTML生成処理
@@ -321,339 +261,30 @@ export class TaskDetailPanel {
      * なぜ必要か: WebviewでリッチなUIを動的に生成するため
      * @param task タスク情報
      * @param artifacts 成果物一覧（サジェストに利用される）
+     * @param extensionUri
      * @returns HTML文字列
      */
-    private getHtmlForWebview(task: Task, artifacts: Artifact[] = []): string {
-        const deliverablesText = this.formatArtifactAssignments(task.deliverables);
-        const prerequisitesText = this.formatArtifactAssignments(task.prerequisites);
-        const completionText = this.formatCompletionConditions(task.completionConditions);
-        const deliverablesSummary = this.summarizeArtifactAssignments(task.deliverables);
-        const prerequisitesSummary = this.summarizeArtifactAssignments(task.prerequisites);
-        const safeTitle = this.escapeHtml(task.title ?? '');
-        const safeDescription = this.escapeHtml(task.description ?? '');
-        const safeAssignee = this.escapeHtml(task.assignee ?? '');
-        const safeEstimate = this.escapeHtml(task.estimate ?? '');
-        const safeDeliverablesText = this.escapeHtml(deliverablesText);
-        const safePrerequisitesText = this.escapeHtml(prerequisitesText);
-        const safeCompletionText = this.escapeHtml(completionText);
-        const safeTaskId = this.escapeHtml(task.id);
-        const safeVersion = this.escapeHtml(String(task.version));
-
-        // build datalist markup from artifacts so suggestions are available in static HTML
-        const datalistHtml = (artifacts || [])
-            .map(a => `<option value="${this.escapeHtml(a.title || '')}">${this.escapeHtml(a.id || '')}</option>`)
-            .join('');
-        const datalistMarkup = `<datalist id="artifactList">${datalistHtml}</datalist>`;
-
-        return `<!DOCTYPE html>
+        private getHtmlForWebview(task: Task, artifacts: Artifact[] = [], extensionUri?: vscode.Uri): string {
+                // Always load the built webview bundle and inject the initial payload.
+                const webview = this._panel.webview;
+                const baseUri = extensionUri ?? this._extensionUri!;
+                const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(baseUri, 'dist', 'webview', 'task.bundle.js'));
+                const payload = JSON.stringify({ task, artifacts });
+                return `<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Task Detail</title>
-    <style>
-        body {
-            padding: 20px;
-            font-family: var(--vscode-font-family);
-            color: var(--vscode-foreground);
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, textarea, select {
-            width: 100%;
-            padding: 8px;
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            box-sizing: border-box;
-        }
-        textarea {
-            min-height: 80px;
-            font-family: var(--vscode-font-family);
-        }
-        button {
-            padding: 8px 16px;
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        button:hover {
-            background: var(--vscode-button-hoverBackground);
-        }
-        .readonly {
-            opacity: 0.7;
-        }
-        kbd {
-            background: var(--vscode-keybindingLabel-background);
-            color: var(--vscode-keybindingLabel-foreground);
-            border: 1px solid var(--vscode-keybindingLabel-border);
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-family: monospace;
-            font-size: 0.85em;
-        }
-        .hint {
-            margin-top: 4px;
-            color: var(--vscode-descriptionForeground);
-            font-size: 0.85em;
-        }
-        .artifact-list {
-            margin: 8px 0 0;
-            padding-left: 18px;
-            color: var(--vscode-descriptionForeground);
-            font-size: 0.85em;
-        }
-    </style>
+    <style>body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:12px}</style>
 </head>
 <body>
-    ${datalistMarkup}
-    <h2>Task Details</h2>
-    <form id="taskForm">
-        <div class="form-group">
-            <label for="title">Title *</label>
-            <input type="text" id="title" name="title" required value="${safeTitle}">
-        </div>
-
-        <div class="form-group">
-            <label for="description">Description</label>
-            <textarea id="description" name="description">${safeDescription}</textarea>
-        </div>
-
-        
-
-        <div class="form-group">
-            <label for="assignee">Assignee</label>
-            <input type="text" id="assignee" name="assignee" value="${safeAssignee}">
-        </div>
-
-        <div class="form-group">
-            <label for="status">Status</label>
-            <select id="status" name="status">
-                <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Pending</option>
-                <option value="in-progress" ${task.status === 'in-progress' ? 'selected' : ''}>In Progress</option>
-                <option value="completed" ${task.status === 'completed' ? 'selected' : ''}>Completed</option>
-                <option value="blocked" ${task.status === 'blocked' ? 'selected' : ''}>Blocked</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="estimate">Estimate</label>
-            <input type="text" id="estimate" name="estimate" placeholder="e.g., 3d, 5h" value="${safeEstimate}">
-        </div>
-
-        <div class="form-group">
-            <label for="deliverables">成果物 (artifactId[:CRUD])</label>
-            <textarea id="deliverables" name="deliverables" placeholder="artifact-id:CUD">${safeDeliverablesText}</textarea>
-            <p class="hint">CRUDは任意です（例: spec-doc:UD）。省略すると参照のみの扱いになります。</p>
-            <div style="margin-top:6px; display:flex; gap:6px;">
-                <input list="artifactList" id="deliverableSuggest" placeholder="suggest artifact by title or id" style="flex:1" />
-                <button type="button" id="addDeliverable">Add</button>
-            </div>
-            <ul id="deliverablesSummary" class="artifact-list"></ul>
-        </div>
-
-        <div class="form-group">
-            <label for="prerequisites">前提条件 (artifactId[:CRUD])</label>
-            <textarea id="prerequisites" name="prerequisites" placeholder="artifact-id">${safePrerequisitesText}</textarea>
-            <p class="hint">このタスクの実行前に必要な成果物を1行ずつ列挙してください。</p>
-            <div style="margin-top:6px; display:flex; gap:6px;">
-                <input list="artifactList" id="prerequisiteSuggest" placeholder="suggest artifact by title or id" style="flex:1" />
-                <button type="button" id="addPrerequisite">Add</button>
-            </div>
-            <ul id="prerequisitesSummary" class="artifact-list"></ul>
-        </div>
-
-        <div class="form-group">
-            <label for="completionConditions">完了条件 (1行につき1条件)</label>
-            <textarea id="completionConditions" name="completionConditions" placeholder="例: 仕様書のレビュー承認">${safeCompletionText}</textarea>
-            <p class="hint">完了条件は記入順に評価されます。</p>
-        </div>
-
-        <div class="form-group readonly">
-            <label>Task ID</label>
-            <input type="text" value="${safeTaskId}" readonly>
-        </div>
-
-        <div class="form-group readonly">
-            <label>Version</label>
-            <input type="text" value="${safeVersion}" readonly>
-        </div>
-
-        <button type="submit" title="Save (Ctrl+S)">Save</button>
-        <p style="margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em;">
-            💡 Tip: Press <kbd>Ctrl+S</kbd> to save quickly
-        </p>
-    </form>
-
-    <script>
-        const vscode = acquireVsCodeApi();
-
-        // Task data from server (safely passed as JSON)
-        const taskData = ${JSON.stringify(task)};
-        const initialDeliverables = ${JSON.stringify(deliverablesText)};
-        const initialPrerequisites = ${JSON.stringify(prerequisitesText)};
-        const initialCompletionConditions = ${JSON.stringify(completionText)};
-        const deliverablesSummary = ${JSON.stringify(deliverablesSummary)};
-        const prerequisitesSummary = ${JSON.stringify(prerequisitesSummary)};
-        
-        // Create title -> id mapping for artifacts
-        const artifactTitleToId = new Map();
-        if (taskData.deliverables) {
-            taskData.deliverables.forEach(d => {
-                if (d.artifact && d.artifact.title && d.artifact.id) {
-                    artifactTitleToId.set(d.artifact.title, d.artifact.id);
-                }
-            });
-        }
-        if (taskData.prerequisites) {
-            taskData.prerequisites.forEach(p => {
-                if (p.artifact && p.artifact.title && p.artifact.id) {
-                    artifactTitleToId.set(p.artifact.title, p.artifact.id);
-                }
-            });
-        }
-
-        // Initialize form fields with task data
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('Task Detail Webview loaded2');
-            document.getElementById('title').value = taskData.title || '';
-            document.getElementById('description').value = taskData.description || '';
-            document.getElementById('assignee').value = taskData.assignee || '';
-            document.getElementById('status').value = taskData.status || 'pending';
-            document.getElementById('estimate').value = taskData.estimate || '';
-            document.getElementById('deliverables').value = initialDeliverables;
-            document.getElementById('prerequisites').value = initialPrerequisites;
-            document.getElementById('completionConditions').value = initialCompletionConditions;
-
-            renderSummary('deliverablesSummary', deliverablesSummary, '成果物はまだ登録されていません。');
-            renderSummary('prerequisitesSummary', prerequisitesSummary, '前提条件はまだ登録されていません。');
-            // wire add buttons for suggestions
-            const addDeliverableBtn = document.getElementById('addDeliverable');
-            const deliverableSuggest = document.getElementById('deliverableSuggest');
-            if (addDeliverableBtn && deliverableSuggest) {
-                addDeliverableBtn.addEventListener('click', () => {
-                    const val = (deliverableSuggest.value || '').trim();
-                    if (!val) return;
-                    const textarea = document.getElementById('deliverables');
-                    if (textarea) {
-                        textarea.value = (textarea.value ? textarea.value + '\\n' : '') + val;
-                        deliverableSuggest.value = '';
-                    }
-                });
-            }
-
-            const addPrereqBtn = document.getElementById('addPrerequisite');
-            const prereqSuggest = document.getElementById('prerequisiteSuggest');
-            if (addPrereqBtn && prereqSuggest) {
-                addPrereqBtn.addEventListener('click', () => {
-                    const val = (prereqSuggest.value || '').trim();
-                    if (!val) return;
-                    const textarea = document.getElementById('prerequisites');
-                    if (textarea) {
-                        textarea.value = (textarea.value ? textarea.value + '\\n' : '') + val;
-                        prereqSuggest.value = '';
-                    }
-                });
-            }
-        });
-
-        function renderSummary(elementId, lines, emptyMessage) {
-            const container = document.getElementById(elementId);
-            if (!container) {
-                return;
-            }
-            container.innerHTML = '';
-            if (!Array.isArray(lines) || lines.length === 0) {
-                const li = document.createElement('li');
-                li.textContent = emptyMessage;
-                container.appendChild(li);
-                return;
-            }
-            lines.forEach((line) => {
-                const li = document.createElement('li');
-                li.textContent = line;
-                container.appendChild(li);
-            });
-        }
-
-        function parseArtifactText(value) {
-            return value
-                .split('\\n')
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0)
-                .map((line) => {
-                    const parts = line.split(':');
-                    const artifactTitleOrId = parts.shift()?.trim() ?? '';
-                    const crud = parts.join(':').trim();
-                    
-                    // Try to convert title to ID, fallback to original value if not found
-                    const artifactId = artifactTitleToId.get(artifactTitleOrId) || artifactTitleOrId;
-                    
-                    return {
-                        artifactId,
-                        crudOperations: crud.length > 0 ? crud : undefined
-                    };
-                })
-                .filter((entry) => entry.artifactId.length > 0);
-        }
-
-        function parseConditionsText(value) {
-            return value
-                .split('\\n')
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0)
-                .map((line) => ({ description: line }));
-        }
-
-        // Save function
-        function saveTask() {
-            const deliverables = parseArtifactText(document.getElementById('deliverables').value);
-            const prerequisites = parseArtifactText(document.getElementById('prerequisites').value);
-            const completionConditions = parseConditionsText(document.getElementById('completionConditions').value);
-
-            const formData = {
-                title: document.getElementById('title').value,
-                description: document.getElementById('description').value,
-                assignee: document.getElementById('assignee').value,
-                status: document.getElementById('status').value,
-                estimate: document.getElementById('estimate').value,
-                deliverables,
-                prerequisites,
-                completionConditions
-            };
-            
-            console.log('Sending form data:', formData);
-            vscode.postMessage({
-                command: 'save',
-                data: formData
-            });
-        }
-
-        // Form submit event
-        document.getElementById('taskForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveTask();
-        });
-
-        // Ctrl+S keyboard shortcut
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault(); // Prevent default browser save dialog
-                saveTask();
-            }
-        });
-    </script>
+    <div id="app"></div>
+    <script>window.__TASK_PAYLOAD__ = ${payload};</script>
+    <script src="${scriptUri}"></script>
 </body>
 </html>`;
-    }
+        }
 
     /**
      * HTMLエスケープ処理

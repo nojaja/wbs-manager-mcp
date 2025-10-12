@@ -17,6 +17,7 @@ export class ArtifactDetailPanel {
     private _artifact: Artifact | null = null;
     private wbsService?: WBSService;
     private mcpClient?: MCPClient;
+    private _extensionUri?: vscode.Uri;
 
     /**
      * パネル生成・表示処理
@@ -46,7 +47,10 @@ export class ArtifactDetailPanel {
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
-                localResourceRoots: [extensionUri]
+                    localResourceRoots: [
+                        extensionUri,
+                        vscode.Uri.joinPath(extensionUri, 'dist', 'webview')
+                    ]
             }
         );
 
@@ -64,6 +68,7 @@ export class ArtifactDetailPanel {
      */
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, serviceOrClient: WBSService | MCPClient) {
         this._panel = panel;
+        this._extensionUri = extensionUri;
         this._artifactId = artifactId;
         // 処理概要: 注入された serviceOrClient が MCPClient か WBSService かを判定して格納
         // 実装理由: 既存の互換性を維持し、どちらの API もサポートするため
@@ -121,7 +126,7 @@ export class ArtifactDetailPanel {
                 : await this.mcpClient!.getArtifact(this._artifactId);
             if (this._artifact) {
                 this._panel.title = `Artifact: ${this._artifact.title}`;
-                this._panel.webview.html = this.getHtmlForWebview(this._artifact);
+                this._panel.webview.html = this.getHtmlForWebview(this._artifact, this._extensionUri);
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load artifact: ${error}`);
@@ -182,151 +187,29 @@ export class ArtifactDetailPanel {
      * 成果物情報をもとに詳細画面のHTMLを生成する
      * なぜ必要か: WebviewでリッチなUIを動的に生成するため
      * @param artifact 成果物情報
+     * @param extensionUri
      * @returns HTML文字列
      */
-    private getHtmlForWebview(artifact: Artifact): string {
-        const safeTitle = this.escapeHtml(artifact.title ?? '');
-        const safeUri = this.escapeHtml(artifact.uri ?? '');
-        const safeDescription = this.escapeHtml(artifact.description ?? '');
-        const safeArtifactId = this.escapeHtml(artifact.id);
-        const safeVersion = this.escapeHtml(String(artifact.version));
-
-        return `<!DOCTYPE html>
+        private getHtmlForWebview(artifact: Artifact, extensionUri?: vscode.Uri): string {
+                const webview = this._panel.webview;
+                const baseUri = extensionUri ?? this._extensionUri!;
+                const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(baseUri, 'dist', 'webview', 'artifact.bundle.js'));
+                const payload = JSON.stringify({ artifact });
+                return `<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Artifact Detail</title>
-    <style>
-        body {
-            padding: 20px;
-            font-family: var(--vscode-font-family);
-            color: var(--vscode-foreground);
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, textarea {
-            width: 100%;
-            padding: 8px;
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            box-sizing: border-box;
-        }
-        textarea {
-            min-height: 80px;
-            font-family: var(--vscode-font-family);
-        }
-        button {
-            padding: 8px 16px;
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        button:hover {
-            background: var(--vscode-button-hoverBackground);
-        }
-        .readonly {
-            opacity: 0.7;
-        }
-        kbd {
-            background: var(--vscode-keybindingLabel-background);
-            color: var(--vscode-keybindingLabel-foreground);
-            border: 1px solid var(--vscode-keybindingLabel-border);
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-family: monospace;
-            font-size: 0.85em;
-        }
-    </style>
+    <style>body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);padding:12px}</style>
 </head>
 <body>
-    <h2>Artifact Details</h2>
-    <form id="artifactForm">
-        <div class="form-group">
-            <label for="title">Title *</label>
-            <input type="text" id="title" name="title" required value="${safeTitle}">
-        </div>
-
-        <div class="form-group">
-            <label for="uri">URI</label>
-            <input type="text" id="uri" name="uri" placeholder="例: src/specs/design.md" value="${safeUri}">
-        </div>
-
-        <div class="form-group">
-            <label for="description">Description</label>
-            <textarea id="description" name="description" placeholder="成果物の説明">${safeDescription}</textarea>
-        </div>
-
-        <div class="form-group readonly">
-            <label>Artifact ID</label>
-            <input type="text" value="${safeArtifactId}" readonly>
-        </div>
-
-        <div class="form-group readonly">
-            <label>Version</label>
-            <input type="text" value="${safeVersion}" readonly>
-        </div>
-
-        <button type="submit" title="Save (Ctrl+S)">Save</button>
-        <p style="margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em;">
-            💡 Tip: Press <kbd>Ctrl+S</kbd> to save quickly
-        </p>
-    </form>
-
-    <script>
-        const vscode = acquireVsCodeApi();
-
-        // Artifact data from server (safely passed as JSON)
-        const artifactData = ${JSON.stringify(artifact)};
-
-        // Initialize form fields with artifact data
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('title').value = artifactData.title || '';
-            document.getElementById('uri').value = artifactData.uri || '';
-            document.getElementById('description').value = artifactData.description || '';
-        });
-
-        // Save function
-        function saveArtifact() {
-            const formData = {
-                title: document.getElementById('title').value,
-                uri: document.getElementById('uri').value,
-                description: document.getElementById('description').value
-            };
-            
-            console.log('Sending form data:', formData);
-            vscode.postMessage({
-                command: 'save',
-                data: formData
-            });
-        }
-
-        // Form submit event
-        document.getElementById('artifactForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveArtifact();
-        });
-
-        // Ctrl+S keyboard shortcut
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 's') {
-                e.preventDefault(); // Prevent default browser save dialog
-                saveArtifact();
-            }
-        });
-    </script>
+    <div id="app"></div>
+    <script>window.__ARTIFACT_PAYLOAD__ = ${payload};</script>
+    <script src="${scriptUri}"></script>
 </body>
 </html>`;
-    }
+        }
 
     /**
      * HTMLエスケープ処理
