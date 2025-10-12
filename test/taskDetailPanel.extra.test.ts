@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../src/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../src/extension/panels/taskDetailPanel';
 
 // We will mock mcpClient.updateTask and mcpClient.getTask to simulate saveTask flows
 

@@ -1,5 +1,5 @@
-import { TaskDetailPanel } from '../src/panels/taskDetailPanel';
-import { MCPClient } from '../src/mcpClient';
+import { TaskDetailPanel } from '../src/extension/panels/taskDetailPanel';
+import { MCPClient } from '../src/extension/mcpClient';
 
 // Minimal smoke test: call getHtmlForWebview via creating instance using mocked panel
 // We avoid complex VSCode APIs by directly testing the HTML generator method via a small wrapper class.

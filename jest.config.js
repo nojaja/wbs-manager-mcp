@@ -23,7 +23,7 @@ module.exports = {
       lines: 71,
       statements: 71,
     },
-    './src/panels/taskDetailPanel.ts': {
+    './src/extension/panels/taskDetailPanel.ts': {
       branches: 45,
       functions: 66,
       lines: 82,

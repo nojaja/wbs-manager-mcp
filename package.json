@@ -33,7 +33,7 @@
     "onView:wbsTree",
     "onView:artifactTree"
   ],
-  "main": "./out/extension.js",
+  "main": "./out/extension/extension.js",
   "contributes": {
     "commands": [
       {
@@ -151,7 +151,7 @@
     "test": "npm run lint && jest --config=jest.config.js --coverage",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
-    "start-server-dev": "node ./out/server/index.js",
+    "start-server-dev": "node ./out/mcpServer/index.js",
     "start-extension-dev": "code --extensionDevelopmentPath=."
   },
   "devDependencies": {

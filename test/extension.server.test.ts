@@ -3,7 +3,7 @@
 
 import { jest } from '@jest/globals';
 import * as path from 'path';
-import { ServerService } from '../src/server/ServerService';
+import { ServerService } from '../src/extension/server/ServerService';
 
 jest.mock('fs', () => ({
   existsSync: jest.fn(),

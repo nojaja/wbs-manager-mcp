@@ -1,4 +1,4 @@
-import { WBSTreeProvider } from '../src/views/wbsTree';
+import { WBSTreeProvider } from '../src/extension/views/wbsTree';
 import * as vscode from 'vscode';
 
 const fakeClient: any = {
@@ -130,5 +130,220 @@ describe('WBSTreeProvider', () => {
     expect(fakeClient.moveTask).toHaveBeenCalledWith('t1', null);
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  test('deleteTask warns when no selection', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    const result = await provider.deleteTask();
+    expect(result.success).toBe(false);
+    expect(warningSpy).toHaveBeenCalledWith('削除するタスクを選択してください。');
+    warningSpy.mockRestore();
+  });
+
+  test('deleteTask warns when invalid selection', async () => {
+    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    const result = await provider.deleteTask({ contextValue: 'project' } as any);
+    expect(result.success).toBe(false);
+    expect(warningSpy).toHaveBeenCalledWith('削除するタスクを選択してください。');
+    warningSpy.mockRestore();
+  });
+
+  test('deleteTask cancels when user does not confirm', async () => {
+    const warningMessageSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined);
+    const taskItem: any = { 
+      contextValue: 'task', 
+      task: { id: 't1', title: 'Test Task' } 
+    };
+    
+    const result = await provider.deleteTask(taskItem);
+    
+    expect(result.success).toBe(false);
+    expect(warningMessageSpy).toHaveBeenCalledWith(
+      '選択したタスクとその子タスクを削除します。よろしいですか？',
+      { modal: true },
+      '削除'
+    );
+    warningMessageSpy.mockRestore();
+  });
+
+  test('deleteTask executes deletion when confirmed', async () => {
+    const warningMessageSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('削除' as any);
+    const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
+    const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
+    
+    fakeClient.deleteTask.mockResolvedValue({ success: true });
+    
+    const taskItem: any = { 
+      contextValue: 'task', 
+      task: { id: 't1', title: 'Test Task' } 
+    };
+    
+    const result = await provider.deleteTask(taskItem);
+    
+    expect(result.success).toBe(true);
+    expect(fakeClient.deleteTask).toHaveBeenCalledWith('t1');
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalledWith('タスクを削除しました。');
+    
+    warningMessageSpy.mockRestore();
+    infoSpy.mockRestore();
+    refreshSpy.mockRestore();
+  });
+
+  test('deleteTask handles API error', async () => {
+    const warningMessageSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('削除' as any);
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    
+    fakeClient.deleteTask.mockResolvedValue({ success: false, error: 'Task not found' });
+    
+    const taskItem: any = { 
+      contextValue: 'task', 
+      task: { id: 't1', title: 'Test Task' } 
+    };
+    
+    const result = await provider.deleteTask(taskItem);
+    
+    expect(result.success).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith('タスクの削除に失敗しました: Task not found');
+    
+    warningMessageSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  test('deleteTask handles exception', async () => {
+    const warningMessageSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('削除' as any);
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    
+    fakeClient.deleteTask.mockRejectedValue(new Error('Network error'));
+    
+    const taskItem: any = { 
+      contextValue: 'task', 
+      task: { id: 't1', title: 'Test Task' } 
+    };
+    
+    const result = await provider.deleteTask(taskItem);
+    
+    expect(result.success).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith('タスクの削除中にエラーが発生しました: Network error');
+    
+    warningMessageSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  test('handleTaskDrop does nothing when no target', async () => {
+    await provider.handleTaskDrop('t1', undefined as any);
+    expect(fakeClient.getTask).not.toHaveBeenCalled();
+  });
+
+  test('handleTaskDrop handles getTask error', async () => {
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    fakeClient.getTask.mockResolvedValue(null);
+    
+    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 't2' } } as any);
+    
+    expect(errorSpy).toHaveBeenCalledWith('移動対象のタスクを取得できませんでした。');
+    errorSpy.mockRestore();
+  });
+
+  test('handleTaskDrop handles move task API error', async () => {
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    fakeClient.getTask.mockResolvedValue({
+      id: 't1',
+      parent_id: 'old',
+      childCount: 0
+    });
+    fakeClient.moveTask.mockResolvedValue({ success: false, error: 'Move failed' });
+    
+    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 't2', childCount: 0 } } as any);
+    
+    expect(errorSpy).toHaveBeenCalledWith('タスクの移動に失敗しました: Move failed');
+    errorSpy.mockRestore();
+  });
+
+  test('handleTaskDrop handles exception during move', async () => {
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    fakeClient.getTask.mockRejectedValue(new Error('Connection error'));
+    
+    await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 't2' } } as any);
+    
+    expect(errorSpy).toHaveBeenCalledWith('タスクの移動中にエラーが発生しました: Connection error');
+    errorSpy.mockRestore();
+  });
+
+  test('getChildren returns tasks for root', async () => {
+    fakeClient.listTasks.mockResolvedValue([
+      { id: 't1', title: 'Task 1', status: 'pending', childCount: 0 },
+      { id: 't2', title: 'Task 2', status: 'in-progress', childCount: 1 }
+    ]);
+    
+    const children = await provider.getChildren();
+    
+    expect(children).toHaveLength(2);
+    expect(children[0].label).toBe('Task 1');
+    expect(children[1].label).toBe('Task 2');
+    expect(fakeClient.listTasks).toHaveBeenCalledWith(null);
+  });
+
+  test('getChildren returns child tasks for task element', async () => {
+    const parentTask = { id: 'parent', title: 'Parent', childCount: 2 };
+    const parentElement: any = { 
+      contextValue: 'task', 
+      task: parentTask 
+    };
+    
+    fakeClient.listTasks.mockResolvedValue([
+      { id: 'child1', title: 'Child 1', status: 'pending', childCount: 0 },
+      { id: 'child2', title: 'Child 2', status: 'completed', childCount: 0 }
+    ]);
+    
+    const children = await provider.getChildren(parentElement);
+    
+    expect(children).toHaveLength(2);
+    expect(children[0].label).toBe('Child 1');
+    expect(children[1].label).toBe('Child 2');
+    expect(fakeClient.listTasks).toHaveBeenCalledWith('parent');
+  });
+
+  test('getChildren returns empty array for non-task element', async () => {
+    const projectElement: any = { contextValue: 'project', itemId: 'p1' };
+    
+    const children = await provider.getChildren(projectElement);
+    
+    expect(children).toHaveLength(0);
+  });
+
+  test('getTasks handles API error', async () => {
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    fakeClient.listTasks.mockRejectedValue(new Error('API Error'));
+    
+    const tasks = await (provider as any).getTasks();
+    
+    expect(tasks).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalledWith('Failed to fetch tasks: Error: API Error');
+    errorSpy.mockRestore();
+  });
+
+  test('createTask handles API error response', async () => {
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    fakeClient.createTask.mockResolvedValue({ success: false, error: 'Creation failed' });
+    
+    const projectItem: any = { contextValue: 'project', itemId: 'p1' };
+    const result = await provider.createTask(projectItem);
+    
+    expect(result.success).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith('タスクの作成に失敗しました: Creation failed');
+    errorSpy.mockRestore();
+  });
+
+  test('createTask handles exception', async () => {
+    const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
+    fakeClient.createTask.mockRejectedValue(new Error('Network error'));
+    
+    const projectItem: any = { contextValue: 'project', itemId: 'p1' };
+    const result = await provider.createTask(projectItem);
+    
+    expect(result.success).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith('タスクの作成中にエラーが発生しました: Network error');
+    errorSpy.mockRestore();
   });
 });

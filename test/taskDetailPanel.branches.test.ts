@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../src/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../src/extension/panels/taskDetailPanel';
 import * as vscode from 'vscode';
 
 describe('TaskDetailPanel branches', () => {

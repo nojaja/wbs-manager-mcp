@@ -1,4 +1,4 @@
-import { MCPClient } from '../src/mcpClient';
+import { MCPClient } from '../src/extension/mcpClient';
 
 describe('MCPClient extra tests', () => {
   let client: MCPClient;

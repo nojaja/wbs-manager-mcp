@@ -194,7 +194,7 @@ async function startLocalServer(context: vscode.ExtensionContext) {
     }
 
     // サーバ実行ファイルのパスを決定
-    const serverPath = path.join(context.extensionPath, 'out', 'server', 'index.js');
+    const serverPath = path.join(context.extensionPath, 'out', 'mcpServer', 'index.js');
     // ワークスペースルートを決定
     const workspaceFolders = vscode.workspace.workspaceFolders;
     const workspaceRoot = workspaceFolders && workspaceFolders.length > 0

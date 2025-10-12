@@ -1,4 +1,4 @@
-import { WBSRepository, initializeDatabase } from '../src/server/db-simple';
+import { WBSRepository, initializeDatabase } from '../src/mcpServer/db-simple';
 import fs from 'fs';
 import path from 'path';
 

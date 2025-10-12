@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../src/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../src/extension/panels/taskDetailPanel';
 
 describe('TaskDetailPanel HTML and escapeHtml', () => {
   const fakePanel: any = {

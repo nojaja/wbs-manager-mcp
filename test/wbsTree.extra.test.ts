@@ -1,5 +1,5 @@
 
-import { WBSTreeProvider } from '../src/views/wbsTree';
+import { WBSTreeProvider } from '../src/extension/views/wbsTree';
 
 describe('WBSTreeProvider extra tests', () => {
   const fakeClient: any = {

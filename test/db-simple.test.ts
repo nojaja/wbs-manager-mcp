@@ -5,7 +5,7 @@ import {
   Artifact,
   TaskArtifactAssignment,
   TaskCompletionCondition
-} from '../src/server/db-simple';
+} from '../src/mcpServer/db-simple';
 import fs from 'fs';
 import path from 'path';
 
@@ -314,8 +314,8 @@ describe('db-simple', () => {
         process.env.WBS_MCP_DATA_DIR = '.';
         
         // db-simpleモジュールを再ロードして新しい環境変数を反映
-        delete require.cache[require.resolve('../src/server/db-simple')];
-        const { WBSRepository: TestRepository } = require('../src/server/db-simple');
+        delete require.cache[require.resolve('../src/mcpServer/db-simple')];
+        const { WBSRepository: TestRepository } = require('../src/mcpServer/db-simple');
         
         // 相対パスが正しく現在の作業ディレクトリを基準に解決されることを確認
         // 実際のパス解決はresolveDatabasePath内で行われるため、
