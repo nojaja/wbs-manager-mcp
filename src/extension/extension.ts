@@ -41,19 +41,25 @@ export async function activate(context: vscode.ExtensionContext) {
     mcpClient = new MCPClient(outputChannel);
     serverService = new ServerService(outputChannel);
     wbsService = new WBSService(mcpClient);
+    // Create providers and inject them into the service
+    const wbsProvider = new (await import('./views/wbsTree')).WBSTreeProvider(wbsService as any);
+    const artifactProvider = new (await import('./views/artifactTree')).ArtifactTreeProvider(wbsService as any);
+    wbsService.setProviders(wbsProvider, artifactProvider);
+    // Inject WBSService into MCPClient so MCPClient can delegate WBS business logic
+    mcpClient.setWbsService(wbsService);
 
     // サーバ・クライアント自動起動
     await startLocalServer(context);
 
     // ツリービュー初期化
-    const dragAndDropController = new WBSTreeDragAndDropController(wbsService.wbsProvider);
+    const dragAndDropController = new WBSTreeDragAndDropController(wbsProvider);
     const treeView = vscode.window.createTreeView('wbsTree', {
-        treeDataProvider: wbsService.wbsProvider,
+        treeDataProvider: wbsProvider,
         showCollapseAll: true,
         dragAndDropController
     });
     const artifactTreeView = vscode.window.createTreeView('artifactTree', {
-        treeDataProvider: wbsService.artifactProvider,
+        treeDataProvider: artifactProvider,
         showCollapseAll: false
     });
 
@@ -90,8 +96,8 @@ export async function activate(context: vscode.ExtensionContext) {
             : undefined);
         // 処理概要: 明示指定なければ現在の選択を編集対象とする
         // 実装理由: コンテキストメニュー/ツールバーからの実行どちらにも対応するため
-        if (target) {
-            ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, mcpClient);
+            if (target) {
+            ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, wbsService);
         }
     });
     const deleteArtifactCommand = vscode.commands.registerCommand('artifactTree.deleteArtifact', async (item?: ArtifactTreeItem) => {
@@ -110,7 +116,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // タスクノードのみ詳細パネルを開く
         // 理由: プロジェクトノードや他ノードで誤動作しないように分岐
         if (item) {
-            TaskDetailPanel.createOrShow(context.extensionUri, item.itemId, mcpClient);
+            TaskDetailPanel.createOrShow(context.extensionUri, item.itemId, wbsService);
         }
     });
 
@@ -118,7 +124,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const selected = treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined;
         const result = await wbsService.createTask(selected as any);
         if (result?.taskId) {
-            TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, mcpClient);
+            TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, wbsService);
         }
     });
 
@@ -128,7 +134,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // 処理概要: 作成成功時のみ詳細パネルを開く
         // 実装理由: 失敗時に空のパネルを開かないためのガード
         if (result?.taskId) {
-            TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, mcpClient);
+            TaskDetailPanel.createOrShow(context.extensionUri, result.taskId, wbsService);
         }
     });
 

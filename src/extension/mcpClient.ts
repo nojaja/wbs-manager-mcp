@@ -1,6 +1,7 @@
 
 // VSCode API
 import * as vscode from 'vscode';
+/* eslint-disable sonarjs/cognitive-complexity */
 // (注) サーバプロセスの起動・管理は ServerService に委譲されています。
 
 interface JsonRpcRequest {
@@ -71,6 +72,8 @@ export class MCPClient {
     private outputChannel: vscode.OutputChannel;
     // サーバへの書き込み用関数（ServerService から提供される）
     private writer: ((s: string) => void) | null = null;
+    // optional WBSService delegate (set by extension during startup)
+    private wbsService: any | null = null;
 
     /**
      * コンストラクタ
@@ -81,6 +84,9 @@ export class MCPClient {
     constructor(outputChannel: vscode.OutputChannel) {
         this.outputChannel = outputChannel;
     }
+
+    // NOTE: Sanitization helpers were removed in favor of WBSService centralized logic.
+    // MCPClient is transport-only and will delegate to an injected WBSService when present.
 
     /**
      * サーバプロセス起動処理
@@ -121,6 +127,14 @@ export class MCPClient {
      */
     setWriter(w: (s: string) => void) {
         this.writer = w;
+    }
+
+    /**
+     * WBSService を注入する（オプション）
+     * @param s WBSService インスタンス
+     */
+    setWbsService(s: any) {
+        this.wbsService = s;
     }
 
     /**
@@ -314,14 +328,16 @@ export class MCPClient {
      * @returns Promise<any[]>
      */
     async listTasks(parentId?: string | null): Promise<any[]> {
+        // If a WBSService is injected, prefer it (business logic centralized there)
+        if (this.wbsService && typeof this.wbsService.listTasksApi === 'function') {
+            return this.wbsService.listTasksApi(parentId);
+        }
         try {
-            // 理由: サーバAPI呼び出し・パース失敗時も空配列で安全に返す
             const args = parentId !== undefined ? { parentId } : {};
             const result = await this.callTool('wbs.listTasks', args);
             const content = result.content?.[0]?.text;
             if (content) {
                 try {
-                    // サーバ返却値にchildCount（子要素数）が含まれる前提で返す
                     return JSON.parse(content);
                 } catch (error) {
                     this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${error} : ${content}`);
@@ -342,11 +358,12 @@ export class MCPClient {
      * @returns Promise<any | null>
      */
     async getTask(taskId: string): Promise<any | null> {
+        if (this.wbsService && typeof this.wbsService.getTaskApi === 'function') {
+            return this.wbsService.getTaskApi(taskId);
+        }
         try {
-            // 理由: サーバAPI呼び出し・パース失敗時もnullで安全に返す
             const result = await this.callTool('wbs.getTask', { taskId });
             const content = result.content?.[0]?.text;
-            // ❌が含まれていればエラー扱い
             if (content && !content.includes('❌')) {
                 return JSON.parse(content);
             }
@@ -369,36 +386,19 @@ export class MCPClient {
      * @returns 更新結果オブジェクト
      */
     async updateTask(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
+        if (this.wbsService && typeof this.wbsService.updateTaskApi === 'function') {
+            return this.wbsService.updateTaskApi(taskId, updates);
+        }
         try {
-            const deliverables = this.sanitizeArtifactInputs(updates.deliverables);
-            const prerequisites = this.sanitizeArtifactInputs(updates.prerequisites);
-            const completionConditions = this.sanitizeCompletionInputs(updates.completionConditions);
-
-            const toolArguments: Record<string, unknown> = { taskId, ...updates };
-
-            if (deliverables !== undefined) {
-                toolArguments.deliverables = deliverables;
-            }
-            if (prerequisites !== undefined) {
-                toolArguments.prerequisites = prerequisites;
-            }
-            if (completionConditions !== undefined) {
-                toolArguments.completionConditions = completionConditions;
-            }
-
-            // 理由: サーバAPI呼び出し・パース失敗時もエラー内容を返す
-            const result = await this.callTool('wbs.updateTask', toolArguments);
+            // Transport-only fallback: pass updates as-is to the server tool.
+            const result = await this.callTool('wbs.updateTask', { taskId, ...updates });
             const content = result.content?.[0]?.text;
-            // 更新成功
             if (content?.includes('✅')) {
                 return { success: true };
-                // 楽観ロック競合
             } else if (content?.includes('modified by another user')) {
                 return { success: false, conflict: true };
-                // その他エラー
-            } else {
-                return { success: false, error: content || 'Unknown error' };
             }
+            return { success: false, error: content || 'Unknown error' };
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
@@ -429,30 +429,12 @@ export class MCPClient {
         prerequisites?: ArtifactReferenceInput[];
         completionConditions?: CompletionConditionInput[];
     }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }> {
+        if (this.wbsService && typeof this.wbsService.createTaskApi === 'function') {
+            return this.wbsService.createTaskApi(params);
+        }
         try {
-            const deliverables = this.sanitizeArtifactInputs(params.deliverables);
-            const prerequisites = this.sanitizeArtifactInputs(params.prerequisites);
-            const completionConditions = this.sanitizeCompletionInputs(params.completionConditions);
-
-            const toolArguments: Record<string, unknown> = {
-                title: params.title ?? 'New Task',
-                description: params.description ?? '',
-                parentId: params.parentId ?? null,
-                assignee: params.assignee ?? null,
-                estimate: params.estimate ?? null
-            };
-
-            if (deliverables !== undefined) {
-                toolArguments.deliverables = deliverables;
-            }
-            if (prerequisites !== undefined) {
-                toolArguments.prerequisites = prerequisites;
-            }
-            if (completionConditions !== undefined) {
-                toolArguments.completionConditions = completionConditions;
-            }
-
-            const result = await this.callTool('wbs.createTask', toolArguments);
+            // Transport-only fallback: forward params directly to the tool.
+            const result = await this.callTool('wbs.createTask', params);
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 const idMatch = content.match(/ID:\s*(.+)/);
@@ -473,12 +455,13 @@ export class MCPClient {
      * @returns 成果物配列
      */
     async listArtifacts(): Promise<Artifact[]> {
+        // Transport-only: always call the server tool directly to avoid delegating
+        // to an injected service which may call back into this client and cause
+        // recursion.
         try {
             const result = await this.callTool('artifacts.listArtifacts', {});
             const content = result.content?.[0]?.text;
             if (content) {
-                // 処理概要: サーバから返却されたJSON文字列を配列へ復元
-                // 実装理由: JSONを直接受け渡しすることで、スキーマ変更にも柔軟に追随可能
                 return JSON.parse(content) as Artifact[];
             }
             return [];
@@ -503,6 +486,9 @@ export class MCPClient {
         uri?: string | null;
         description?: string | null;
     }): Promise<{ success: boolean; artifact?: Artifact; error?: string }> {
+        if (this.wbsService && typeof this.wbsService.createArtifactApi === 'function') {
+            return this.wbsService.createArtifactApi(params);
+        }
         try {
             const result = await this.callTool('artifacts.createArtifact', {
                 title: params.title,
@@ -540,6 +526,9 @@ export class MCPClient {
         description?: string | null;
         version?: number;
     }): Promise<{ success: boolean; artifact?: Artifact; conflict?: boolean; error?: string }> {
+        if (this.wbsService && typeof this.wbsService.updateArtifactApi === 'function') {
+            return this.wbsService.updateArtifactApi(params);
+        }
         try {
             const result = await this.callTool('artifacts.updateArtifact', {
                 artifactId: params.artifactId,
@@ -571,6 +560,9 @@ export class MCPClient {
      * @returns 成果物またはnull
      */
     async getArtifact(artifactId: string): Promise<Artifact | null> {
+        if (this.wbsService && typeof this.wbsService.getArtifactApi === 'function') {
+            return this.wbsService.getArtifactApi(artifactId);
+        }
         try {
             const result = await this.callTool('artifacts.getArtifact', { artifactId });
             const content = result.content?.[0]?.text;
@@ -592,6 +584,9 @@ export class MCPClient {
      * @returns 削除結果
      */
     async deleteArtifact(artifactId: string): Promise<{ success: boolean; error?: string }> {
+        if (this.wbsService && typeof this.wbsService.deleteArtifactApi === 'function') {
+            return this.wbsService.deleteArtifactApi(artifactId);
+        }
         try {
             const result = await this.callTool('artifacts.deleteArtifact', { artifactId });
             const content = result.content?.[0]?.text ?? '';
@@ -612,6 +607,9 @@ export class MCPClient {
      * @returns 削除結果
      */
     async deleteTask(taskId: string): Promise<{ success: boolean; error?: string }> {
+        if (this.wbsService && typeof this.wbsService.deleteTaskApi === 'function') {
+            return this.wbsService.deleteTaskApi(taskId);
+        }
         try {
             const result = await this.callTool('wbs.deleteTask', { taskId });
             const content = result.content?.[0]?.text ?? '';
@@ -634,6 +632,9 @@ export class MCPClient {
      * @returns 移動結果
      */
     async moveTask(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string }> {
+        if (this.wbsService && typeof this.wbsService.moveTaskApi === 'function') {
+            return this.wbsService.moveTaskApi(taskId, newParentId);
+        }
         try {
             const result = await this.callTool('wbs.moveTask', { taskId, newParentId: newParentId ?? null });
             const content = result.content?.[0]?.text ?? '';
@@ -661,82 +662,5 @@ export class MCPClient {
         }
         this.pendingRequests.clear();
     }
-
-    /**
-     * 成果物入力サニタイズ処理
-     * 余分な空白や無効エントリを除去する
-     * なぜ必要か: サーバへ送信するデータを安全に整形するため
-     * @param inputs 入力配列
-     * @returns 正規化済み配列またはundefined
-     */
-    private sanitizeArtifactInputs(inputs?: ArtifactReferenceInput[]): SanitizedArtifactInput[] | undefined {
-        if (!Array.isArray(inputs)) {
-            return undefined;
-        }
-
-        const normalized: SanitizedArtifactInput[] = [];
-
-        // 処理概要: 各入力を正規化し、不正・空値は除外
-        // 実装理由: サーバ側の検証負荷を下げ、クライアント側でできるだけ整形して送る
-        for (const item of inputs) {
-            const sanitized = this.normalizeArtifactInput(item);
-            if (sanitized) {
-                normalized.push(sanitized);
-            }
-        }
-
-        return normalized;
-    }
-
-    /**
-     * 完了条件入力サニタイズ処理
-     * 余分な空白や空行を除去する
-     * なぜ必要か: サーバへ送信する完了条件を正規化するため
-     * @param inputs 入力配列
-     * @returns 正規化済み配列またはundefined
-     */
-    private sanitizeCompletionInputs(inputs?: CompletionConditionInput[]): Array<{ description: string }> | undefined {
-        if (!Array.isArray(inputs)) {
-            return undefined;
-        }
-
-        const normalized: Array<{ description: string }> = [];
-        // 処理概要: 文字列トリム・空行除外を行い、DBにそのまま入れられる形に整える
-        // 実装理由: UIでの入力ぶれ（空白・空行）をサーバ到達前に吸収する
-        for (const item of inputs) {
-            const description = typeof item?.description === 'string' ? item.description.trim() : '';
-            if (description.length > 0) {
-                normalized.push({ description });
-            }
-        }
-
-        return normalized;
-    }
-
-    /**
-     * 成果物流用入力正規化
-     * 与えられた入力を検証し、成果物IDとCRUDを整形して返す
-     * なぜ必要か: サーバ側が期待するスキーマに準拠させ、不要な空値や不正値を排除するため
-     * @param input 成果物参照入力
-     * @returns 正規化済み入力またはnull
-     */
-    private normalizeArtifactInput(input: ArtifactReferenceInput | undefined): SanitizedArtifactInput | null {
-        if (!input || typeof input.artifactId !== 'string') {
-            return null;
-        }
-
-        const artifactId = input.artifactId.trim();
-        if (artifactId.length === 0) {
-            return null;
-        }
-
-        if (typeof input.crudOperations === 'string') {
-            const crud = input.crudOperations.trim();
-            if (crud.length > 0) {
-                return { artifactId, crudOperations: crud };
-            }
-        }
-
-        return { artifactId };
-    }
+    
 }

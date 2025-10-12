@@ -1,8 +1,10 @@
 
 // VSCode APIをインポート
+/* eslint-disable sonarjs/cognitive-complexity */
 import * as vscode from 'vscode';
-// MCPクライアント（プロジェクト・タスク管理API）をインポート
-import { MCPClient } from '../mcpClient';
+// 型のみのインポート: 循環参照を避けるため型注釈はimport typeを使用
+import type { WBSService } from '../services/WBSService';
+import type { MCPClient } from '../mcpClient';
 
 
 /**
@@ -38,8 +40,10 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     // ツリー更新イベント（外部から購読可能）
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
-    // MCPクライアント（API呼び出し用）
-    private mcpClient: MCPClient;
+    // ビジネスロジックサービス（WBS の操作はこのサービス経由で行う）
+    private readonly wbsService?: WBSService;
+    // 従来互換: 直接 MCPClient を受け取る場合の参照
+    private readonly mcpClient?: MCPClient;
 
     /**
      * コンストラクタ
@@ -47,8 +51,17 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param mcpClient MCPクライアント
      * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
      */
-    constructor(mcpClient: MCPClient) {
-        this.mcpClient = mcpClient;
+    /**
+     * コンストラクタ
+     * @param serviceOrClient WBSService か MCPClient のいずれか（互換性のため）
+     */
+    constructor(serviceOrClient: WBSService | MCPClient) {
+        // 互換性: serviceOrClient が listTasks を持つなら MCPClient と見なす
+        if ((serviceOrClient as any)?.listTasks) {
+            this.mcpClient = serviceOrClient as MCPClient;
+        } else {
+            this.wbsService = serviceOrClient as WBSService;
+        }
     }
 
     /**
@@ -83,8 +96,10 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             // ルート直下のタスクのみ取得
             return this.getTasks();
         } else if (element.contextValue === 'task' && element.task) {
-            // 子タスクを動的に取得
-            const children = await this.mcpClient.listTasks(element.task.id);
+            // 子タスクを動的に取得（サービス経由）
+            const children = this.wbsService
+                ? await this.wbsService.listTasksApi(element.task.id)
+                : await (this.mcpClient as any).listTasks(element.task.id);
             return children.map((child: Task) => new TreeItem(
                 this.getTaskLabel(child),
                 child.id,
@@ -105,8 +120,10 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      */
     private async getTasks(): Promise<TreeItem[]> {
         try {
-            // ルート直下のタスクのみ取得
-            const tasks = await this.mcpClient.listTasks(null);
+            // ルート直下のタスクのみ取得（サービス経由）
+            const tasks = this.wbsService
+                ? await this.wbsService.listTasksApi(null)
+                : await (this.mcpClient as any).listTasks(null);
             return tasks.map((task: Task) => new TreeItem(
                 this.getTaskLabel(task),
                 task.id,
@@ -138,10 +155,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         const { parentId } = this.resolveCreationContext(target);
 
         try {
-            const response = await this.mcpClient.createTask({
-                parentId: parentId ?? null,
-                title: 'New Task'
-            });
+            const response = this.wbsService
+                ? await this.wbsService.createTaskApi({ parentId: parentId ?? null, title: 'New Task' })
+                : await (this.mcpClient as any).createTask({ parentId: parentId ?? null, title: 'New Task' });
             if (!response.success) {
                 if (response.error) {
                     vscode.window.showErrorMessage(`タスクの作成に失敗しました: ${response.error}`);
@@ -181,7 +197,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             return { success: false };
         }
         try {
-            const response = await this.mcpClient.deleteTask(target.task.id);
+            const response = this.wbsService
+                ? await this.wbsService.deleteTaskApi(target.task.id)
+                : await (this.mcpClient as any).deleteTask(target.task.id);
             if (!response.success) {
                 if (response.error) {
                     vscode.window.showErrorMessage(`タスクの削除に失敗しました: ${response.error}`);
@@ -244,7 +262,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         }
 
         try {
-            const draggedTask = await this.mcpClient.getTask(taskId);
+            const draggedTask = this.wbsService
+                ? await this.wbsService.getTaskApi(taskId)
+                : await (this.mcpClient as any).getTask(taskId);
             if (!draggedTask) {
                 vscode.window.showErrorMessage('移動対象のタスクを取得できませんでした。');
                 return;
@@ -261,7 +281,9 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
                 return;
             }
 
-            const result = await this.mcpClient.moveTask(taskId, decision.parentId);
+            const result = this.wbsService
+                ? await this.wbsService.moveTaskApi(taskId, decision.parentId ?? null)
+                : await (this.mcpClient as any).moveTask(taskId, decision.parentId ?? null);
             if (result.success) {
                 this.refresh();
                 vscode.window.showInformationMessage('タスクを移動しました。');
@@ -285,9 +307,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 子孫に含まれていればtrue
      */
     private containsTask(task: Task, searchId: string): boolean {
-        // childrenプロパティは廃止。containsTaskは常にfalseを返す（UI上の循環チェックはサーバ側で担保）
-        // もしくは、必要ならmcpClient.getTaskで子タスクを都度取得して再帰探索する実装にする
-        // ここでは簡易にfalseを返す
+        // childrenプロパティは廃止。UI側では循環チェックを行わない（サーバ側で担保）ため常にfalseを返す
+        // 将来的に必要ならここで再帰探索実装を追加する
         return false;
     }
 
@@ -338,25 +359,16 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 判定結果
      */
     private evaluateTaskDrop(draggedTask: Task, targetTask: Task): DropDecision {
-        // プロジェクト分離は行わないためチェックしない
-
-        if (draggedTask.id === targetTask.id || draggedTask.parent_id === targetTask.id) {
-            // 処理概要: 自身や現在の親をドロップ先にする場合は変化なし
-            // 実装理由: 無効な移動（自己親子）や無意味な更新を抑止
-            return { kind: 'noop' };
-        }
-
-        if (this.containsTask(draggedTask, targetTask.id)) {
-            // 処理概要: 自分の子孫を親にしようとしている場合は警告
-            // 実装理由: 循環参照によるツリー破壊を防ぐ
-            return { kind: 'warning', message: '子孫タスクの下への移動はできません。' };
-        }
-
+        // 組み合わせて早期リターンすることで複雑度を抑える
         const currentParentId = draggedTask.parent_id ?? null;
-        if (currentParentId === targetTask.id) {
-            // 処理概要: 既に同じ親であれば何もしない
-            // 実装理由: 不要な更新を避ける
+        // 自身や現在の親をドロップ先にする場合、変化なし
+        if (draggedTask.id === targetTask.id || currentParentId === targetTask.id || draggedTask.parent_id === targetTask.id) {
             return { kind: 'noop' };
+        }
+
+        // 自分の子孫を親にしようとしている場合は警告
+        if (this.containsTask(draggedTask, targetTask.id)) {
+            return { kind: 'warning', message: '子孫タスクの下への移動はできません。' };
         }
 
         return { kind: 'parent', parentId: targetTask.id };

@@ -85,13 +85,8 @@ describe('MCPClient', () => {
     const spy = jest.spyOn(client as any, 'callTool').mockResolvedValue({ content: [{ text: message }] });
     const result = await client.createTask({});
     expect(result).toEqual({ success: true, taskId: 'new-task-id', message });
-    expect(spy).toHaveBeenCalledWith('wbs.createTask', {
-      title: 'New Task',
-      description: '',
-      parentId: null,
-      assignee: null,
-      estimate: null
-    });
+    // MCPClient is transport-only when WBSService is not injected; expect raw params
+    expect(spy).toHaveBeenCalledWith('wbs.createTask', {});
     spy.mockRestore();
   });
 
@@ -100,13 +95,8 @@ describe('MCPClient', () => {
     const spy = jest.spyOn(client as any, 'callTool').mockResolvedValue({ content: [{ text: message }] });
     const result = await client.createTask({ parentId: 't1', title: ' ' });
     expect(result).toEqual({ success: false, error: message, message });
-    expect(spy).toHaveBeenCalledWith('wbs.createTask', {
-      title: ' ',
-      description: '',
-      parentId: 't1',
-      assignee: null,
-      estimate: null
-    });
+    // MCPClient forwards the provided params as-is when no WBSService is present
+    expect(spy).toHaveBeenCalledWith('wbs.createTask', { parentId: 't1', title: ' ' });
     spy.mockRestore();
   });
 

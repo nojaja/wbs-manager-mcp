@@ -212,40 +212,9 @@ describe('MCPClient additional coverage tests', () => {
   });
 
   describe('Utility methods', () => {
-    test('sanitizeArtifactInputs handles various input types', () => {
-      // Test with undefined
-      let result = (client as any).sanitizeArtifactInputs(undefined);
-      expect(result).toBeUndefined();
-
-      // Test with empty array
-      result = (client as any).sanitizeArtifactInputs([]);
-      expect(result).toEqual([]);
-
-      // Test with valid artifacts
-      const artifacts = [
-        { artifactId: 'art1', crudOperations: 'read' },
-        { artifactId: 'art2' }
-      ];
-      result = (client as any).sanitizeArtifactInputs(artifacts);
-      expect(result).toEqual([
-        { artifactId: 'art1', crudOperations: 'read' },
-        { artifactId: 'art2', crudOperations: undefined }
-      ]);
-    });
-
-    test('sanitizeCompletionInputs handles various input types', () => {
-      // Test with undefined
-      let result = (client as any).sanitizeCompletionInputs(undefined);
-      expect(result).toBeUndefined();
-
-      // Test with empty array
-      result = (client as any).sanitizeCompletionInputs([]);
-      expect(result).toEqual([]);
-
-      // Test with valid conditions
-      const conditions = [{ description: 'Test condition' }];
-      result = (client as any).sanitizeCompletionInputs(conditions);
-      expect(result).toEqual([{ description: 'Test condition' }]);
+    test('MCPClient no longer exposes sanitize helpers (handled by WBSService)', () => {
+      expect((client as any).sanitizeArtifactInputs).toBeUndefined();
+      expect((client as any).sanitizeCompletionInputs).toBeUndefined();
     });
   });
 });

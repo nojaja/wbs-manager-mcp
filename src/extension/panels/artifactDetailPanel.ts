@@ -1,7 +1,8 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import { MCPClient, Artifact } from '../mcpClient';
+import type { WBSService } from '../services/WBSService';
+import type { MCPClient, Artifact } from '../mcpClient';
 
 /**
  * 成果物詳細パネルクラス
@@ -14,17 +15,18 @@ export class ArtifactDetailPanel {
     private _disposables: vscode.Disposable[] = [];
     private _artifactId: string;
     private _artifact: Artifact | null = null;
-    private mcpClient: MCPClient;
+    private wbsService?: WBSService;
+    private mcpClient?: MCPClient;
 
     /**
      * パネル生成・表示処理
      * 既存パネルがあれば再利用し、なければ新規作成して成果物詳細を表示する
      * なぜ必要か: 複数タブを乱立させず、1つの詳細パネルで成果物編集を集中管理するため
-     * @param extensionUri 拡張機能のURI
-     * @param artifactId 成果物ID
-     * @param mcpClient MCPクライアント
+    * @param extensionUri 拡張機能のURI
+    * @param artifactId 成果物ID
+    * @param serviceOrClient WBSService か MCPClient のいずれか
      */
-    public static createOrShow(extensionUri: vscode.Uri, artifactId: string, mcpClient: MCPClient) {
+    public static createOrShow(extensionUri: vscode.Uri, artifactId: string, serviceOrClient: WBSService | MCPClient) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -47,22 +49,26 @@ export class ArtifactDetailPanel {
             }
         );
 
-        ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, mcpClient);
+        ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, serviceOrClient);
     }
 
     /**
      * コンストラクタ
-     * Webviewパネル・成果物ID・MCPクライアントを受け取り初期化する
+     * Webviewパネル・成果物ID・WBSServiceを受け取り初期化する
      * なぜ必要か: パネルの状態・成果物情報・API通信を一元管理するため
-     * @param panel Webviewパネル
-     * @param extensionUri 拡張機能のURI
-     * @param artifactId 成果物ID
-     * @param mcpClient MCPクライアント
+    * @param panel Webviewパネル
+    * @param extensionUri 拡張機能のURI
+    * @param artifactId 成果物ID
+    * @param serviceOrClient WBSService か MCPClient のいずれか
      */
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, mcpClient: MCPClient) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, serviceOrClient: WBSService | MCPClient) {
         this._panel = panel;
         this._artifactId = artifactId;
-        this.mcpClient = mcpClient;
+        if ((serviceOrClient as any)?.getArtifact) {
+            this.mcpClient = serviceOrClient as MCPClient;
+        } else {
+            this.wbsService = serviceOrClient as WBSService;
+        }
 
         this.loadArtifact();
 
@@ -102,7 +108,9 @@ export class ArtifactDetailPanel {
     private async loadArtifact() {
         try {
             // 理由: 成果物取得失敗時もエラー通知し、UIの不整合を防ぐ
-            this._artifact = await this.mcpClient.getArtifact(this._artifactId);
+            this._artifact = this.wbsService
+                ? await this.wbsService.getArtifactApi(this._artifactId)
+                : await this.mcpClient!.getArtifact(this._artifactId);
             if (this._artifact) {
                 this._panel.title = `Artifact: ${this._artifact.title}`;
                 this._panel.webview.html = this.getHtmlForWebview(this._artifact);
@@ -128,7 +136,9 @@ export class ArtifactDetailPanel {
                 description: data.description || null,
                 version: this._artifact?.version
             };
-            const result = await this.mcpClient.updateArtifact(updates);
+            const result = this.wbsService
+                ? await this.wbsService.updateArtifactApi(updates)
+                : await this.mcpClient!.updateArtifact(updates);
 
             // 更新成功時
             if (result.success) {

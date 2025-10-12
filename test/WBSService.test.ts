@@ -27,7 +27,8 @@ describe('WBSService', () => {
       listArtifacts: jest.fn(),
       createArtifact: jest.fn(),
       updateArtifact: jest.fn(),
-      deleteArtifact: jest.fn()
+      deleteArtifact: jest.fn(),
+      callTool: jest.fn()
     };
 
     mockWbsProvider = {
@@ -54,6 +55,64 @@ describe('WBSService', () => {
     MockedArtifactTreeProvider.mockImplementation(() => mockArtifactProvider);
 
     wbsService = new WBSService(mockMcpClient);
+  });
+
+  describe('API methods (list/get/create/update/delete/move)', () => {
+    beforeEach(() => {
+      // ensure provider exposes mcpClient for API methods to call
+      (wbsService.wbsProvider as any).mcpClient = mockMcpClient;
+    });
+
+    it('listTasksApi returns parsed array', async () => {
+      mockMcpClient.callTool.mockResolvedValue({ content: [{ text: JSON.stringify([{ id: 't1', title: 'Task1' }]) }] });
+      const res = await wbsService.listTasksApi(null);
+      expect(res).toEqual([{ id: 't1', title: 'Task1' }]);
+    });
+
+    it('getTaskApi returns object or null', async () => {
+      mockMcpClient.callTool
+        .mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 't1', title: 'Task1' }) }] })
+        .mockResolvedValueOnce({ content: [{ text: '❌ error' }] });
+
+      const ok = await wbsService.getTaskApi('t1');
+      expect(ok).toEqual({ id: 't1', title: 'Task1' });
+
+      const ng = await wbsService.getTaskApi('t1');
+      expect(ng).toBeNull();
+    });
+
+    it('createTaskApi extracts ID on success', async () => {
+      mockMcpClient.callTool.mockResolvedValue({ content: [{ text: '✅ Created\nID: 42' }] });
+      const res = await wbsService.createTaskApi({ title: 'A' });
+      expect(res.success).toBe(true);
+      expect(res.taskId).toBe('42');
+    });
+
+    it('updateTaskApi detects success/conflict/error', async () => {
+      mockMcpClient.callTool
+        .mockResolvedValueOnce({ content: [{ text: '✅' }] })
+        .mockResolvedValueOnce({ content: [{ text: 'modified by another user' }] })
+        .mockResolvedValueOnce({ content: [{ text: '❌ some error' }] });
+
+      const ok = await wbsService.updateTaskApi('t1', {});
+      expect(ok.success).toBe(true);
+
+      const conflict = await wbsService.updateTaskApi('t1', {});
+      expect(conflict.success).toBe(false);
+      expect(conflict.conflict).toBe(true);
+
+      const err = await wbsService.updateTaskApi('t1', {});
+      expect(err.success).toBe(false);
+      expect(err.error).toBeDefined();
+    });
+
+    it('deleteTaskApi and moveTaskApi return success on ✅', async () => {
+      mockMcpClient.callTool.mockResolvedValue({ content: [{ text: '✅' }] });
+      const d = await wbsService.deleteTaskApi('t1');
+      expect(d.success).toBe(true);
+      const m = await wbsService.moveTaskApi('t1', 'p1');
+      expect(m.success).toBe(true);
+    });
   });
 
   describe('constructor', () => {
