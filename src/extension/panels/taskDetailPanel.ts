@@ -42,13 +42,16 @@ export class TaskDetailPanel {
     * @param serviceOrClient WBSService か MCPClient のいずれか
      */
     public static createOrShow(extensionUri: vscode.Uri, taskId: string, serviceOrClient: WBSService | MCPClient) {
+        // 処理名: パネル作成/表示
+        // 処理概要: 既存パネルがあれば再利用し、無ければ新規作成して詳細を表示する
+        // 実装理由: 同一タスクの複数パネルを防ぎリソース消費を抑えるため
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // 既存パネルがあれば再利用し、タスクIDを更新
-        // 理由: 複数パネル生成による混乱・リソース浪費を防ぐため
         if (TaskDetailPanel.currentPanel) {
+            // 処理概要: 既存パネルの再利用
+            // 実装理由: ユーザの画面遷移中に複数パネルを生成しないため
             TaskDetailPanel.currentPanel._panel.reveal(column);
             TaskDetailPanel.currentPanel.updateTask(taskId);
             return;
@@ -79,13 +82,15 @@ export class TaskDetailPanel {
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, serviceOrClient: WBSService | MCPClient) {
         this._panel = panel;
         this._taskId = taskId;
-        // detect whether serviceOrClient is an MCPClient (has getTask) or WBSService
+        // 処理概要: 注入オブジェクトが MCPClient か WBSService かを判定して保持
+        // 実装理由: 互換性を保つためにどちらの API もサポートする
         if ((serviceOrClient as any)?.getTask) {
             this.mcpClient = serviceOrClient as MCPClient;
         } else {
             this.wbsService = serviceOrClient as WBSService;
         }
 
+        // 初期ロード
         this.loadTask();
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -93,7 +98,8 @@ export class TaskDetailPanel {
         this._panel.webview.onDidReceiveMessage(
             message => {
                 // 受信メッセージのコマンド種別で処理分岐
-                // 理由: 複数コマンド拡張時の可読性・保守性向上のため
+                // 処理概要: Webview からのコマンドを解釈して該当処理を呼び出す
+                // 実装理由: Webview 側の操作をホスト側で安全に扱うため
                 switch (message.command) {
                     case 'save':
                         // 処理概要: フォームからの保存要求を受けて更新処理を実行
@@ -114,6 +120,9 @@ export class TaskDetailPanel {
      * @param taskId タスクID
      */
     private async updateTask(taskId: string) {
+        // 処理名: タスク更新（パネル内でのタスク切替）
+        // 処理概要: 内部 taskId を更新して再読み込みする
+        // 実装理由: 別のタスクを同一パネルで表示する場合に利用するため
         this._taskId = taskId;
         await this.loadTask();
     }
@@ -124,23 +133,25 @@ export class TaskDetailPanel {
      * なぜ必要か: 詳細画面表示時に常に最新のタスク情報を取得するため
      */
     private async loadTask() {
+        // 処理名: タスク読込
+        // 処理概要: WBSService or MCPClient からタスク情報を取得し Webview に反映する
+        // 実装理由: 詳細表示時に常に最新の情報を表示するため
         try {
-            // 理由: タスク取得失敗時もエラー通知し、UIの不整合を防ぐ
             this._task = this.wbsService
                 ? await this.wbsService.getTaskApi(this._taskId)
                 : await this.mcpClient!.getTask(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
-                // Fetch project artifacts for suggestion list (minimal change)
+                // サジェスト用成果物一覧を取得（オプション）
                 let artifacts: Artifact[] = [];
                 try {
-                    // 処理概要: サジェスト用の成果物一覧を取得（失敗しても機能継続）
-                    // 実装理由: 主要機能（詳細表示/編集）を阻害しない非必須データのため
+                    // 処理概要: サジェストデータを取得するが、失敗時は機能継続
+                    // 実装理由: サジェストは補助機能であり、取得失敗で主機能を妨げないため
                     artifacts = this.wbsService
                         ? await this.wbsService.listArtifactsApi()
                         : await this.mcpClient!.listArtifacts();
                 } catch (e) {
-                    // ignore and continue without suggestions
+                    // サジェスト取得失敗時はログを残さず処理を続行
                 }
                 this._panel.webview.html = this.getHtmlForWebview(this._task, artifacts);
             }
@@ -208,21 +219,26 @@ export class TaskDetailPanel {
      * @param data 保存するフォームデータ
      */
     private async saveTask(data: any) {
+        // 処理名: タスク保存
+        // 処理概要: Webview から送られたフォームデータを整形してサーバへ更新リクエストを送り、結果に応じた UI 操作を行う
+        // 実装理由: 編集結果を永続化し、ユーザにフィードバックを与えるため
         try {
-            // 理由: サーバ更新失敗時もエラー通知し、UIの不整合を防ぐ
             const updates = this.buildUpdateObject(data);
             const result = this.wbsService
                 ? await this.wbsService.updateTaskApi(this._taskId, updates)
                 : await this.mcpClient!.updateTask(this._taskId, updates);
 
-            // 更新成功時
             if (result.success) {
+                // 処理概要: 成功時は再読み込みとツリー更新を行う
+                // 実装理由: UI を最新状態に保つため
                 this.handleUpdateSuccess();
-                // 楽観ロック競合時
             } else if (result.conflict) {
+                // 処理概要: 競合検出時はユーザに選択を促す
+                // 実装理由: 楽観ロックによる競合時の適切な対処を促すため
                 await this.handleUpdateConflict();
-                // その他エラー時
             } else {
+                // 処理概要: その他エラーは表示する
+                // 実装理由: 利用者に失敗理由を伝えるため
                 vscode.window.showErrorMessage(`Failed to update task: ${result.error}`);
             }
         } catch (error) {

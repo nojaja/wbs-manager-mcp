@@ -12,8 +12,9 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
     readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
     /**
-     * コンストラクタ
-     * @param wbsService WBSService インスタンス
+    * 処理名: コンストラクタ
+    * 処理概要: WBSService もしくは MCPClient を受け取り内部参照を設定する
+    * 実装理由(なぜ必要か): 互換性のために service / client のどちらでも利用可能にするため
      */
     // 互換: service か client のどちらかを受け取る
     private readonly wbsService?: WBSService;
@@ -66,11 +67,13 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
      */
     async getChildren(element?: ArtifactTreeItem): Promise<ArtifactTreeItem[]> {
         if (element) {
-            // 処理概要: 本ツリーはフラット構造のため子は持たない
-            // 実装理由: 成果物は階層化しない設計。将来の拡張余地を残しつつ現状は空配列
+            // 処理概要: このツリーは階層を持たないため子要素は常に空
+            // 実装理由: 成果物はフラット一覧として扱うため
             return [];
         }
 
+        // 処理概要: サービス/クライアントから成果物一覧を取得して TreeItem に変換
+        // 実装理由: UI に表示するためのラップ処理
         const artifacts = await this.fetchArtifacts();
         return artifacts.map((artifact: Artifact) => new ArtifactTreeItem(artifact));
     }

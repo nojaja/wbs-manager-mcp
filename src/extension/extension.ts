@@ -33,6 +33,9 @@ let wbsService: WBSService;
  * @param context VSCode拡張機能のコンテキスト
  */
 export async function activate(context: vscode.ExtensionContext) {
+    // 処理名: 拡張機能アクティベート処理
+    // 処理概要: 拡張機能の初期化、クライアント/サービスの生成、ビューやコマンドの登録を行う
+    // 実装理由(なぜ必要か): 拡張機能が有効化された際に動作に必要なインスタンスや UI を初期化するため
     // 出力チャネルの初期化（ログ表示用）
     outputChannel = vscode.window.createOutputChannel('MCP-WBS');
     outputChannel.appendLine('MCP WBS Extension activated');
@@ -49,6 +52,8 @@ export async function activate(context: vscode.ExtensionContext) {
     mcpClient.setWbsService(wbsService);
 
     // サーバ・クライアント自動起動
+    // 処理概要: 開発用ローカルサーバを自動で起動し、クライアント接続を確立する
+    // 実装理由: ユーザが手動でサーバを起動する手間を省き、即時に UI が動作する状態にするため
     await startLocalServer(context);
 
     // ツリービュー初期化
@@ -65,6 +70,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // コマンド登録: サーバ起動
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
+        // 処理概要: 明示的にローカルサーバを再起動/起動するコマンド
+        // 実装理由: サーバ停止後の再接続や設定反映のためにユーザが手動で起動できるようにする
         await startLocalServer(context);
         wbsService.refreshWbsTree();
         wbsService.refreshArtifactTree();
@@ -72,10 +79,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // コマンド登録: ツリーリフレッシュ
     const refreshTreeCommand = vscode.commands.registerCommand('wbsTree.refresh', async () => {
-
-        // MCPClientが未接続なら再接続を試みる
-        // 理由: サーバ再起動や初回起動時にクライアントが未初期化の場合でもUIリフレッシュを正常化するため
+        // 処理名: ツリーリフレッシュコマンド
+        // 処理概要: MCPClient の接続を確認し、WBS ツリーの再読み込みを行う
+        // 実装理由: クライアント未接続時でも UI を復旧させるため
         if (!mcpClient) {
+            // 処理概要: MCPClient が未初期化なら新規作成してサーバ起動処理を行う
+            // 実装理由: サーバ停止→起動後に UI が正常に通信できるようにするため
             mcpClient = new MCPClient(outputChannel);
             await startLocalServer(context);
         }
@@ -91,30 +100,33 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     const editArtifactCommand = vscode.commands.registerCommand('artifactTree.editArtifact', async (item?: ArtifactTreeItem) => {
+        // 処理名: 成果物編集コマンド
+        // 処理概要: 明示的に指定があればそれを、無ければツリーの選択を編集対象として詳細パネルを開く
+        // 実装理由: ユーザがコンテキストメニューやショートカットから編集できるようにするため
         const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
             ? artifactTreeView.selection[0]
             : undefined);
-        // 処理概要: 明示指定なければ現在の選択を編集対象とする
-        // 実装理由: コンテキストメニュー/ツールバーからの実行どちらにも対応するため
-            if (target) {
+        if (target) {
             ArtifactDetailPanel.createOrShow(context.extensionUri, target.artifact.id, wbsService);
         }
     });
     const deleteArtifactCommand = vscode.commands.registerCommand('artifactTree.deleteArtifact', async (item?: ArtifactTreeItem) => {
+        // 処理名: 成果物削除コマンド
+        // 処理概要: 指定または選択中の成果物を削除するためのサービス呼び出しを行う
+        // 実装理由: ユーザが UI から成果物を削除できるようにするため
         outputChannel.appendLine(`artifactTree.deleteArtifact: ${item ? item.label : 'no item'}`);
         const target = item ?? (artifactTreeView.selection && artifactTreeView.selection.length > 0
             ? artifactTreeView.selection[0]
             : undefined);
-        // 処理概要: 明示指定がなければ選択中の成果物を削除
-        // 実装理由: 操作性を統一し、誤削除を避けるため選択が無い場合は何もしない
         await wbsService.deleteArtifact(target);
     });
 
     // コマンド登録: タスク詳細パネルを開く
     const openTaskCommand = vscode.commands.registerCommand('wbsTree.openTask', (item) => {
+        // 処理名: タスク詳細パネル表示コマンド
+        // 処理概要: タスクノードのクリックで詳細パネルを開く
+        // 実装理由: ユーザがタスクの詳細を簡単に編集・参照できるようにするため
         outputChannel.appendLine(`wbsTree.openTask: ${item ? item.label : 'no item'}`);
-        // タスクノードのみ詳細パネルを開く
-        // 理由: プロジェクトノードや他ノードで誤動作しないように分岐
         if (item) {
             TaskDetailPanel.createOrShow(context.extensionUri, item.itemId, wbsService);
         }

@@ -1,7 +1,6 @@
 
 // VSCode API
 import * as vscode from 'vscode';
-/* eslint-disable sonarjs/cognitive-complexity */
 // (注) サーバプロセスの起動・管理は ServerService に委譲されています。
 
 interface JsonRpcRequest {
@@ -76,9 +75,9 @@ export class MCPClient {
     private wbsService: any | null = null;
 
     /**
-     * コンストラクタ
-     * 出力チャネルを受け取り、初期化する
-     * なぜ必要か: ログ出力やデバッグ情報をVSCodeに表示するため
+     * 処理名: コンストラクタ
+     * 処理概要: 出力チャネルを保存し、初期状態を設定する
+     * 実装理由(なぜ必要か): ログ出力先を確保して通信のデバッグや状態監視を可能にするため
      * @param outputChannel 出力チャネル
      */
     constructor(outputChannel: vscode.OutputChannel) {
@@ -108,8 +107,9 @@ export class MCPClient {
      * start は引数なしで呼び出され、ServerService から writer と parsed responses が渡されることを期待する。
      */
     async start(): Promise<void> {
-        // ServerService が先に registerClient を呼んで writer をセットする想定です。
-        // writer が設定されるまで短時間待機してから初期化を行います。
+        // 処理名: クライアント開始処理
+        // 処理概要: ServerService が writer を登録するまで待機し、初期化シーケンスを実行する
+        // 実装理由: writer が未設定のまま通信処理を行うとエラーとなるため安全に初期化する
         const startAt = Date.now();
         const timeout = 5000; // 5秒待つ
         while (!this.writer && Date.now() - startAt < timeout) {
@@ -126,6 +126,9 @@ export class MCPClient {
      * @param w サーバへ書き込む関数（例: stdin.write をラップしたもの）
      */
     setWriter(w: (s: string) => void) {
+        // 処理名: writer 登録
+        // 処理概要: ServerService から受け取った書き込み関数を内部に保持する
+        // 実装理由: クライアントは writer を通じてサーバへメッセージを送信するため
         this.writer = w;
     }
 
@@ -134,6 +137,9 @@ export class MCPClient {
      * @param s WBSService インスタンス
      */
     setWbsService(s: any) {
+        // 処理名: WBSService 注入
+        // 処理概要: ビジネスロジック層の実装を注入してクライアントが処理を委譲できるようにする
+        // 実装理由: クライアントを transport-only に保ちつつ既存のビジネスロジックを利用するため
         this.wbsService = s;
     }
 
@@ -142,6 +148,9 @@ export class MCPClient {
      * @param rawLine サーバの stdout 行（文字列）
      */
     handleResponseFromServer(rawLine: string) {
+        // 処理名: サーバ生レスポンス受信ハンドラ
+        // 処理概要: 生の1行(JSON)をパースし内部ハンドラへ渡す
+        // 実装理由: ServerService が返す文字列を JSON として扱い、該当する Promise を解決/拒否するため
         try {
             const parsed = JSON.parse(rawLine);
             this.handleResponseInternal(parsed as JsonRpcResponse);
@@ -159,6 +168,9 @@ export class MCPClient {
      * @param parsed サーバからパース済みの JSON-RPC オブジェクト
      */
     handleResponse(parsed: any) {
+        // 処理名: パース済レスポンスハンドラ
+        // 処理概要: 既にオブジェクト化されたレスポンスを内部ハンドラへ渡す
+        // 実装理由: ServerService 以外のソースからも同じ内部処理を使えるようにするため
         try {
             const response = parsed as JsonRpcResponse;
             this.handleResponseInternal(response);
@@ -173,6 +185,9 @@ export class MCPClient {
      * @param signal シグナル
      */
     onServerExit(code: number | null, signal: NodeJS.Signals | null) {
+        // 処理名: サーバ終了通知ハンドラ
+        // 処理概要: サーバプロセス終了時に保留中のリクエストを全て拒否し、内部状態をクリアする
+        // 実装理由: サーバが停止した状態で保留を残すとリソースリークやフリーズを招くため
         this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
         for (const [id, { reject }] of this.pendingRequests) {
             reject(new Error('Server process exited'));
@@ -186,6 +201,9 @@ export class MCPClient {
      * なぜ必要か: サーバ・クライアント間のプロトコルバージョンや機能を同期するため
      */
     private async initialize(): Promise<void> {
+        // 処理名: 初期化処理
+        // 処理概要: JSON-RPC の initialize リクエストを送ってサーバと機能同期を行う
+        // 実装理由: クライアントとサーバのプロトコルや機能を合わせて以降の通信を安定させるため
         const response = await this.sendRequest('initialize', {
             protocolVersion: '2024-11-05',
             capabilities: {},
@@ -212,7 +230,9 @@ export class MCPClient {
      * @returns Promise<JsonRpcResponse>
      */
     private sendRequest(method: string, params?: any): Promise<JsonRpcResponse> {
-        // サーバプロセスが未接続（writer未設定）なら即時エラー（writer が現行の一意の送信手段）
+        // 処理名: JSON-RPC リクエスト送信
+        // 処理概要: writer を経由してサーバへ JSON-RPC リクエストを送信し、Promise でレスポンスを待つ
+        // 実装理由: 非同期通信の結果を呼び出し元へ返すための汎用的な送信ラッパ
         if (!this.writer) {
             return Promise.reject(new Error('MCP server not started'));
         }
@@ -232,17 +252,15 @@ export class MCPClient {
             const requestStr = JSON.stringify(request) + '\n';
             this.outputChannel.appendLine(`[MCP Client] Sending: ${method}`);
 
-            // サーバへリクエスト送信（必ず writer が存在する前提）
+            // サーバへリクエスト送信
             try {
-                // writer が必須になったため、ここは単純に writer を呼ぶ
                 this.writer!(requestStr);
             } catch (error) {
                 this.pendingRequests.delete(id);
                 reject(error);
             }
 
-            // 10秒タイムアウトで未応答リクエストを自動エラー化
-            // 理由: サーバハング・通信断で待ち続けることを避け、UIの応答性を保つ
+            // タイムアウト設定: 10秒で未応答なら reject
             setTimeout(() => {
                 if (this.pendingRequests.has(id)) {
                     this.pendingRequests.delete(id);
@@ -260,7 +278,9 @@ export class MCPClient {
      * @param params パラメータ
      */
     private sendNotification(method: string, params?: any): void {
-        // サーバプロセスが未起動なら何もしない
+        // 処理名: 通知送信
+        // 処理概要: JSON-RPC の通知を送る（レスポンスは不要）
+        // 実装理由: 状態変更やイベントをサーバへ伝えるための片方向メカニズム
         if (!this.writer) {
             return;
         }
@@ -282,12 +302,13 @@ export class MCPClient {
      * @param response サーバからのレスポンス
      */
     private handleResponseInternal(response: JsonRpcResponse): void {
-        // レスポンスIDが存在する場合のみ対応するPromiseを解決/拒否
+        // 処理名: レスポンス内部処理
+        // 処理概要: JSON-RPC レスポンスの id を見て対応する保留 Promise を解決または拒否する
+        // 実装理由: 非同期送信に対するレスポンスの受け口を一元化するため
         if (response.id !== undefined) {
             const pending = this.pendingRequests.get(response.id as number);
             if (pending) {
                 this.pendingRequests.delete(response.id as number);
-                // 理由: サーバ側でエラーが返却された場合はreject、それ以外はresolve
                 if (response.error) {
                     pending.reject(new Error(response.error.message));
                 } else {

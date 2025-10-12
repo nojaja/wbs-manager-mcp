@@ -15,10 +15,12 @@ export class WBSService {
   private readonly mcpClient: MCPClient;
 
   /**
-   * コンストラクタ
-   * @param mcpClient MCPクライアント
-   */
-  constructor(mcpClient: MCPClient) {
+   * 処理名: コンストラクタ
+   * 処理概要: MCPClient を受け取り内部の provider をデフォルトで生成する
+   * 実装理由(なぜ必要か): 既存の互換性を保ちつつサービスを初期化するため
+   * @param mcpClient MCPClient のインスタンス（ツール呼び出し用）
+    */
+   constructor(mcpClient: MCPClient) {
     this.mcpClient = mcpClient;
     // デフォルトでは既存互換のため provider を生成する
     this.wbsProvider = new WBSTreeProvider(mcpClient as any);
@@ -44,8 +46,10 @@ export class WBSService {
    */
   async listTasksApi(parentId?: string | null): Promise<any[]> {
     try {
+      // 処理概要: 指定 parentId の直下タスクをサーバから取得して JSON 化して返す
+      // 実装理由: UI のツリー描画に必要なタスクデータを取得するため
       const args = parentId !== undefined ? { parentId } : {};
-  const result = await (this.mcpClient as any).callTool('wbs.listTasks', args);
+      const result = await (this.mcpClient as any).callTool('wbs.listTasks', args);
       const content = result.content?.[0]?.text;
       if (content) {
         try {
@@ -68,7 +72,9 @@ export class WBSService {
    */
   async getTaskApi(taskId: string): Promise<any | null> {
     try {
-  const result = await (this.mcpClient as any).callTool('wbs.getTask', { taskId });
+      // 処理概要: 指定 taskId の詳細を取得して返す
+      // 実装理由: タスク詳細表示・編集時に最新情報が必要なため
+      const result = await (this.mcpClient as any).callTool('wbs.getTask', { taskId });
       const content = result.content?.[0]?.text;
       if (content && !content.includes('❌')) {
         return JSON.parse(content);
@@ -86,6 +92,8 @@ export class WBSService {
    * @returns 正規化済み配列またはundefined
    */
   private sanitizeArtifactInputs(inputs?: Array<{ artifactId: string; crudOperations?: string | null }>) {
+    // 処理概要: 入力配列を検証・正規化して不正な要素を除去する
+    // 実装理由: サーバへ渡す前に安全な入力形式に整えるため
     if (!Array.isArray(inputs)) return undefined;
     const normalized: Array<{ artifactId: string; crudOperations?: string | null }> = [];
     for (const item of inputs) {
@@ -101,6 +109,8 @@ export class WBSService {
    * @returns 正規化済み配列またはundefined
    */
   private sanitizeCompletionInputs(inputs?: Array<{ description: string }>) {
+    // 処理概要: 完了条件の配列を検証し空文字を除去して返す
+    // 実装理由: 空の完了条件をサーバへ渡さないことでデータ整合性を保つため
     if (!Array.isArray(inputs)) return undefined;
     const normalized: Array<{ description: string }> = [];
     for (const item of inputs) {
@@ -116,6 +126,8 @@ export class WBSService {
    * @returns 正規化済み入力またはnull
    */
   private normalizeArtifactInput(input: { artifactId: string; crudOperations?: string | null } | undefined) {
+    // 処理概要: 単一成果物入力を検証・正規化する
+    // 実装理由: 無効な artifactId や空の crudOperations を弾くため
     if (!input || typeof input.artifactId !== 'string') return null;
     const artifactId = input.artifactId.trim();
     if (artifactId.length === 0) return null;
@@ -134,6 +146,8 @@ export class WBSService {
    */
   async updateTaskApi(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
     try {
+      // 処理概要: 更新内容を正規化してサーバへ渡し、結果を解釈して返す
+      // 実装理由: クライアントからの生データを整形してサーバ API と整合する形にするため
       const deliverables = this.sanitizeArtifactInputs(updates.deliverables);
       const prerequisites = this.sanitizeArtifactInputs(updates.prerequisites);
       const completionConditions = this.sanitizeCompletionInputs(updates.completionConditions);
@@ -150,7 +164,7 @@ export class WBSService {
         toolArguments.completionConditions = completionConditions;
       }
 
-  const result = await (this.mcpClient as any).callTool('wbs.updateTask', toolArguments);
+      const result = await (this.mcpClient as any).callTool('wbs.updateTask', toolArguments);
       const content = result.content?.[0]?.text;
       if (content?.includes('✅')) {
         return { success: true };

@@ -29,7 +29,9 @@ export class ServerService {
    * @returns 存在すればtrue
    */
   validateServerPath(serverPath: string): boolean {
-    // 理由: サーバファイルが存在しない場合は即時エラー通知し、無駄な起動処理を防ぐ
+    // 処理名: サーバ実行ファイル存在チェック
+    // 処理概要: 与えられたパスにサーバ実行ファイルが存在するかを検証する
+    // 実装理由: 起動処理を行う前に必須ファイルの有無を確認し、無駄な処理や例外を防ぐため
     if (!fs.existsSync(serverPath)) {
       this.outputChannel.appendLine(`Error: Server file not found at ${serverPath}`);
       return false;
@@ -46,13 +48,15 @@ export class ServerService {
    * @returns サーバ用環境変数
    */
   spawnServerProcess(serverPath: string, workspaceRoot: string) {
+    // 処理名: サーバプロセス起動
+    // 処理概要: Node 実行パスで指定スクリプトを spawn し、環境変数と作業ディレクトリを設定して起動する
+    // 実装理由: サーバを独立プロセスとして動作させ、拡張機能本体とプロセス分離を行うため
     this.outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
 
     // サーバ用環境変数を設定
-    // WBS_MCP_DATA_DIRは相対パス"."で設定（サーバはcwd: workspaceRootで起動されるため）
     const serverEnv = {
       ...process.env,
-      WBS_MCP_DATA_DIR: "."
+      WBS_MCP_DATA_DIR: '.'
     };
     // サーバプロセスをspawnで起動
     this.serverProcess = child_process.spawn(process.execPath, [serverPath], {
@@ -71,17 +75,19 @@ export class ServerService {
    */
   setupServerProcessHandlers(onExit?: (code: number|null, signal: NodeJS.Signals|null) => void) {
     if (!this.serverProcess) return;
-    // サーバの標準出力を処理
-    // サーバのstdoutはJSON-RPCレスポンスのフレーム（改行区切り）を含むため、行単位で解析して登録されたクライアントへ通知する
+    // 処理名: サーバプロセスハンドラ登録
+    // 処理概要: stdout/stderr のコールバックとプロセス終了/エラー時のハンドラを登録する
+    // 実装理由: サーバのログ収集と JSON レスポンスの受け渡し、エラー検知を行うため
     let buffer = '';
     if (this.serverProcess.stdout && typeof (this.serverProcess.stdout as any).setEncoding === 'function') {
       (this.serverProcess.stdout as any).setEncoding('utf8');
     }
     this.serverProcess.stdout?.on('data', (data) => {
+      // 処理概要: stdout のデータをバッファリングして行毎に分割し処理する
+      // 実装理由: JSON-RPC は改行区切りで送られてくるため確実に1行ずつ処理する必要がある
       buffer += data.toString();
       let lines = buffer.split('\n');
       buffer = lines.pop() || '';
-      // If there were no newline splits but we have content, process that as a single line
       if (lines.length === 0 && buffer === '') {
         lines = [buffer];
       }
@@ -89,29 +95,25 @@ export class ServerService {
         this.processServerLine(line);
       }
     });
-    // サーバの標準エラー出力をログ・コンソールに出力
-    // 理由: サーバ側のエラーを即時にユーザー・開発者へ通知するため
+    // stderr は即時にログ表示
     this.serverProcess.stderr?.on('data', (data) => {
       const error = data.toString().trim();
       this.outputChannel.appendLine(`[Server Error] ${error}`);
       this.outputChannel.show?.();
     });
-    // サーバプロセス終了時の処理
-    // 理由: サーバ異常終了時にユーザーへ通知し、リソースをクリーンアップするため
+    // プロセス終了時の処理: クライアント通知・クリーンアップ
     this.serverProcess.on('exit', (code, signal) => {
       this.outputChannel.appendLine(`Server process exited with code ${code}, signal: ${signal}`);
       if (code !== 0) {
         this.outputChannel.appendLine(`MCP server exited unexpectedly with code ${code}`);
       }
       this.serverProcess = null;
-      // クライアントへ終了通知
       if (this.registeredClient && typeof this.registeredClient.onServerExit === 'function') {
         this.registeredClient.onServerExit(code, signal);
       }
       if (onExit) onExit(code, signal);
     });
-    // サーバプロセスエラー時の処理
-    // 理由: サーバ起動失敗や予期せぬ例外を即時通知し、リソースリークを防ぐため
+    // 起動エラー時の処理
     this.serverProcess.on('error', (err) => {
       this.outputChannel.appendLine(`Server process error: ${err.message}`);
       this.serverProcess = null;
@@ -123,11 +125,14 @@ export class ServerService {
    * @param line stdout から受け取った1行の文字列
    */
   private processServerLine(line: string) {
+    // 処理名: stdout 行処理
+    // 処理概要: 改行で区切られた1行をトリムし、ログ表示および登録クライアントへ通知する
+    // 実装理由: サーバの JSON-RPC レスポンスやデバッグ出力を正しく受け渡すため
     const trimmed = line.trim();
     if (!trimmed) return;
     this.outputChannel.appendLine(`[Server] ${trimmed}`);
     this.outputChannel.show?.();
-    // クライアントが raw string を処理できる場合はそのまま渡す（互換性保持）
+    // raw string を受け取れるクライアントがあればそのまま渡す（後方互換）
     if (this.registeredClient && typeof (this.registeredClient as any).handleResponseFromServer === 'function') {
       (this.registeredClient as any).handleResponseFromServer(trimmed);
       return;
@@ -146,6 +151,9 @@ export class ServerService {
    * サーバプロセスを停止
    */
   stopServerProcess() {
+    // 処理名: サーバ停止処理
+    // 処理概要: プロセスが存在する場合は kill して参照をクリアする
+    // 実装理由: 拡張機能の終了や再起動時にサーバが残らないようにするため
     if (this.serverProcess) {
       this.outputChannel.appendLine('Stopping MCP server...');
       this.serverProcess.kill();
@@ -167,8 +175,10 @@ export class ServerService {
    * @param client MCPClient 相当のオブジェクト
    */
   registerClient(client: { handleResponse?: (resp: any) => void; onServerExit?: (code: number | null, signal: NodeJS.Signals | null) => void; setWriter?: (w: (s: string) => void) => void }) {
+    // 処理名: クライアント登録
+    // 処理概要: MCPClient 相当のオブジェクトを保持し、必要ならば server.stdin へ書き込むラッパーを渡す
+    // 実装理由: ServerService がプロセス入出力を集中管理し、クライアントへ安全なインターフェースを提供するため
     this.registeredClient = client;
-    // サーバの stdin へ書き込むラッパーを渡す
     if (this.registeredClient && typeof this.registeredClient.setWriter === 'function') {
       this.registeredClient.setWriter((s: string) => {
         this.serverProcess?.stdin?.write(s);

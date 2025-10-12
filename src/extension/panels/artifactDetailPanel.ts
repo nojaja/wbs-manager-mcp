@@ -27,12 +27,13 @@ export class ArtifactDetailPanel {
     * @param serviceOrClient WBSService か MCPClient のいずれか
      */
     public static createOrShow(extensionUri: vscode.Uri, artifactId: string, serviceOrClient: WBSService | MCPClient) {
+        // 処理名: 成果物詳細パネル作成/表示
+        // 処理概要: 既存パネルがあれば再利用、無ければ新規作成して成果物詳細を表示
+        // 実装理由: 同一資源の複数パネル生成を防ぎ一貫した編集体験を提供するため
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // 既存パネルがあれば再利用し、成果物IDを更新
-        // 理由: 複数パネル生成による混乱・リソース浪費を防ぐため
         if (ArtifactDetailPanel.currentPanel) {
             ArtifactDetailPanel.currentPanel._panel.reveal(column);
             ArtifactDetailPanel.currentPanel.updateArtifact(artifactId);
@@ -64,6 +65,8 @@ export class ArtifactDetailPanel {
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, serviceOrClient: WBSService | MCPClient) {
         this._panel = panel;
         this._artifactId = artifactId;
+        // 処理概要: 注入された serviceOrClient が MCPClient か WBSService かを判定して格納
+        // 実装理由: 既存の互換性を維持し、どちらの API もサポートするため
         if ((serviceOrClient as any)?.getArtifact) {
             this.mcpClient = serviceOrClient as MCPClient;
         } else {
@@ -76,8 +79,8 @@ export class ArtifactDetailPanel {
 
         this._panel.webview.onDidReceiveMessage(
             message => {
-                // 受信メッセージのコマンド種別で処理分岐
-                // 理由: 複数コマンド拡張時の可読性・保守性向上のため
+                // 受信メッセージでコマンドを振り分け
+                // 実装理由: Webview 側の操作をホスト側で適切に処理するため
                 switch (message.command) {
                     case 'save':
                         this.saveArtifact(message.data);
@@ -96,6 +99,9 @@ export class ArtifactDetailPanel {
      * @param artifactId 成果物ID
      */
     private async updateArtifact(artifactId: string) {
+        // 処理名: 成果物更新（パネル内での切替）
+        // 処理概要: 内部 ID を更新して再読込を行う
+        // 実装理由: 同一パネルで別の成果物を表示できるようにするため
         this._artifactId = artifactId;
         await this.loadArtifact();
     }
@@ -106,8 +112,10 @@ export class ArtifactDetailPanel {
      * なぜ必要か: 詳細画面表示時に常に最新の成果物情報を取得するため
      */
     private async loadArtifact() {
+        // 処理名: 成果物読込
+        // 処理概要: サービス/クライアントから成果物情報を取得し Webview に埋め込む
+        // 実装理由: 詳細表示時に最新の成果物情報を提示するため
         try {
-            // 理由: 成果物取得失敗時もエラー通知し、UIの不整合を防ぐ
             this._artifact = this.wbsService
                 ? await this.wbsService.getArtifactApi(this._artifactId)
                 : await this.mcpClient!.getArtifact(this._artifactId);
@@ -127,8 +135,10 @@ export class ArtifactDetailPanel {
      * @param data 保存するフォームデータ
      */
     private async saveArtifact(data: any) {
+        // 処理名: 成果物保存
+        // 処理概要: フォームデータを元に成果物更新を行い、結果に応じて UI を更新する
+        // 実装理由: 編集内容を永続化してユーザにフィードバックを返すため
         try {
-            // 理由: サーバ更新失敗時もエラー通知し、UIの不整合を防ぐ
             const updates = {
                 artifactId: this._artifactId,
                 title: data.title,
@@ -140,25 +150,26 @@ export class ArtifactDetailPanel {
                 ? await this.wbsService.updateArtifactApi(updates)
                 : await this.mcpClient!.updateArtifact(updates);
 
-            // 更新成功時
             if (result.success) {
+                // 処理概要: 成功時は再読込とツリー更新を行う
+                // 実装理由: UI の一貫性を保つため
                 vscode.window.showInformationMessage('Artifact updated successfully');
                 this.loadArtifact();
                 vscode.commands.executeCommand('artifactTree.refresh');
-                // 楽観ロック競合時
             } else if (result.conflict) {
+                // 処理概要: 競合検出時はユーザの選択で再読込を行う
+                // 実装理由: 楽観ロック競合の取り扱いを利用者に委ねるため
                 const choice = await vscode.window.showWarningMessage(
                     'Artifact has been modified by another user. Your version is outdated.',
                     'Reload',
                     'Cancel'
                 );
-                // ユーザーがReloadを選択した場合のみ再読込
-                // 理由: 意図しない再取得を防ぐ
                 if (choice === 'Reload') {
                     this.loadArtifact();
                 }
-                // その他エラー時
             } else {
+                // 処理概要: その他エラーは表示
+                // 実装理由: 利用者に失敗を通知し次のアクションを促すため
                 vscode.window.showErrorMessage(`Failed to update artifact: ${result.error}`);
             }
         } catch (error) {
