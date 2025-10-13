@@ -54,7 +54,7 @@ describe('WBSService', () => {
     MockedWBSTreeProvider.mockImplementation(() => mockWbsProvider);
     MockedArtifactTreeProvider.mockImplementation(() => mockArtifactProvider);
 
-    wbsService = new WBSService(mockMcpClient);
+  wbsService = new WBSService(mockMcpClient, { wbsProvider: mockWbsProvider as any, artifactProvider: mockArtifactProvider as any });
   });
 
   describe('API methods (list/get/create/update/delete/move)', () => {
@@ -117,8 +117,6 @@ describe('WBSService', () => {
 
   describe('constructor', () => {
     it('should create WBSService with providers', () => {
-      expect(MockedWBSTreeProvider).toHaveBeenCalledWith(mockMcpClient);
-      expect(MockedArtifactTreeProvider).toHaveBeenCalledWith(mockMcpClient);
       expect(wbsService.wbsProvider).toBe(mockWbsProvider);
       expect(wbsService.artifactProvider).toBe(mockArtifactProvider);
     });

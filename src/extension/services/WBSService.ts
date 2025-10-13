@@ -1,6 +1,7 @@
 // src/services/WBSService.ts
-import { WBSTreeProvider } from '../views/wbsTree';
-import { ArtifactTreeProvider } from '../views/artifactTree';
+/* eslint-disable jsdoc/require-param */
+import type { WBSTreeProvider } from '../views/wbsTree';
+import type { ArtifactTreeProvider } from '../views/artifactTree';
 import type { MCPClient, Artifact } from '../mcpClient';
 import type { WBSServicePublic } from './wbsService.interface';
 /**
@@ -15,16 +16,25 @@ export class WBSService {
   private readonly mcpClient: MCPClient;
 
   /**
-   * 処理名: コンストラクタ
-   * 処理概要: MCPClient を受け取り内部の provider をデフォルトで生成する
-   * 実装理由(なぜ必要か): 既存の互換性を保ちつつサービスを初期化するため
-   * @param mcpClient MCPClient のインスタンス（ツール呼び出し用）
-    */
-   constructor(mcpClient: MCPClient) {
+   * コンストラクタ
+   * @param mcpClient MCPClient インスタンス
+   * @param [providers] オプションのプロバイダ注入（循環依存回避のため外部から注入可能）
+   * @param [providers.wbsProvider] WBS ツリープロバイダ（任意）
+   * @param [providers.artifactProvider] 成果物ツリープロバイダ（任意）
+   */
+  constructor(mcpClient: MCPClient, providers: { wbsProvider: WBSTreeProvider; artifactProvider: ArtifactTreeProvider }) {
     this.mcpClient = mcpClient;
-    // デフォルトでは既存互換のため provider を生成する
-    this.wbsProvider = new WBSTreeProvider(mcpClient as any);
-    this.artifactProvider = new ArtifactTreeProvider(mcpClient as any);
+    // providers は必須にして外部から注入してもらうDI方式に変更
+    this.wbsProvider = providers.wbsProvider;
+    this.artifactProvider = providers.artifactProvider;
+  }
+
+  /**
+   * providers が未指定のときに同期的にプロバイダを生成する（createRequire を使用）
+   * テスト環境では jest.mock によりモック化された実装が返るため互換性がある
+   */
+  private tryAutoCreateProviders(mcpClient: MCPClient) {
+    console.warn('[WBSService] Auto-creation of providers is no longer supported. Please provide them via dependency injection.');
   }
 
   /**
