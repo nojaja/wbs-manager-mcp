@@ -31,8 +31,10 @@ export default class WbsListTasksTool extends Tool {
      */
     async run(args: any) {
         try {
+            // DB リポジトリを取得し、存在確認を行う
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
+            // 指定 parentId のタスク一覧を取得して文字列化して返す
             const tasks = await repo.listTasks(args.parentId);
             return { content: [{ type: 'text', text: JSON.stringify(tasks, null, 2) }] };
         } catch (error) {

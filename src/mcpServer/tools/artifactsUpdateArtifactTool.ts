@@ -36,6 +36,7 @@ export default class ArtifactsUpdateArtifactTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ確認と更新データの適用
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const artifact = await repo.updateArtifact(args.artifactId, {

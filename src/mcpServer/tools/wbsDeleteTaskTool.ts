@@ -35,6 +35,7 @@ export default class WbsDeleteTaskTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリを検証し、タスク削除処理を呼び出す
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const deleted = await repo.deleteTask(args.taskId);

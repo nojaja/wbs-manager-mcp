@@ -3,13 +3,17 @@ import path from 'path';
 import type { Tool, ToolDeps } from './Tool';
 
 /**
- * ツールの登録・実行を管理するレジストリ
+ * 処理名: ToolRegistry クラス
+ * 処理概要: ツール（Tool）インスタンスの登録・解除・取得・実行、および動的ロードと依存注入を管理するレジストリ機能を提供します。
+ * 実装理由: アプリケーション側で個別のツール実装を意識せずに一元的に操作できるようにするため。ツールの管理と初期化、依存注入の適用を集中させ保守性を高めます。
  */
 export class ToolRegistry {
     tools: Map<string, Tool>;
     deps: ToolDeps;
     /**
-     * @constructor
+     * 処理名: コンストラクタ
+     * 処理概要: 内部のツールマップと依存オブジェクトを初期化します。
+     * 実装理由: ToolRegistry の基本状態（空のマップと空の依存オブジェクト）を確実に用意するため。
      */
     constructor() {
         this.tools = new Map();
@@ -17,23 +21,31 @@ export class ToolRegistry {
     }
 
     /**
-     * ツールを登録して初期化する
+     * 処理名: register
+     * 処理概要: Tool インスタンスをレジストリに登録し、必要であれば初期化（init）を呼び出します。
+     * 実装理由: 登録と同時に依存注入を適用してツールを使用可能な状態にすることで、呼び出し側の責務を軽減します。
      * @param {Tool} tool 登録するツールインスタンス
      */
     register(tool: Tool) {
+        // 引数検証: 不正なツールオブジェクトを防ぐ
         if (!tool || !tool.meta || !tool.meta.name) throw new Error('Invalid tool');
+        // ツールを登録マップに格納
         this.tools.set(tool.meta.name, tool);
         try {
+            // 初期化が提供されている場合は依存を渡して呼び出す
             if (typeof (tool as any).init === 'function') {
                 (tool as any).init(this.deps);
             }
         } catch (err) {
+            // 初期化失敗はログに記録するが、登録自体は継続
             console.error('[ToolRegistry] tool.init failed for', tool.meta.name, err);
         }
     }
 
     /**
-     * 指定名のツールを登録解除する
+     * 処理名: unregister
+     * 処理概要: 指定した名前のツールをレジストリから削除します。
+     * 実装理由: ランタイムで不要になったツールを解放・削除できるようにし、競合や不要なリソース保持を防ぐため。
      * @param {string} name ツール名
      * @returns {boolean} 削除に成功したか
      */
@@ -42,7 +54,9 @@ export class ToolRegistry {
     }
 
     /**
-     * ツール取得
+     * 処理名: get
+     * 処理概要: 名前に対応するツールインスタンスを返します。
+     * 実装理由: 外部からツールを直接取得して特定の機能を呼び出せるようにするため。
      * @param {string} name ツール名
      * @returns {Tool | undefined} ツールインスタンスまたは undefined
      */
@@ -51,7 +65,9 @@ export class ToolRegistry {
     }
 
     /**
-     * 登録済みツールのメタ一覧を返す
+     * 処理名: list
+     * 処理概要: 登録済みツールのメタ情報一覧を配列で返します。
+     * 実装理由: 外部が利用可能なツール一覧（メタ情報）を取得して UI 表示や自動化に利用できるようにするため。
      * @returns {Array<any>} メタ情報配列
      */
     list() {
@@ -59,40 +75,51 @@ export class ToolRegistry {
     }
 
     /**
-     * 指定ツールを実行する
+     * 処理名: execute
+     * 処理概要: 指定したツールを実行し、その実行結果を返却する非同期メソッドです。
+     * 実装理由: ツール呼び出しを統一的に扱い、存在確認や例外伝搬などを一元管理するため。
      * @param {string} name ツール名
      * @param {any} args 実行引数
      * @returns {Promise<any>} ツールの実行結果
      */
     async execute(name: string, args: any) {
         const tool = this.get(name);
+        // ツール存在チェック: 存在しない場合はエラーにする（呼び出し側で処理）
         if (!tool) throw new Error(`Tool not found: ${name}`);
         return tool.run(args);
     }
     /**
-     * 指定ディレクトリからツールを動的にロードする (互換用)
-     * 非推奨: 動的ロードを使わない方針の場合は呼び出さないでください
+     * 処理名: loadFromDirectory
+     * 処理概要: 指定ディレクトリ内の .js/.mjs ファイルを動的にインポートして、ツールインスタンスを登録します（互換用）。
+     * 実装理由: 外部プラグイン的にツールを配置して自動検出・登録する古い互換パスをサポートするため。動的ロードはセキュリティや可観測性の観点から推奨されません。
      * @param {string} dir ディレクトリパス
-    * @returns {Promise<void>} 非同期完了
+     * @returns {Promise<void>} 非同期完了
      */
     async loadFromDirectory(dir: string) {
+        // 指定パスを絶対化して検査
         const abs = path.resolve(dir);
         if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return;
+        // 対象ファイルを列挙（.js/.mjs）
         const files = fs.readdirSync(abs).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
+        // 各ファイルを順にインポートしてツールインスタンスを検出・登録する
         for (const f of files) {
             try {
                 const modPath = new URL(path.join(abs, f)).href;
                 const mod = await import(modPath);
+                // エクスポート形態の違いに対応してインスタンスを探す
                 const instance = mod.default || mod.tool || mod.instance;
                 if (instance) this.register(instance as Tool);
             } catch (err) {
+                // 動的ロードは実行時エラーが発生しやすいため、失敗をログに残して次に進む
                 console.error('[ToolRegistry] Failed to load tool', f, err);
             }
         }
     }
 
     /**
-     * 依存注入の設定
+     * 処理名: setDeps
+     * 処理概要: レジストリに保持しているすべてのツールに対して依存オブジェクトを注入し、必要であれば初期化を再実行します。
+     * 実装理由: ツールが利用する共通リソース（DB やログ等）の提供を一括で行うため。動的に依存を差し替えられることでテストや起動時構成が容易になります。
      * @param {ToolDeps} deps 注入する依存オブジェクト
      * @returns {void}
      */
@@ -100,8 +127,10 @@ export class ToolRegistry {
         this.deps = deps || {};
         for (const tool of this.tools.values()) {
             try {
+                // init 関数がある場合は新しい依存を渡して再初期化
                 if (typeof (tool as any).init === 'function') (tool as any).init(this.deps);
             } catch (err) {
+                // 初期化に失敗しても他のツールの初期化は続行する
                 console.error('[ToolRegistry] tool.init failed during setDeps for', tool.meta?.name, err);
             }
         }

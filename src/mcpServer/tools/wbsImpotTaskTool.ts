@@ -33,9 +33,11 @@ export default class WbsImpotTaskTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ存在確認と入力タスク配列の正規化
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const tasks = Array.isArray(args.tasks) ? args.tasks : [];
+            // importTasks を呼び出して一括登録を実行
             const created = await repo.importTasks(tasks);
             return { content: [{ type: 'text', text: JSON.stringify(created, null, 2) }] };
         } catch (error) {

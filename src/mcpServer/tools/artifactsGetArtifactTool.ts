@@ -36,6 +36,7 @@ export default class ArtifactsGetArtifactTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ取得と指定成果物の検索
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const artifact = await repo.getArtifact(args.artifactId);

@@ -36,6 +36,7 @@ export default class ArtifactsListArtifactsTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ確認と一覧取得
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const artifacts = await repo.listArtifacts();

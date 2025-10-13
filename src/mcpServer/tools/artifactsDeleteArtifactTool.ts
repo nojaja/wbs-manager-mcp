@@ -36,6 +36,7 @@ export default class ArtifactsDeleteArtifactTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ検証および削除処理の実行
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const deleted = await repo.deleteArtifact(args.artifactId);

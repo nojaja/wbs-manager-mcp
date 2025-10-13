@@ -33,6 +33,7 @@ export default class ArtifactsCreateArtifactTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ存在確認と成果物作成
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const artifact = await repo.createArtifact(args.title, args.uri ?? null, args.description ?? null);

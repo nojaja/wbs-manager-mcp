@@ -27,13 +27,16 @@ export default class WbsGetTaskTool extends Tool {
     * @returns {Promise<any>} ツールレスポンス
      */
     async run(args: any) {
+        // リポジトリを取得してタスク検索を行う
         const repo = this.repo;
         try {
             if (!repo) throw new Error('Repository not injected');
             const task = await repo.getTask(args.taskId);
+            // 見つからない場合はユーザー向けメッセージを返す
             if (!task) {
                 return { content: [{ type: 'text', text: `❌ Task not found: ${args.taskId}` }] };
             }
+            // タスク情報を JSON で返却
             return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}` }] };

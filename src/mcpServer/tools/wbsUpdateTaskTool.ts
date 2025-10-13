@@ -29,15 +29,19 @@ export default class WbsUpdateTaskTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ取得と存在確認
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
 
+            // 対象タスクを取得し、存在しない場合は notFound を返す
             const currentTask = await repo.getTask(args.taskId);
             if (!currentTask) return this.notFound(args.taskId);
 
+            // 楽観ロック用バージョン検証を実行（競合検出）
             const versionErr = this.checkVersion(args, currentTask);
             if (versionErr) return versionErr;
 
+            // 更新データを組み立てて DB を更新する
             const updateData = this.buildUpdateData(args, currentTask);
             const updatedTask = await repo.updateTask(args.taskId, updateData);
             return { content: [{ type: 'text', text: `✅ Task updated successfully!\n\n${JSON.stringify(updatedTask, null, 2)}` }] };

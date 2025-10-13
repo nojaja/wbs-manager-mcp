@@ -66,8 +66,10 @@ export default class WbsCreateTaskTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリの存在確認
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
+            // 引数を正規化して DB に渡す（deliverables/prerequisites/conditions の整形と検証）
             const task = await repo.createTask(
                 args.title,
                 args.description ?? '',

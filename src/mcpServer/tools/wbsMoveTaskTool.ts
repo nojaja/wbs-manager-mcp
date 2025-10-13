@@ -35,8 +35,10 @@ export default class WbsMoveTaskTool extends Tool {
      */
     async run(args: any) {
         try {
+            // リポジトリ検証
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
+            // 指定タスクを新しい親配下に移動し、結果を返す
             const task = await repo.moveTask(args.taskId, args.newParentId ?? null);
             return { content: [{ type: 'text', text: `✅ Task moved successfully!\n\n${JSON.stringify(task, null, 2)}` }] };
         } catch (error) {

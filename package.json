@@ -28,11 +28,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:mcpWbs.start",
-    "onView:wbsTree",
-    "onView:artifactTree"
-  ],
+  
   "main": "./out/extension/extension.js",
   "contributes": {
     "commands": [

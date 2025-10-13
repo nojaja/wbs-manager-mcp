@@ -34,17 +34,17 @@ interface JsonRpcNotification {
 }
 
 /**
- * 標準入出力MCPサーバクラス
- * 標準入出力経由でリクエスト受付・DB操作・レスポンス返却を行う
- * なぜ必要か: VSCode拡張とサーバ間をシンプルなプロトコルで接続し、DB操作を分離するため
+ * 処理名: Stdio MCP サーバ（クラス）
+ * 処理概要: 標準入出力を使って JSON-RPC 形式のメッセージを受信し、DB 操作／ツール呼び出しを仲介して応答を返すサーバ実装。
+ * 実装理由: VSCode 拡張側と分離してサーバ側の DB やツールを独立して扱うため。標準入出力でのやり取りにより拡張とプロセス間通信を簡潔に保つ。
  */
 class StdioMCPServer {
     private repo: WBSRepository;
 
     /**
-     * コンストラクタ
-     * WBSリポジトリ初期化・標準入出力ハンドラ設定を行う
-     * なぜ必要か: DB操作・リクエスト受付を一元管理するため
+     * 処理名: コンストラクタ
+     * 処理概要: WBSRepository のインスタンスを作成し、標準入出力の受信ハンドラを設定する
+     * 実装理由: サーバが扱うデータ層（リポジトリ）と通信ハンドラを初期化して、以降のメッセージ処理を一元的に行うため
      */
     constructor() {
         this.repo = new WBSRepository();
@@ -52,9 +52,9 @@ class StdioMCPServer {
     }
 
     /**
-     * 標準入出力ハンドラ設定処理
-     * stdinからのデータ受信・パース・メッセージ分岐処理を行う
-    * なぜ必要か: VSCode拡張からのリクエストをリアルタイムで受信・処理するため（標準入出力を通信チャネルとして利用）
+     * 処理名: 標準入出力ハンドラ設定
+     * 処理概要: process.stdin に対してデータイベントと end イベントを登録し、受信したバイト列を行単位で分割して JSON-RPC メッセージとして処理する
+     * 実装理由: ストリームは任意の境界で切れるためバッファリングして行単位で安全にパースし、途中受信や複数メッセージの同時到着を扱うため
      */
     private setupStdioHandlers() {
         process.stdin.setEncoding('utf8');
@@ -65,24 +65,28 @@ class StdioMCPServer {
             let lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
-            // 1行ずつJSON-RPCメッセージとして処理
-            // 処理概要: 受信した行をJSONとしてパースし、通知/リクエストへ振り分け
-            // 実装理由: ストリーム分割の境界問題（途中受信）を避け、確実に1行単位で扱う
+            // 1行ずつ JSON-RPC メッセージとして処理するループ
+            // 処理概要: split によって得た各行を順にパースして handleMessage に渡す
+            // 実装理由: ストリームがメッセージの途中で切れることや複数メッセージが単一チャンクで来るケースに対応するため
             for (const line of lines) {
-                // 空行はスキップ
-                if (line.trim()) {
-                    // 理由: サーバへの不正リクエストやパース失敗時も安全にエラー通知
-                    try {
-                        const message = JSON.parse(line.trim());
-                        this.handleMessage(message);
-                    } catch (error) {
-                        console.error('[MCP Server] Failed to parse message:', error);
-                    }
+                // 空行は意図せぬノイズなので無視する
+                if (!line.trim()) continue;
+
+                // JSON パースは例外を投げる可能性があるため個別に try/catch で保護する
+                // 処理概要: パース成功で handleMessage を呼ぶ。失敗時はログに記録して次の行へ進む
+                // 実装理由: 不正な入力によりサーバ全体が停止するのを防ぎ、問題の行だけを無害化するため
+                try {
+                    const message = JSON.parse(line.trim());
+                    this.handleMessage(message);
+                } catch (error) {
+                    console.error('[MCP Server] Failed to parse message:', error);
                 }
             }
         });
 
         process.stdin.on('end', () => {
+            // 処理概要: stdin の終了を受けてプロセスを終了する
+            // 実装理由: 親プロセス側の入力が終了した場合、サーバ側もクリーンに終了する必要があるため
             console.error('[MCP Server] Stdin ended, exiting...');
             process.exit(0);
         });
@@ -99,17 +103,18 @@ class StdioMCPServer {
     }
 
     /**
-     * メッセージ受信処理
-     * JSON-RPCリクエスト/通知を受信し、リクエストはhandleRequest、通知はhandleNotificationへ振り分ける
-     * なぜ必要か: クライアントからの各種操作要求を正しく分岐・処理するため
+     * 処理名: メッセージ受信ハンドラ
+     * 処理概要: 受信した JSON-RPC メッセージをログ出力し、リクエストか通知かで処理を分岐する
+     * 実装理由: JSON-RPC の仕様に従い、id の有無でレスポンスが必要か判定し適切に handleRequest / handleNotification を呼び出すため
      * @param message 受信メッセージ
      */
     private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
         try {
             console.error(`[MCP Server] Received: ${message.method}`, message.params);
 
-            // idプロパティの有無でリクエスト/通知を分岐
-            // 理由: JSON-RPC仕様に従い、応答要否を正しく判定するため
+            // id プロパティの有無でリクエスト/通知を判定
+            // 処理概要: リクエストはレスポンスを返す必要があるため handleRequest を呼び、通知は handleNotification に委譲する
+            // 実装理由: クライアントとサーバ間での同期的な呼び出し/非同期通知を正しく扱うため
             if ('id' in message) {
                 // Request - needs response
                 const response = await this.handleRequest(message as JsonRpcRequest);
@@ -119,11 +124,11 @@ class StdioMCPServer {
                 await this.handleNotification(message as JsonRpcNotification);
             }
         } catch (error) {
+            // 処理概要: message 処理中の例外はログに出力し、リクエストの場合はエラー応答を返す
+            // 実装理由: 通知は一方向通信なので応答しないが、リクエストは呼び出し元が結果を待っているためエラーを返却する必要がある
             console.error('[MCP Server] Error handling message:', error);
-            // idプロパティがある場合のみエラー応答を返す
-            // 理由: 通知には応答不要、リクエストのみエラー返却
             if ('id' in message) {
-                this.sendResponse(message.method,{
+                this.sendResponse(message.method, {
                     jsonrpc: '2.0',
                     id: message.id,
                     error: {
@@ -136,19 +141,22 @@ class StdioMCPServer {
     }
 
     /**
-     * リクエスト処理
-     * JSON-RPCリクエストのメソッドごとにDB操作やツール呼び出しを行い、レスポンスを返す
-     * なぜ必要か: クライアントからのAPI呼び出しをDB操作やツール呼び出しにマッピングするため
+     * 処理名: リクエストハンドラ
+     * 処理概要: JSON-RPC リクエストのメソッド名に応じて適切なレスポンスを返す。内部的にはツール呼び出しやリソース情報の返却を行う
+     * 実装理由: クライアント API をサーバの機能（ツール実行やリソース提供）にマッピングするため
      * @param request リクエストオブジェクト
      * @returns レスポンスオブジェクト
      */
     private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
         const { method, params, id } = request;
 
-        // メソッド名ごとに処理を分岐
-        // 理由: JSON-RPC仕様に従い、APIごとに適切なレスポンスを返すため
+        // メソッド名ごとに処理を分岐する switch ブロック
+        // 処理概要: 各 API 名に対応したレスポンス/副作用を実行する
+        // 実装理由: 単一エンドポイント（JSON-RPC）で複数機能を提供するため、明示的に分岐して処理を管理する
         switch (method) {
             case 'initialize':
+                // 処理概要: サーバの基本情報・機能一覧を返す
+                // 実装理由: クライアントがサーバの能力やバージョンを把握するため必要
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -165,6 +173,8 @@ class StdioMCPServer {
                 };
 
             case 'tools/list':
+                // 処理概要: 登録済みツール一覧を返す
+                // 実装理由: クライアントが利用可能なツールを列挙して UI 等で表示するため
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -175,11 +185,15 @@ class StdioMCPServer {
 
             case 'tools/call':
                 {
+                    // 処理概要: 指定されたツール名でツールを実行し結果を返す
+                    // 実装理由: 拡張から具体的な処理（タスク作成/取得等）をリクエストできるようにするため
                     const toolResult = await toolRegistry.execute(params?.name, params?.arguments ?? {});
                     return { jsonrpc: '2.0', id, result: toolResult };
                 }
 
             case 'ping':
+                // 処理概要: 単純な疎通確認（空の結果を返す）
+                // 実装理由: クライアントがサーバとの接続状態を確認するため
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -187,6 +201,8 @@ class StdioMCPServer {
                 };
 
             case 'resources/list':
+                // 処理概要: リソース一覧を返す（現状未実装で空配列）
+                // 実装理由: 将来的に外部リソースを列挙する API のプレースホルダ
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -196,6 +212,8 @@ class StdioMCPServer {
                 };
 
             case 'prompts/list':
+                // 処理概要: プロンプト一覧を返す（現状未実装で空配列）
+                // 実装理由: 将来の拡張でプロンプトを提供するためのプレースホルダ
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -205,8 +223,9 @@ class StdioMCPServer {
                 };
 
             default:
-                // 未知のメソッドはエラー応答
-                // 理由: 仕様外の呼び出しを明示的に拒否し、クライアントの誤実装に気づけるようにする
+                // 未知のメソッドは明示的にエラー応答を返す
+                // 処理概要: サポート外のメソッド呼び出しに対して Method not found エラーを返す
+                // 実装理由: クライアント側の誤実装やタイプミスを早期に検出できるようにするため
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -219,23 +238,24 @@ class StdioMCPServer {
     }
 
     /**
-     * 通知処理
-     * JSON-RPC通知のメソッドごとにログ出力等を行う
-     * なぜ必要か: クライアントからの状態通知やイベントを受けてサーバ側で処理するため（応答不要の一方向通信）
+     * 処理名: 通知ハンドラ
+     * 処理概要: JSON-RPC の通知メッセージを受け取り、現状はログ出力のみを行う
+     * 実装理由: 通知は応答不要の一方向メッセージであり、将来的にイベント処理を追加するための受け口を確保する
      * @param notification 通知オブジェクト
      */
     private async handleNotification(notification: JsonRpcNotification) {
         const { method } = notification;
-        // 通知はログ出力のみで受け流す（必要なら将来拡張する）
+        // 処理概要: 通知を受けてログに記録する（軽量な受け流し実装）
+        // 実装理由: 通知の多数到着や非同期イベントを簡潔に扱うため、現状はログに残すだけにする
         console.error(`[MCP Server] Notification received: ${method}`);
         return;
     }
 
 
     /**
-     * レスポンス送信処理
-     * JSON-RPCレスポンスを標準出力へ送信する
-     * なぜ必要か: クライアントへAPI応答を返し、UIを更新させるため
+     * 処理名: レスポンス送信
+     * 処理概要: JSON-RPC レスポンスオブジェクトを文字列化して標準出力に書き出す
+     * 実装理由: 拡張クライアントは標準出力の各行を JSON-RPC レスポンスとして読み取るため、正確に一行ずつ出力する必要がある
      * @param method メソッド名
      * @param response レスポンスオブジェクト
      */
