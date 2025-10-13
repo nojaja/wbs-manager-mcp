@@ -73,7 +73,7 @@ export class ServerService {
    * なぜ必要か: サーバの状態監視・障害検知・ユーザー通知のため
    * @param onExit 終了時コールバック
    */
-  setupServerProcessHandlers(onExit?: (code: number|null, signal: NodeJS.Signals|null) => void) {
+  setupServerProcessHandlers(onExit?: (code: number | null, signal: NodeJS.Signals | null) => void) {
     if (!this.serverProcess) return;
     // 処理名: サーバプロセスハンドラ登録
     // 処理概要: stdout/stderr のコールバックとプロセス終了/エラー時のハンドラを登録する

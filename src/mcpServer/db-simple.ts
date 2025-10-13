@@ -270,12 +270,12 @@ export class WBSRepository {
         const db = await this.db();
         const id = uuidv4();
         const now = new Date().toISOString();
-    // status はテスト期待値に合わせ、title/description/estimate のみを必須として判定する
-    const hasTitle = !!(title && title.toString().trim().length > 0);
-    const hasDescription = !!(description && description.toString().trim().length > 0);
-    const hasEstimate = !!(estimate && estimate.toString().trim().length > 0);
-    const allPresent = hasTitle && hasDescription && hasEstimate;
-    const status = allPresent ? 'pending' : 'draft';
+        // status はテスト期待値に合わせ、title/description/estimate のみを必須として判定する
+        const hasTitle = !!(title && title.toString().trim().length > 0);
+        const hasDescription = !!(description && description.toString().trim().length > 0);
+        const hasEstimate = !!(estimate && estimate.toString().trim().length > 0);
+        const allPresent = hasTitle && hasDescription && hasEstimate;
+        const status = allPresent ? 'pending' : 'draft';
 
         await db.run('BEGIN');
         try {
@@ -557,12 +557,12 @@ export class WBSRepository {
             return null;
         }
 
-    const rows = await db.all<Task[]>(
-        `SELECT id, parent_id, title, description, assignee, status,
+        const rows = await db.all<Task[]>(
+            `SELECT id, parent_id, title, description, assignee, status,
             estimate, created_at, updated_at, version
          FROM tasks
          ORDER BY created_at ASC`
-    );
+        );
 
         const taskMap = new Map<string, Task>();
 
@@ -633,7 +633,7 @@ export class WBSRepository {
         const now = new Date().toISOString();
         const newVersion = current.version + 1;
 
-    await db.run('BEGIN');
+        await db.run('BEGIN');
         try {
             await db.run(
                 `UPDATE tasks
@@ -732,15 +732,15 @@ export class WBSRepository {
             return updates.status;
         }
 
-    const finalTitle = updates.title ?? current.title;
-    const finalDescription = (updates.description ?? current.description ?? '');
-    const finalEstimate = (updates.estimate ?? current.estimate ?? '');
+        const finalTitle = updates.title ?? current.title;
+        const finalDescription = (updates.description ?? current.description ?? '');
+        const finalEstimate = (updates.estimate ?? current.estimate ?? '');
 
-    const titleOk = !!(finalTitle && String(finalTitle).trim().length > 0);
-    const descriptionOk = !!(finalDescription && String(finalDescription).trim().length > 0);
-    const estimateOk = !!(finalEstimate && String(finalEstimate).trim().length > 0);
+        const titleOk = !!(finalTitle && String(finalTitle).trim().length > 0);
+        const descriptionOk = !!(finalDescription && String(finalDescription).trim().length > 0);
+        const estimateOk = !!(finalEstimate && String(finalEstimate).trim().length > 0);
 
-    return (titleOk && descriptionOk && estimateOk) ? 'pending' : 'draft';
+        return (titleOk && descriptionOk && estimateOk) ? 'pending' : 'draft';
     }
 
     /**

@@ -573,7 +573,7 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
     * なぜ必要か: Drag&DropのUI制御とデータ更新（サーバ呼び出し）を分離し、責務を明確化するため
      * @param provider ドロップ処理を委譲するWBSツリープロバイダ
      */
-    constructor(private readonly provider: WBSTreeProvider) {}
+    constructor(private readonly provider: WBSTreeProvider) { }
 
     /**
      * ドラッグ開始処理

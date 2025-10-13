@@ -94,7 +94,7 @@ class StdioMCPServer {
         // Handle process termination
         process.on('SIGINT', () => {
             console.error('[MCP Server] Received SIGINT, exiting...');
-            process.exit(0);    
+            process.exit(0);
         });
         process.on('SIGTERM', () => {
             console.error('[MCP Server] Received SIGTERM, exiting...');

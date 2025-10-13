@@ -702,5 +702,5 @@ export class MCPClient {
         }
         this.pendingRequests.clear();
     }
-    
+
 }

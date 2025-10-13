@@ -183,7 +183,7 @@ export class WBSService {
    * @param content ツール出力の text フィールド
    * @returns {{ type: 'conflict'|'error'|'success'|null; id?: string }} 分析結果
    */
-  private analyzePlainContent(content: any): { type: 'conflict'|'error'|'success'|null; id?: string } {
+  private analyzePlainContent(content: any): { type: 'conflict' | 'error' | 'success' | null; id?: string } {
     if (typeof content !== 'string') return { type: null };
     if (content.includes('modified by another user')) return { type: 'conflict' };
     if (content.includes('❌')) return { type: 'error' };
@@ -257,7 +257,7 @@ export class WBSService {
       if (prerequisites !== undefined) toolArguments.prerequisites = prerequisites;
       if (completionConditions !== undefined) toolArguments.completionConditions = completionConditions;
 
-  const result = await (this.mcpClient as any).callTool('wbs.planMode.createTask', toolArguments);
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.createTask', toolArguments);
       const parsed = this.parseToolResponse(result);
       if (parsed.parsed) {
         return { success: true, taskId: parsed.parsed.id, message: parsed.hintSummary };
@@ -464,12 +464,12 @@ export class WBSService {
         description: params.description ?? null
       });
 
-      
-    const parsed = this.parseToolResponse(result);
-    if (parsed.parsed && typeof parsed.parsed === 'object') {
-    return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary };
-    }
-    return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
+
+      const parsed = this.parseToolResponse(result);
+      if (parsed.parsed && typeof parsed.parsed === 'object') {
+        return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary };
+      }
+      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };

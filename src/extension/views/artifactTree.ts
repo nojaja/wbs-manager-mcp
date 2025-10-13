@@ -28,18 +28,18 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
      * @param serviceOrClient WBSService もしくは MCPClient（互換性のためどちらでも受け取る）
      */
     constructor(serviceOrClient: WBSServicePublic | MCPClient) {
-            // Prefer treating the object as a WBSServicePublic when it exposes
-            // the new service API. Otherwise treat it as an MCPClient for
-            // backward compatibility.
-            const asAny = serviceOrClient as any;
-            if (asAny && (typeof asAny.listArtifactsApi === 'function' || asAny.artifactProvider)) {
-                this.wbsService = serviceOrClient as WBSServicePublic;
-            } else if (asAny && typeof asAny.listArtifacts === 'function') {
-                this.mcpClient = serviceOrClient as MCPClient;
-            } else {
-                // Fallback: prefer the newer service API surface
-                this.wbsService = serviceOrClient as WBSServicePublic;
-            }
+        // Prefer treating the object as a WBSServicePublic when it exposes
+        // the new service API. Otherwise treat it as an MCPClient for
+        // backward compatibility.
+        const asAny = serviceOrClient as any;
+        if (asAny && (typeof asAny.listArtifactsApi === 'function' || asAny.artifactProvider)) {
+            this.wbsService = serviceOrClient as WBSServicePublic;
+        } else if (asAny && typeof asAny.listArtifacts === 'function') {
+            this.mcpClient = serviceOrClient as MCPClient;
+        } else {
+            // Fallback: prefer the newer service API surface
+            this.wbsService = serviceOrClient as WBSServicePublic;
+        }
     }
 
     /**
@@ -108,7 +108,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
      * @returns Promise<Artifact[]>
      */
     private async mapArtifactProviderItems(): Promise<Artifact[]> {
-    const items = await (this.wbsService as any)!.artifactProvider.getChildren();
+        const items = await (this.wbsService as any)!.artifactProvider.getChildren();
         if (!Array.isArray(items)) return [];
         return (items as any[]).map((it) => it && it.artifact ? it.artifact : undefined).filter(Boolean);
     }
