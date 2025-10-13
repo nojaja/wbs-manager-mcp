@@ -98,7 +98,7 @@ export class ServerService {
     // stderr は即時にログ表示
     this.serverProcess.stderr?.on('data', (data) => {
       const error = data.toString().trim();
-      this.outputChannel.appendLine(`[Server Error] ${error}`);
+      this.outputChannel.appendLine(`${error}`);
       this.outputChannel.show?.();
     });
     // プロセス終了時の処理: クライアント通知・クリーンアップ
@@ -130,8 +130,6 @@ export class ServerService {
     // 実装理由: サーバの JSON-RPC レスポンスやデバッグ出力を正しく受け渡すため
     const trimmed = line.trim();
     if (!trimmed) return;
-    this.outputChannel.appendLine(`[Server] ${trimmed}`);
-    this.outputChannel.show?.();
     // raw string を受け取れるクライアントがあればそのまま渡す（後方互換）
     if (this.registeredClient && typeof (this.registeredClient as any).handleResponseFromServer === 'function') {
       (this.registeredClient as any).handleResponseFromServer(trimmed);

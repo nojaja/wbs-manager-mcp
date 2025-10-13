@@ -261,7 +261,8 @@ class StdioMCPServer {
      */
     private sendResponse(method: string, response: JsonRpcResponse) {
         const responseStr = JSON.stringify(response);
-        console.error(`[MCP Server] Sending: ${responseStr}`);
+        const debuggingStr = JSON.stringify(response, null, 2); // for easier debugging
+        console.error(`[MCP Server] Sending: ${debuggingStr}`);
         process.stdout.write(responseStr + '\n');
     }
 }
