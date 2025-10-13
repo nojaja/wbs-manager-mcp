@@ -1,6 +1,6 @@
 
 import { jest } from '@jest/globals';
-import { WBSService } from '../src/extension/services/WBSService';
+import { WBSService } from '../../src/extension/services/WBSService';
 
 describe('WBS/Artifact ビジネスロジックの現状動作テスト', () => {
   let mcpClient: any;

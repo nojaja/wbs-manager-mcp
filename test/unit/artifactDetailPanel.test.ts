@@ -1,4 +1,4 @@
-import { ArtifactDetailPanel } from '../src/extension/panels/artifactDetailPanel';
+import { ArtifactDetailPanel } from '../../src/extension/panels/artifactDetailPanel';
 
 describe('ArtifactDetailPanel', () => {
   const fakePanel: any = {

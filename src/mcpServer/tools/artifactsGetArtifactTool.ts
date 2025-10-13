@@ -14,7 +14,7 @@ export default class ArtifactsGetArtifactTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'artifacts.getArtifact', description: 'Get artifact by ID', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' } }, required: ['artifactId'] } });
+        super({ name: 'wbs.planMode.getArtifact', description: 'Get artifact by ID', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' } }, required: ['artifactId'] } });
         this.repo = null;
     }
     /**
@@ -40,10 +40,16 @@ export default class ArtifactsGetArtifactTool extends Tool {
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
             const artifact = await repo.getArtifact(args.artifactId);
-            if (!artifact) return { content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }] };
-            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }] };
+            if (!artifact) {
+                const llmHints = { nextActions: [{ action: 'searchArtifact', detail: 'IDを確認して再検索してください' }], notes: ['指定された成果物が見つかりませんでした。'] };
+                return { content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }], llmHints };
+            }
+            const llmHints = { nextActions: [{ action: 'linkToTasks', detail: `成果物 ${args.artifactId} を関連タスクにリンクできます` }], notes: ['成果物を取得しました。追加アクション: タスクへのリンク検討'] };
+            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }], llmHints };
         } catch (error) {
-            return { content: [{ type: 'text', text: `❌ Failed to get artifact: ${error instanceof Error ? error.message : String(error)}` }] };
+            const message = error instanceof Error ? error.message : String(error);
+            const llmHints = { nextActions: [{ action: 'retryGetArtifact', detail: '再試行してください' }], notes: [`例外メッセージ: ${message}`] };
+            return { content: [{ type: 'text', text: `❌ Failed to get artifact: ${message}` }], llmHints };
         }
     }
 }

@@ -12,7 +12,7 @@ export default class WbsDeleteTaskTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'wbs.deleteTask', description: 'Delete a task and its descendants', inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'] } });
+        super({ name: 'wbs.planMode.deleteTask', description: 'Delete a task and its descendants', inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'] } });
         this.repo = null;
     }
 

@@ -9,7 +9,7 @@ export default class WbsGetTaskTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'wbs.getTask', description: 'Get task details by ID (tool plugin)', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Task ID' } }, required: ['taskId'] } });
+        super({ name: 'wbs.planMode.getTask', description: 'Get task details by ID (tool plugin)', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Task ID' } }, required: ['taskId'] } });
         this.repo = null;
     }
 

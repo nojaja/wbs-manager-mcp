@@ -3,7 +3,7 @@
 
 import { jest } from '@jest/globals';
 import * as path from 'path';
-import { ServerService } from '../src/extension/server/ServerService';
+import { ServerService } from '../../src/extension/server/ServerService';
 
 jest.mock('fs', () => ({
   existsSync: jest.fn(),
@@ -25,7 +25,7 @@ describe('サーバプロセス管理の現状動作テスト', () => {
   // Node.js組み込みモジュールはESM+Jest環境で一度しかspyOnできないためdescribe直下で一度だけspyOn
   beforeEach(() => {
     jest.clearAllMocks();
-    serverPath = path.join(__dirname, '../src/server/index.js');
+    serverPath = path.join(__dirname, '../../src/server/index.js');
     workspaceRoot = path.join(__dirname, '..');
     mockProcess = {};
     outputChannel = { appendLine: jest.fn(), show: jest.fn() };

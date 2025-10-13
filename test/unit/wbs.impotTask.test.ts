@@ -1,8 +1,8 @@
-import { WBSRepository, initializeDatabase } from '../src/mcpServer/db-simple';
+import { WBSRepository, initializeDatabase } from '../../src/mcpServer/db-simple';
 import fs from 'fs';
 import path from 'path';
 
-describe('wbs.impotTask tool (repository.importTasks)', () => {
+describe('wbs.planMode.impotTask tool (repository.importTasks)', () => {
     const TEST_DIR = path.resolve(__dirname, '.tmp_impot');
 
     beforeAll(async () => {

@@ -1,4 +1,4 @@
-import { MCPClient } from '../src/extension/mcpClient';
+import { MCPClient } from '../../src/extension/mcpClient';
 
 const fakeOutput = { appendLine: jest.fn() } as any;
 
@@ -86,7 +86,7 @@ describe('MCPClient', () => {
     const result = await client.createTask({});
     expect(result).toEqual({ success: true, taskId: 'new-task-id', message });
     // MCPClient is transport-only when WBSService is not injected; expect raw params
-    expect(spy).toHaveBeenCalledWith('wbs.createTask', {});
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', {});
     spy.mockRestore();
   });
 
@@ -96,7 +96,7 @@ describe('MCPClient', () => {
     const result = await client.createTask({ parentId: 't1', title: ' ' });
     expect(result).toEqual({ success: false, error: message, message });
     // MCPClient forwards the provided params as-is when no WBSService is present
-    expect(spy).toHaveBeenCalledWith('wbs.createTask', { parentId: 't1', title: ' ' });
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', { parentId: 't1', title: ' ' });
     spy.mockRestore();
   });
 
@@ -105,7 +105,7 @@ describe('MCPClient', () => {
     spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
     const ok = await client.deleteTask('t5');
     expect(ok).toEqual({ success: true });
-    expect(spy).toHaveBeenCalledWith('wbs.deleteTask', { taskId: 't5' });
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.deleteTask', { taskId: 't5' });
 
     spy.mockResolvedValueOnce({ content: [{ text: '❌ missing' }] });
     const fail = await client.deleteTask('t5');
@@ -124,7 +124,7 @@ describe('MCPClient', () => {
     spy.mockResolvedValueOnce({ content: [{ text: '✅ moved' }] });
     const ok = await client.moveTask('t1', 'p2');
     expect(ok).toEqual({ success: true });
-    expect(spy).toHaveBeenCalledWith('wbs.moveTask', { taskId: 't1', newParentId: 'p2' });
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.moveTask', { taskId: 't1', newParentId: 'p2' });
 
     spy.mockResolvedValueOnce({ content: [{ text: '❌ fail' }] });
     const fail = await client.moveTask('t1', 'p2');

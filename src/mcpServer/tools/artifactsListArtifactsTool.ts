@@ -14,7 +14,7 @@ export default class ArtifactsListArtifactsTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'artifacts.listArtifacts', description: 'List artifacts', inputSchema: { type: 'object', properties: {} } });
+        super({ name: 'wbs.planMode.listArtifacts', description: 'List artifacts', inputSchema: { type: 'object', properties: {} } });
         this.repo = null;
     }
     /**
@@ -39,10 +39,13 @@ export default class ArtifactsListArtifactsTool extends Tool {
             // リポジトリ確認と一覧取得
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
-            const artifacts = await repo.listArtifacts();
-            return { content: [{ type: 'text', text: JSON.stringify(artifacts, null, 2) }] };
+            const list = await repo.listArtifacts();
+            const llmHints = { nextActions: [], notes: ['成果物一覧を取得しました'] };
+            return { content: [{ type: 'json', text: JSON.stringify(list, null, 2) }], llmHints };
         } catch (error) {
-            return { content: [{ type: 'text', text: `❌ Failed to list artifacts: ${error instanceof Error ? error.message : String(error)}` }] };
+            const message = error instanceof Error ? error.message : String(error);
+            const llmHints = { nextActions: [{ action: 'wbs.planMode.listArtifacts', detail: '再試行してください' }], notes: [`例外メッセージ: ${message}`] };
+            return { content: [{ type: 'text', text: `❌ Failed to list artifacts: ${message}` }], llmHints };
         }
     }
 }

@@ -12,7 +12,7 @@ export default class WbsMoveTaskTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'wbs.moveTask', description: 'Move a task under a different parent', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, newParentId: { type: 'string' } }, required: ['taskId'] } });
+        super({ name: 'wbs.planMode.moveTask', description: 'Move a task under a different parent', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, newParentId: { type: 'string' } }, required: ['taskId'] } });
         this.repo = null;
     }
 

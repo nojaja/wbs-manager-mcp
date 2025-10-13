@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../src/extension/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
 
 const fakePanel: any = {
   reveal: jest.fn(),

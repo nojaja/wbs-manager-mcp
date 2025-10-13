@@ -368,7 +368,7 @@ export class MCPClient {
             // 処理概要: wbs.listTasks ツールを呼び、テキストレスポンスを JSON に変換して返す
             // 実装理由: サーバはテキストコンテンツを返すため、クライアント側で構造化データに戻す必要がある
             const args = parentId !== undefined ? { parentId } : {};
-            const result = await this.callTool('wbs.listTasks', args);
+            const result = await this.callTool('wbs.planMode.listTasks', args);
             const content = result.content?.[0]?.text;
             if (content) {
                 try {
@@ -402,7 +402,7 @@ export class MCPClient {
             return this.wbsService.getTaskApi(taskId);
         }
         try {
-            const result = await this.callTool('wbs.getTask', { taskId });
+            const result = await this.callTool('wbs.planMode.getTask', { taskId });
             const content = result.content?.[0]?.text;
             if (content && !content.includes('❌')) {
                 return JSON.parse(content);
@@ -431,7 +431,7 @@ export class MCPClient {
         }
         try {
             // Transport-only fallback: pass updates as-is to the server tool.
-            const result = await this.callTool('wbs.updateTask', { taskId, ...updates });
+            const result = await this.callTool('wbs.planMode.updateTask', { taskId, ...updates });
             const content = result.content?.[0]?.text;
             if (content?.includes('✅')) {
                 return { success: true };
@@ -474,7 +474,7 @@ export class MCPClient {
         }
         try {
             // Transport-only fallback: forward params directly to the tool.
-            const result = await this.callTool('wbs.createTask', params);
+            const result = await this.callTool('wbs.planMode.createTask', params);
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 const idMatch = content.match(/ID:\s*(.+)/);
@@ -499,7 +499,7 @@ export class MCPClient {
         // to an injected service which may call back into this client and cause
         // recursion.
         try {
-            const result = await this.callTool('artifacts.listArtifacts', {});
+            const result = await this.callTool('wbs.planMode.listArtifacts', {});
             const content = result.content?.[0]?.text;
             if (content) {
                 return JSON.parse(content) as Artifact[];
@@ -530,7 +530,7 @@ export class MCPClient {
             return this.wbsService.createArtifactApi(params);
         }
         try {
-            const result = await this.callTool('artifacts.createArtifact', {
+            const result = await this.callTool('wbs.planMode.createArtifact', {
                 title: params.title,
                 uri: params.uri ?? null,
                 description: params.description ?? null
@@ -570,7 +570,7 @@ export class MCPClient {
             return this.wbsService.updateArtifactApi(params);
         }
         try {
-            const result = await this.callTool('artifacts.updateArtifact', {
+            const result = await this.callTool('wbs.planMode.updateArtifact', {
                 artifactId: params.artifactId,
                 title: params.title,
                 uri: params.uri ?? null,
@@ -604,7 +604,7 @@ export class MCPClient {
             return this.wbsService.getArtifactApi(artifactId);
         }
         try {
-            const result = await this.callTool('artifacts.getArtifact', { artifactId });
+            const result = await this.callTool('wbs.planMode.getArtifact', { artifactId });
             const content = result.content?.[0]?.text;
             if (content && !content.includes('❌')) {
                 return JSON.parse(content);
@@ -628,7 +628,7 @@ export class MCPClient {
             return this.wbsService.deleteArtifactApi(artifactId);
         }
         try {
-            const result = await this.callTool('artifacts.deleteArtifact', { artifactId });
+            const result = await this.callTool('wbs.planMode.deleteArtifact', { artifactId });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };
@@ -651,7 +651,7 @@ export class MCPClient {
             return this.wbsService.deleteTaskApi(taskId);
         }
         try {
-            const result = await this.callTool('wbs.deleteTask', { taskId });
+            const result = await this.callTool('wbs.planMode.deleteTask', { taskId });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };
@@ -676,7 +676,7 @@ export class MCPClient {
             return this.wbsService.moveTaskApi(taskId, newParentId);
         }
         try {
-            const result = await this.callTool('wbs.moveTask', { taskId, newParentId: newParentId ?? null });
+            const result = await this.callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };

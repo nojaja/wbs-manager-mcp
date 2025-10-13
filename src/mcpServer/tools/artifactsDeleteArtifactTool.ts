@@ -14,7 +14,7 @@ export default class ArtifactsDeleteArtifactTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'artifacts.deleteArtifact', description: 'Delete an artifact', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' } }, required: ['artifactId'] } });
+        super({ name: 'wbs.planMode.deleteArtifact', description: 'Delete an artifact', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' } }, required: ['artifactId'] } });
         this.repo = null;
     }
     /**
@@ -36,14 +36,27 @@ export default class ArtifactsDeleteArtifactTool extends Tool {
      */
     async run(args: any) {
         try {
-            // リポジトリ検証および削除処理の実行
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
+
             const deleted = await repo.deleteArtifact(args.artifactId);
-            if (!deleted) return { content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }] };
-            return { content: [{ type: 'text', text: `✅ Artifact deleted successfully!\n\nID: ${args.artifactId}` }] };
-        } catch (error) {
-            return { content: [{ type: 'text', text: `❌ Failed to delete artifact: ${error instanceof Error ? error.message : String(error)}` }] };
+
+            const llmHints = {
+                nextActions: [
+                    { action: 'refreshArtifactList', detail: '最新の成果物一覧を取得してください' }
+                ],
+                notes: [deleted ? '成果物が削除されました。' : '指定された成果物は見つかりませんでした。']
+            };
+
+            if (!deleted) {
+                return { content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }], llmHints };
+            }
+
+            return { content: [{ type: 'text', text: `✅ Artifact deleted successfully!\n\nID: ${args.artifactId}` }], llmHints };
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const llmHints = { nextActions: [{ action: 'checkRepo', detail: 'リポジトリの注入状態を確認してください' }], notes: [`例外メッセージ: ${message}`] };
+            return { content: [{ type: 'text', text: `❌ Failed to delete artifact: ${message}` }], llmHints };
         }
     }
 }

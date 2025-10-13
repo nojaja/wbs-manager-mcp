@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import * as vscode from 'vscode';
-import { ArtifactTreeItem, ArtifactTreeProvider } from '../src/extension/views/artifactTree';
-import { MCPClient, Artifact } from '../src/extension/mcpClient';
+import { ArtifactTreeItem, ArtifactTreeProvider } from '../../src/extension/views/artifactTree';
+import { MCPClient, Artifact } from '../../src/extension/mcpClient';
 
 jest.mock('vscode');
 

@@ -1,10 +1,10 @@
-import { WBSService } from '../src/extension/services/WBSService';
-import { WBSTreeProvider } from '../src/extension/views/wbsTree';
-import { ArtifactTreeProvider } from '../src/extension/views/artifactTree';
+import { WBSService } from '../../src/extension/services/WBSService';
+import { WBSTreeProvider } from '../../src/extension/views/wbsTree';
+import { ArtifactTreeProvider } from '../../src/extension/views/artifactTree';
 
 // モックの設定
-jest.mock('../src/extension/views/wbsTree');
-jest.mock('../src/extension/views/artifactTree');
+jest.mock('../../src/extension/views/wbsTree');
+jest.mock('../../src/extension/views/artifactTree');
 
 const MockedWBSTreeProvider = WBSTreeProvider as jest.MockedClass<typeof WBSTreeProvider>;
 const MockedArtifactTreeProvider = ArtifactTreeProvider as jest.MockedClass<typeof ArtifactTreeProvider>;

@@ -9,7 +9,7 @@ describe('MCPClient branch coverage', () => {
   });
 
   test('initialize throws when response has error', async () => {
-    const mod = await import('../src/extension/mcpClient');
+    const mod = await import('../../src/extension/mcpClient');
     client = new mod.MCPClient(fakeOutput);
     jest.spyOn(client as any, 'sendRequest').mockResolvedValue({ error: { message: 'init fail' } });
     await expect((client as any).initialize()).rejects.toThrow('Failed to initialize MCP: init fail');
@@ -39,7 +39,7 @@ describe('MCPClient branch coverage', () => {
 
   jest.resetModules();
   jest.doMock('child_process', () => ({ spawn: () => new DummyChildProcess() }));
-  const mod = await import('../src/extension/mcpClient');
+  const mod = await import('../../src/extension/mcpClient');
   client = new mod.MCPClient(fakeOutput);
 
   // provide a writer so sendRequest can work
@@ -66,7 +66,7 @@ describe('MCPClient branch coverage', () => {
   });
 
   test('sendRequest rejects when stdin.write callback errors', async () => {
-    const mod = await import('../src/extension/mcpClient');
+    const mod = await import('../../src/extension/mcpClient');
     client = new mod.MCPClient(fakeOutput);
     // simulate writer that throws via callback
     client.setWriter((_: string) => { throw new Error('writefail'); });
@@ -76,7 +76,7 @@ describe('MCPClient branch coverage', () => {
   });
 
   test('callTool throws when response.error present', async () => {
-    const mod = await import('../src/extension/mcpClient');
+    const mod = await import('../../src/extension/mcpClient');
     client = new mod.MCPClient(fakeOutput);
     jest.spyOn(client as any, 'sendRequest').mockResolvedValue({ error: { message: 'tool error' } });
     await expect(client.callTool('x', {})).rejects.toThrow('tool error');
@@ -85,7 +85,7 @@ describe('MCPClient branch coverage', () => {
 
 
   test('listTasks returns parsed array on success', async () => {
-    const mod = await import('../src/extension/mcpClient');
+    const mod = await import('../../src/extension/mcpClient');
     client = new mod.MCPClient(fakeOutput);
     const payload = JSON.stringify([{ id: 't1', title: 'T1' }]);
     const res = { content: [{ text: payload }] };
@@ -93,6 +93,6 @@ describe('MCPClient branch coverage', () => {
     const r = await client.listTasks('p1');
     expect(Array.isArray(r)).toBe(true);
     expect(r[0].id).toBe('t1');
-    expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', { parentId: 'p1' });
+    expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', { parentId: 'p1' });
   });
 });

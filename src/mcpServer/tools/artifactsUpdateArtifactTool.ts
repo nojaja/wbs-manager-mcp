@@ -13,7 +13,7 @@ export default class ArtifactsUpdateArtifactTool extends Tool {
      * @constructor
      */
     constructor() {
-        super({ name: 'artifacts.updateArtifact', description: 'Update an existing artifact', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' }, title: { type: 'string' }, uri: { type: 'string' }, description: { type: 'string' }, ifVersion: { type: 'number' } }, required: ['artifactId'] } });
+        super({ name: 'wbs.planMode.updateArtifact', description: 'Update an existing artifact', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' }, title: { type: 'string' }, uri: { type: 'string' }, description: { type: 'string' }, ifVersion: { type: 'number' } }, required: ['artifactId'] } });
         this.repo = null;
     }
 
@@ -45,9 +45,12 @@ export default class ArtifactsUpdateArtifactTool extends Tool {
                 description: args.description ?? null,
                 ifVersion: args.ifVersion
             });
-            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }] };
+            const llmHints = { nextActions: [{ action: 'wbs.planMode.updateTask', detail: `成果物 ${args.artifactId} をタスクと紐づける` }], notes: ['成果物が更新されました'] };
+            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }], llmHints };
         } catch (error) {
-            return { content: [{ type: 'text', text: `❌ Failed to update artifact: ${error instanceof Error ? error.message : String(error)}` }] };
+            const message = error instanceof Error ? error.message : String(error);
+            const llmHints = { nextActions: [{ action: 'wbs.planMode.updateArtifact', detail: '再試行してください' }], notes: [`例外メッセージ: ${message}`] };
+            return { content: [{ type: 'text', text: `❌ Failed to update artifact: ${message}` }], llmHints };
         }
     }
 }
