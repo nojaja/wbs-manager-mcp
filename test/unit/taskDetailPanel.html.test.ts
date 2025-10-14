@@ -10,28 +10,33 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
     webviewOptions: {}
   };
 
-  test('getHtmlForWebview includes selected status and readonly fields', () => {
+  test('getHtmlForWebview embeds task payload and references bundle', () => {
     const fakeMcp: any = { getTask: jest.fn() };
     const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
 
-  const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', assignee: 'A', estimate: '3d' };
+    const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', assignee: 'A', estimate: '3d' };
     const html = (panel as any).getHtmlForWebview(task);
 
-    // status option 'in-progress' should be selected
-    expect(html).toContain('option value="in-progress" selected');
-    // readonly fields
-    expect(html).toContain('value="t1" readonly');
-    expect(html).toContain('value="42" readonly');
-    // fields present
-    expect(html).toContain('T' /* title appears */);
+    // Minimal HTML skeleton and script
+    expect(html).toContain('<title>Task Detail</title>');
+    expect(html).toContain('<div id="app"></div>');
+    expect(html).toContain('task.bundle.js');
+    const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
+    expect(m).toBeTruthy();
+    const payload = JSON.parse(m![1]);
+    expect(payload.task.id).toBe('t1');
+    expect(payload.task.status).toBe('in-progress');
   });
 
-  test('getHtmlForWebview pending status selection', () => {
+  test('getHtmlForWebview includes pending status in payload', () => {
     const fakeMcp: any = { getTask: jest.fn() };
     const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', fakeMcp);
     const task = { id: 't2', title: 'Y', status: 'pending', version: 1 };
     const html = (panel as any).getHtmlForWebview(task);
-    expect(html).toContain('option value="pending" selected');
+    const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
+    expect(m).toBeTruthy();
+    const payload = JSON.parse(m![1]);
+    expect(payload.task.status).toBe('pending');
   });
 
   test('escapeHtml escapes special characters', () => {

@@ -253,7 +253,7 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
   });
 
   describe('HTML generation edge cases', () => {
-    test('getHtmlForWebview handles undefined values', () => {
+  test('getHtmlForWebview embeds payload even with undefined values', () => {
       const fakeMcp: any = { getArtifact: jest.fn() };
       const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
       
@@ -266,14 +266,16 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
       };
       
       const html = (panel as any).getHtmlForWebview(artifact);
-      
-      // Should handle undefined values gracefully
-      expect(html).toContain('value=""'); // Empty value for undefined title
-      expect(html).toContain('value="artifact-123" readonly');
-      expect(html).toContain('value="1" readonly');
+      // Should still render skeleton and embed payload as JSON
+      expect(html).toContain('<div id="app"></div>');
+      expect(html).toContain('artifact.bundle.js');
+      const m = html.match(/window.__ARTIFACT_PAYLOAD__ = (.*?);<\/script>/s);
+      expect(m).toBeTruthy();
+      const payload = JSON.parse(m![1]);
+      expect(payload.artifact).toEqual({ id: 'artifact-123', version: 1 });
     });
 
-    test('getHtmlForWebview generates complete HTML structure', () => {
+    test('getHtmlForWebview generates minimal HTML structure with script', () => {
       const fakeMcp: any = { getArtifact: jest.fn() };
       const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
       
@@ -286,12 +288,11 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
       };
       
       const html = (panel as any).getHtmlForWebview(artifact);
-      
-      // Check that all required HTML elements are present
+      // Check that expected minimal HTML is present
       expect(html).toContain('<!DOCTYPE html>');
       expect(html).toContain('<html lang="en">');
-      expect(html).toContain('<form id="artifactForm">');
-      expect(html).toContain('type="submit"');
+      expect(html).toContain('<div id="app"></div>');
+      expect(html).toContain('artifact.bundle.js');
       expect(html).toContain('</html>');
     });
   });

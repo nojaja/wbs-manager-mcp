@@ -172,8 +172,7 @@
     "typescript-eslint": "^8.46.0",
     "webpack": "^5.99.8",
     "webpack-cli": "^5.1.4",
-    "vue-loader": "^17.0.0",
-    "vue": "^3.3.4",
+  "vue-loader": "^17.0.0",
     "css-loader": "^6.8.1",
     "style-loader": "^3.3.3",
     "html-webpack-plugin": "^5.5.1",
@@ -184,6 +183,7 @@
     "@babel/preset-env": "^7.22.10"
   },
   "dependencies": {
+    "vue": "^3.3.4",
     "express": "^4.18.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",

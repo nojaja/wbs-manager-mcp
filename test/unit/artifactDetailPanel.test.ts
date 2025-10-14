@@ -63,7 +63,7 @@ describe('ArtifactDetailPanel', () => {
     expect(escaped).toContain('&#039;');
   });
 
-  test('getHtmlForWebview generates correct HTML with artifact data', () => {
+  test('getHtmlForWebview generates minimal HTML with payload and script', () => {
     const fakeMcp: any = { getProjectArtifact: jest.fn() };
     const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
     
@@ -76,19 +76,16 @@ describe('ArtifactDetailPanel', () => {
     };
     
     const html = (panel as any).getHtmlForWebview(artifact);
-    
-    // Check that form fields are pre-populated
-    expect(html).toContain('value="Test Artifact"');
-    expect(html).toContain('value="src/test.md"');
-    expect(html).toContain('>Test description</textarea>');
-    expect(html).toContain('value="artifact-123" readonly');
-    expect(html).toContain('value="1" readonly');
-    
-    // Check form structure
-    expect(html).toContain('<form id="artifactForm">');
-    expect(html).toContain('id="title"');
-    expect(html).toContain('id="uri"');
-    expect(html).toContain('id="description"');
+    // Basic skeleton
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('<title>Artifact Detail</title>');
+    expect(html).toContain('<div id="app"></div>');
+    expect(html).toContain('artifact.bundle.js');
+    // Payload embedding includes artifact data
+    const m = html.match(/window.__ARTIFACT_PAYLOAD__ = (.*?);<\/script>/s);
+    expect(m).toBeTruthy();
+    const payload = JSON.parse(m![1]);
+    expect(payload.artifact).toEqual(artifact);
   });
 
   test('dispose cleans up resources', () => {

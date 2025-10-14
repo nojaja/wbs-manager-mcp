@@ -21,14 +21,19 @@ describe('TaskDetailPanel', () => {
     jest.clearAllMocks();
   });
 
-  test('getHtmlForWebview contains task data', async () => {
+  test('getHtmlForWebview contains task data payload and script', async () => {
     const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
     const html = (panel as any).getHtmlForWebview({ id: 't1', title: 'Hello', status: 'pending', version: 1 });
-    expect(html).toContain('Task Details');
-    expect(html).toContain('Hello');
-    expect(html).toContain('deliverables');
-    expect(html).toContain('前提条件');
-    expect(html).toContain('完了条件');
+    // Title and container exist
+    expect(html).toContain('<title>Task Detail</title>');
+    expect(html).toContain('<div id="app"></div>');
+    // Script bundle is referenced
+    expect(html).toContain('task.bundle.js');
+    // Payload embedding includes task data
+    const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
+    expect(m).toBeTruthy();
+    const payload = JSON.parse(m![1]);
+    expect(payload.task).toEqual({ id: 't1', title: 'Hello', status: 'pending', version: 1 });
   });
 
   test('buildUpdateObject forwards new collections and version', () => {
