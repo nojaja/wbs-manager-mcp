@@ -118,7 +118,7 @@ describe('ServerService', () => {
   // simulate Buffer input
   stdoutCallback(Buffer.from('test output\n'));
 
-  expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('[Server] test output');
+  expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('test output');
       expect(mockOutputChannel.show).toHaveBeenCalled();
     });
 
@@ -131,7 +131,7 @@ describe('ServerService', () => {
       const stderrCallback = mockChildProcess.stderr.on.mock.calls.find(call => call[0] === 'data')[1];
       stderrCallback(Buffer.from('test error'));
       
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('[Server Error] test error');
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('test error');
       expect(mockOutputChannel.show).toHaveBeenCalled();
     });
 

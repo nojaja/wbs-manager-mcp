@@ -1,31 +1,38 @@
-/* eslint-disable jsdoc/require-jsdoc */
 import { Tool } from './Tool';
 
 /** wbs.updateTask ツール */
+/**
+ * wbs.planMode.updateTask ツール実装
+ * - 既存タスクの更新を行う
+ */
 export default class WbsUpdateTaskTool extends Tool {
+    /** リポジトリ（DI注入） */
     repo: any | null;
 
+    /**
+     * コンストラクタ
+     */
     constructor() {
         super({ name: 'wbs.planMode.updateTask', description: 'Update an existing task', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, assignee: { type: 'string' }, status: { type: 'string' }, estimate: { type: 'string' }, completionConditions: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' } }, required: ['description'] } }, deliverables: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, prerequisites: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, ifVersion: { type: 'number' } }, required: ['taskId'] } });
         this.repo = null;
     }
 
+
     /**
-     * 初期化
-     * @param deps DIで注入される依存
-     * @returns {Promise<void>}
+     * 依存関係を初期化
+     * @param deps 依存注入オブジェクト
+     * @returns Promise<void>
      */
     async init(deps?: any) {
         await super.init(deps);
         this.repo = this.deps.repo || null;
     }
 
+
     /**
-     * タスク更新処理
-     * 指定IDのタスクをDBで更新し、結果を返す
-     * なぜ必要か: クライアントからのタスク編集・保存要求に応えるため
+     * タスク更新を実行
      * @param args 更新引数
-     * @returns {Promise<any>} ツールレスポンス
+     * @returns ツールレスポンス
      */
     async run(args: any) {
         try {
@@ -51,21 +58,21 @@ export default class WbsUpdateTaskTool extends Tool {
     }
 
     /**
-     * タスク未検出時のレスポンス
-     * @param {string} taskId タスクID
-     * @returns {any} レスポンスオブジェクト
+     * タスク未検出時レスポンス生成
+     * @param taskId タスクID
+     * @returns レスポンス
      */
     private notFound(taskId: string) {
         return { content: [{ type: 'text', text: `❌ Task not found: ${taskId}` }] };
     }
 
     /**
-     * 楽観ロック用バージョン検証処理
+     * 楽観ロック検証
      * バージョン不一致時はエラーを返す
      * なぜ必要か: 複数ユーザー編集時の競合検出・整合性維持のため
-     * @param {any} task 更新データ
-     * @param {any} currentTask 現在のタスク
-     * @returns {any|null} エラーオブジェクトまたは null
+     * @param task 入力タスク
+     * @param currentTask 現在タスク
+     * @returns エラー応答またはnull
      */
     private checkVersion(task: any, currentTask: any) {
         if (task.ifVersion !== undefined && currentTask.version !== task.ifVersion) {
@@ -75,12 +82,12 @@ export default class WbsUpdateTaskTool extends Tool {
     }
 
     /**
-     * タスク更新オブジェクト生成処理
+     * 更新データ生成
      * 更新引数と現在のタスクから更新用オブジェクトを生成する
      * なぜ必要か: DB更新時に必要な差分のみを安全にまとめるため
-     * @param {any} args 実行引数
-     * @param {any} currentTask 現在のタスク
-     * @returns {any} 更新データオブジェクト
+     * @param args 実行引数
+     * @param currentTask 現在タスク
+     * @returns 更新オブジェクト
      */
     private buildUpdateData(args: any, currentTask: any) {
         return {
