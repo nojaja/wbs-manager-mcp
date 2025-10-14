@@ -77,15 +77,15 @@ describe('MCPClient', () => {
     const spy = jest.spyOn(client as any, 'callTool');
     spy.mockResolvedValueOnce(success);
     const r1 = await client.updateTask('t1', {});
-    expect(r1).toEqual({ success: true });
+    expect(r1).toEqual({ success: true, taskId: 't1', message: '✅ OK' });
 
     spy.mockResolvedValueOnce(conflict);
     const r2 = await client.updateTask('t1', {});
-    expect(r2).toEqual({ success: false, conflict: true });
+    expect(r2).toEqual({ success: false, conflict: true, error: 'modified by another user', message: 'modified by another user' });
 
     spy.mockResolvedValueOnce(fail);
     const r3 = await client.updateTask('t1', {});
-    expect(r3).toEqual({ success: false, error: 'some error' });
+    expect(r3).toEqual({ success: false, error: 'some error', message: 'some error' });
 
     spy.mockRestore();
   });
@@ -114,12 +114,12 @@ describe('MCPClient', () => {
     const spy = jest.spyOn(client as any, 'callTool');
     spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
     const ok = await client.deleteTask('t5');
-    expect(ok).toEqual({ success: true });
+    expect(ok).toEqual({ success: true, taskId: 't5', message: '✅ removed' });
     expect(spy).toHaveBeenCalledWith('wbs.planMode.deleteTask', { taskId: 't5' });
 
     spy.mockResolvedValueOnce({ content: [{ text: '❌ missing' }] });
     const fail = await client.deleteTask('t5');
-    expect(fail).toEqual({ success: false, error: '❌ missing' });
+    expect(fail).toEqual({ success: false, error: '❌ missing', message: '❌ missing' });
 
     spy.mockRejectedValueOnce(new Error('boom'));
     const err = await client.deleteTask('t5');
@@ -133,12 +133,12 @@ describe('MCPClient', () => {
     const spy = jest.spyOn(client as any, 'callTool');
     spy.mockResolvedValueOnce({ content: [{ text: '✅ moved' }] });
     const ok = await client.moveTask('t1', 'p2');
-    expect(ok).toEqual({ success: true });
+    expect(ok).toEqual({ success: true, taskId: 't1', message: '✅ moved' });
     expect(spy).toHaveBeenCalledWith('wbs.planMode.moveTask', { taskId: 't1', newParentId: 'p2' });
 
     spy.mockResolvedValueOnce({ content: [{ text: '❌ fail' }] });
     const fail = await client.moveTask('t1', 'p2');
-    expect(fail).toEqual({ success: false, error: '❌ fail' });
+    expect(fail).toEqual({ success: false, error: '❌ fail', message: '❌ fail' });
 
     spy.mockRejectedValueOnce(new Error('boom'));
     const err = await client.moveTask('t1', null);

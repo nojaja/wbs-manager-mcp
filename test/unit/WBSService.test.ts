@@ -20,15 +20,16 @@ describe('WBSService', () => {
     
     mockMcpClient = {
       listTasks: jest.fn(),
-      createTask: jest.fn(),
-      deleteTask: jest.fn(),
       getTask: jest.fn(),
+      createTask: jest.fn(),
+      updateTask: jest.fn(),
+      deleteTask: jest.fn(),
       moveTask: jest.fn(),
       listArtifacts: jest.fn(),
+      getArtifact: jest.fn(),
       createArtifact: jest.fn(),
       updateArtifact: jest.fn(),
-      deleteArtifact: jest.fn(),
-      callTool: jest.fn()
+      deleteArtifact: jest.fn()
     };
 
     mockWbsProvider = {
@@ -58,60 +59,142 @@ describe('WBSService', () => {
   });
 
   describe('API methods (list/get/create/update/delete/move)', () => {
-    beforeEach(() => {
-      // ensure provider exposes mcpClient for API methods to call
-      (wbsService.wbsProvider as any).mcpClient = mockMcpClient;
-    });
+    it('listTasksApi delegates to mcpClient.listTasks', async () => {
+      const tasks = [{ id: 't1', title: 'Task1' }];
+      mockMcpClient.listTasks.mockResolvedValue(tasks);
 
-    it('listTasksApi returns parsed array', async () => {
-      mockMcpClient.callTool.mockResolvedValue({ content: [{ text: JSON.stringify([{ id: 't1', title: 'Task1' }]) }] });
       const res = await wbsService.listTasksApi(null);
-      expect(res).toEqual([{ id: 't1', title: 'Task1' }]);
+
+      expect(mockMcpClient.listTasks).toHaveBeenCalledWith(null);
+      expect(res).toBe(tasks);
     });
 
-    it('getTaskApi returns object or null', async () => {
-      mockMcpClient.callTool
-        .mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 't1', title: 'Task1' }) }] })
-        .mockResolvedValueOnce({ content: [{ text: '❌ error' }] });
+    it('getTaskApi delegates to mcpClient.getTask', async () => {
+      mockMcpClient.getTask
+        .mockResolvedValueOnce({ id: 't1', title: 'Task1' })
+        .mockResolvedValueOnce(null);
 
       const ok = await wbsService.getTaskApi('t1');
+      expect(mockMcpClient.getTask).toHaveBeenCalledWith('t1');
       expect(ok).toEqual({ id: 't1', title: 'Task1' });
 
       const ng = await wbsService.getTaskApi('t1');
       expect(ng).toBeNull();
     });
 
-    it('createTaskApi extracts ID on success', async () => {
-      mockMcpClient.callTool.mockResolvedValue({ content: [{ text: '✅ Created\nID: 42' }] });
-      const res = await wbsService.createTaskApi({ title: 'A' });
-      expect(res.success).toBe(true);
-      expect(res.taskId).toBe('42');
+    it('createTaskApi sanitizes inputs and delegates to mcpClient.createTask', async () => {
+      mockMcpClient.createTask.mockResolvedValue({ success: true, taskId: '42', message: '- done' });
+
+      const res = await wbsService.createTaskApi({
+        title: ' A ',
+        deliverables: [
+          { artifactId: ' art1 ', crudOperations: ' create ' },
+          { artifactId: '   ' },
+          null as any
+        ],
+        completionConditions: [
+          { description: '   ' },
+          { description: 'Finish' }
+        ]
+      });
+
+      expect(mockMcpClient.createTask).toHaveBeenCalledWith({
+        title: ' A ',
+        description: '',
+        parentId: null,
+        assignee: null,
+        estimate: null,
+        deliverables: [{ artifactId: 'art1', crudOperations: 'create' }],
+        completionConditions: [{ description: 'Finish' }]
+      });
+      expect(res).toEqual({ success: true, taskId: '42', message: '- done' });
     });
 
-    it('updateTaskApi detects success/conflict/error', async () => {
-      mockMcpClient.callTool
-        .mockResolvedValueOnce({ content: [{ text: '✅' }] })
-        .mockResolvedValueOnce({ content: [{ text: 'modified by another user' }] })
-        .mockResolvedValueOnce({ content: [{ text: '❌ some error' }] });
+    it('updateTaskApi sanitizes inputs and returns client result', async () => {
+      mockMcpClient.updateTask.mockResolvedValue({ success: true, taskId: 't1', message: '- updated' });
 
-      const ok = await wbsService.updateTaskApi('t1', {});
-      expect(ok.success).toBe(true);
+      const res = await wbsService.updateTaskApi('t1', {
+        deliverables: [{ artifactId: ' art1 ', crudOperations: ' ' }],
+        prerequisites: [{ artifactId: 'art2', crudOperations: ' read ' }],
+        completionConditions: [{ description: ' done ' }, { description: '   ' }],
+        extra: 'keep'
+      });
+
+      expect(mockMcpClient.updateTask).toHaveBeenCalledWith('t1', {
+        deliverables: [{ artifactId: 'art1' }],
+        prerequisites: [{ artifactId: 'art2', crudOperations: 'read' }],
+        completionConditions: [{ description: 'done' }],
+        extra: 'keep'
+      });
+      expect(res).toEqual({ success: true, taskId: 't1', message: '- updated' });
+    });
+
+    it('updateTaskApi propagates conflict and error', async () => {
+      mockMcpClient.updateTask
+        .mockResolvedValueOnce({ success: false, conflict: true, error: 'conflict' })
+        .mockResolvedValueOnce({ success: false, error: 'error' });
 
       const conflict = await wbsService.updateTaskApi('t1', {});
-      expect(conflict.success).toBe(false);
-      expect(conflict.conflict).toBe(true);
+      expect(conflict).toEqual({ success: false, conflict: true, error: 'conflict' });
 
-      const err = await wbsService.updateTaskApi('t1', {});
-      expect(err.success).toBe(false);
-      expect(err.error).toBeDefined();
+      const error = await wbsService.updateTaskApi('t1', {});
+      expect(error).toEqual({ success: false, error: 'error' });
     });
 
-    it('deleteTaskApi and moveTaskApi return success on ✅', async () => {
-      mockMcpClient.callTool.mockResolvedValue({ content: [{ text: '✅' }] });
+    it('deleteTaskApi and moveTaskApi delegate to client', async () => {
+      mockMcpClient.deleteTask.mockResolvedValue({ success: true, taskId: 't1' });
+      mockMcpClient.moveTask.mockResolvedValue({ success: true, taskId: 't1' });
+
       const d = await wbsService.deleteTaskApi('t1');
-      expect(d.success).toBe(true);
       const m = await wbsService.moveTaskApi('t1', 'p1');
-      expect(m.success).toBe(true);
+
+      expect(mockMcpClient.deleteTask).toHaveBeenCalledWith('t1');
+      expect(mockMcpClient.moveTask).toHaveBeenCalledWith('t1', 'p1');
+      expect(d).toEqual({ success: true, taskId: 't1' });
+      expect(m).toEqual({ success: true, taskId: 't1' });
+    });
+  });
+
+  describe('Artifact API methods', () => {
+    it('listArtifactsApi delegates to client', async () => {
+      const artifacts = [{ id: 'a1' }];
+      mockMcpClient.listArtifacts.mockResolvedValue(artifacts);
+      const res = await wbsService.listArtifactsApi();
+      expect(mockMcpClient.listArtifacts).toHaveBeenCalledWith();
+      expect(res).toBe(artifacts);
+    });
+
+    it('getArtifactApi delegates to client', async () => {
+      mockMcpClient.getArtifact.mockResolvedValueOnce({ id: 'a1' }).mockResolvedValueOnce(null);
+      const ok = await wbsService.getArtifactApi('a1');
+      const ng = await wbsService.getArtifactApi('a1');
+      expect(mockMcpClient.getArtifact).toHaveBeenNthCalledWith(1, 'a1');
+      expect(ok).toEqual({ id: 'a1' });
+      expect(ng).toBeNull();
+    });
+
+    it('createArtifactApi delegates and returns result', async () => {
+      const result = { success: true, artifact: { id: 'a1' }, message: '- created' };
+      mockMcpClient.createArtifact.mockResolvedValue(result);
+      const res = await wbsService.createArtifactApi({ title: 'x', uri: undefined, description: null });
+      expect(mockMcpClient.createArtifact).toHaveBeenCalledWith({ title: 'x', uri: null, description: null });
+      expect(res).toBe(result);
+    });
+
+    it('updateArtifactApi delegates and returns result', async () => {
+      const result = { success: true, artifact: { id: 'a1' } };
+      mockMcpClient.updateArtifact.mockResolvedValue(result);
+      const res = await wbsService.updateArtifactApi({ artifactId: 'a1', title: 'T', uri: undefined, description: undefined, version: 2 });
+      expect(mockMcpClient.updateArtifact).toHaveBeenCalledWith({ artifactId: 'a1', title: 'T', uri: null, description: null, version: 2 });
+      expect(res).toBe(result);
+    });
+
+    it('deleteArtifactApi delegates and returns result', async () => {
+      const result = { success: true };
+      mockMcpClient.deleteArtifact.mockResolvedValue(result);
+      const res = await wbsService.deleteArtifactApi('a1');
+      expect(mockMcpClient.deleteArtifact).toHaveBeenCalledWith('a1');
+      expect(res).toBe(result);
     });
   });
 

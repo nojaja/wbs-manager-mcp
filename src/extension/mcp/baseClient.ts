@@ -105,7 +105,7 @@ export class MCPBaseClient {
      * @param args ツールに渡す引数
      * @returns ツールの実行結果
      */
-    public async callTool(toolName: string, args: unknown): Promise<unknown> {
+    protected async callTool(toolName: string, args: unknown): Promise<unknown> {
         const response = await this.sendRequest('tools/call', {
             name: toolName,
             arguments: args
@@ -116,6 +116,85 @@ export class MCPBaseClient {
         }
 
         return response.result;
+    }
+
+    /**
+     * ツールレスポンスを解析し、JSON/テキスト/ヒントを正規化して返す。
+     * @param result ツール実行結果
+     * @returns 正規化済みの解析結果
+     */
+    protected parseToolResponse(result: unknown): { parsed?: any; hintSummary: string; rawText?: string; error?: string } {
+        const content = (result as any)?.content?.[0]?.text;
+        const rawText = typeof content === 'string' ? content : undefined;
+        const hint = (result as any)?.llmHints ?? null;
+        const hintSummary = Array.isArray(hint?.nextActions)
+            ? hint.nextActions.map((action: any) => `- ${action?.detail ?? ''}`).join('\n')
+            : '';
+
+        if (!content) {
+            return {
+                hintSummary,
+                rawText,
+                error: typeof result === 'string' ? result : JSON.stringify(result)
+            };
+        }
+
+        try {
+            const parsed = JSON.parse(content);
+            return { parsed, hintSummary, rawText };
+        } catch (error) {
+            // JSON でなければ後続のプレーンテキスト解析へフォールバック
+        }
+
+        const analysis = this.analyzePlainContent(content);
+        const fallbackError = typeof content === 'string' ? content : JSON.stringify(content);
+        return this.mapAnalysisToResult(analysis, hintSummary, rawText, fallbackError);
+    }
+
+    /**
+     * ツール出力のプレーンテキストを解析して成功/失敗/競合などを判別する。
+     * @param content ツール出力文字列
+     * @returns 成功/失敗/競合区分
+     */
+    protected analyzePlainContent(content: unknown): { type: 'conflict' | 'error' | 'success' | null; id?: string } {
+        if (typeof content !== 'string') {
+            return { type: null };
+        }
+        if (content.includes('modified by another user')) {
+            return { type: 'conflict' };
+        }
+        if (content.includes('❌')) {
+            return { type: 'error' };
+        }
+        if (content.includes('✅')) {
+            const match = content.match(/ID:\s*(\S+)/);
+            return { type: 'success', id: match ? match[1] : undefined };
+        }
+        return { type: null };
+    }
+
+    /**
+     * analyzePlainContent の結果を正規化レスポンスへ変換する。
+     * @param analysis 解析結果
+     * @param hintSummary ヒント要約
+     * @param rawText レスポンステキスト
+     * @param fallbackError エラー時のフォールバック文字列
+     * @returns 正規化レスポンス
+     */
+    protected mapAnalysisToResult(
+        analysis: { type: 'conflict' | 'error' | 'success' | null; id?: string } | null,
+        hintSummary: string,
+        rawText: string | undefined,
+        fallbackError: string
+    ): { parsed?: any; hintSummary: string; rawText?: string; error?: string } {
+        if (!analysis || analysis.type === null) {
+            return { hintSummary, rawText, error: fallbackError };
+        }
+        if (analysis.type === 'conflict' || analysis.type === 'error') {
+            return { hintSummary, rawText, error: fallbackError };
+        }
+        const payload = analysis.id ? { id: analysis.id } : true;
+        return { parsed: payload, hintSummary, rawText };
     }
 
     /**

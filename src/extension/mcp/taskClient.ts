@@ -15,13 +15,12 @@ export class MCPTaskClient extends MCPInitializeClient {
         const args = parentId !== undefined ? { parentId } : {};
         try {
             const result = await this.callTool('wbs.planMode.listTasks', args);
-            const content = (result as any)?.content?.[0]?.text;
-            if (content) {
-                try {
-                    return JSON.parse(content);
-                } catch (error) {
-                    this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${error instanceof Error ? error.message : String(error)} : ${content}`);
-                }
+            const parsed = this.parseToolResponse(result);
+            if (Array.isArray(parsed.parsed)) {
+                return parsed.parsed;
+            }
+            if (parsed.error) {
+                this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${parsed.error}`);
             }
             return [];
         } catch (error) {
@@ -39,9 +38,12 @@ export class MCPTaskClient extends MCPInitializeClient {
     public async getTask(taskId: string): Promise<any | null> {
         try {
             const result = await this.callTool('wbs.planMode.getTask', { taskId });
-            const content = (result as any)?.content?.[0]?.text;
-            if (content && !content.includes('❌')) {
-                return JSON.parse(content);
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed && typeof parsed.parsed === 'object') {
+                return parsed.parsed;
+            }
+            if (parsed.error) {
+                this.outputChannel.appendLine(`[MCP Client] Failed to get task: ${parsed.error}`);
             }
             return null;
         } catch (error) {
@@ -57,17 +59,19 @@ export class MCPTaskClient extends MCPInitializeClient {
      * @param updates 更新内容
      * @returns 成功・競合・エラー情報
      */
-    public async updateTask(taskId: string, updates: Record<string, unknown>): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
+    public async updateTask(taskId: string, updates: Record<string, unknown>): Promise<{ success: boolean; conflict?: boolean; error?: string; taskId?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.updateTask', { taskId, ...updates });
-            const content = (result as any)?.content?.[0]?.text;
-            if (content?.includes('✅')) {
-                return { success: true };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed) {
+                const parsedId = typeof parsed.parsed === 'object' && parsed.parsed !== null ? parsed.parsed.id : undefined;
+                const message = parsed.hintSummary || parsed.rawText;
+                return { success: true, taskId: parsedId ?? taskId, message };
             }
-            if (content?.includes('modified by another user')) {
-                return { success: false, conflict: true };
+            if (parsed.error && parsed.error.includes('modified by another user')) {
+                return { success: false, conflict: true, error: parsed.error, message: parsed.hintSummary || parsed.rawText };
             }
-            return { success: false, error: content ?? 'Unknown error' };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
@@ -99,13 +103,13 @@ export class MCPTaskClient extends MCPInitializeClient {
     }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.createTask', params);
-            const content = (result as any)?.content?.[0]?.text ?? '';
-            if (content.includes('✅')) {
-                const idMatch = content.match(/ID:\s*(.+)/);
-                const createdId = idMatch ? idMatch[1].trim() : undefined;
-                return { success: true, taskId: createdId, message: content };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed) {
+                const createdId = typeof parsed.parsed === 'object' ? parsed.parsed.id : undefined;
+                const message = parsed.hintSummary || parsed.rawText;
+                return { success: true, taskId: createdId, message };
             }
-            return { success: false, error: content || 'Unknown error', message: content };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return { success: false, error: message };
@@ -118,14 +122,16 @@ export class MCPTaskClient extends MCPInitializeClient {
      * @param taskId 削除するタスクID
      * @returns 削除結果
      */
-    public async deleteTask(taskId: string): Promise<{ success: boolean; error?: string }> {
+    public async deleteTask(taskId: string): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.deleteTask', { taskId });
-            const content = (result as any)?.content?.[0]?.text ?? '';
-            if (content.includes('✅')) {
-                return { success: true };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed) {
+                const parsedId = typeof parsed.parsed === 'object' ? parsed.parsed.id : undefined;
+                const message = parsed.hintSummary || parsed.rawText;
+                return { success: true, taskId: parsedId ?? taskId, message };
             }
-            return { success: false, error: content || 'Unknown error' };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }
@@ -138,14 +144,16 @@ export class MCPTaskClient extends MCPInitializeClient {
      * @param newParentId 新しい親タスクID。ルートの場合はnull
      * @returns 移動結果
      */
-    public async moveTask(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string }> {
+    public async moveTask(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
-            const content = (result as any)?.content?.[0]?.text ?? '';
-            if (content.includes('✅')) {
-                return { success: true };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed) {
+                const parsedId = typeof parsed.parsed === 'object' ? parsed.parsed.id : undefined;
+                const message = parsed.hintSummary || parsed.rawText;
+                return { success: true, taskId: parsedId ?? taskId, message };
             }
-            return { success: false, error: content || 'Unknown error' };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }

@@ -79,7 +79,7 @@ describe('MCPClient branch coverage', () => {
     const mod = await import('../../src/extension/mcpClient');
     client = new mod.MCPClient(fakeOutput);
     jest.spyOn(client as any, 'sendRequest').mockResolvedValue({ error: { message: 'tool error' } });
-    await expect(client.callTool('x', {})).rejects.toThrow('tool error');
+  await expect((client as any).callTool('x', {})).rejects.toThrow('tool error');
   });
 
 

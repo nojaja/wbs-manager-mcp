@@ -58,14 +58,14 @@ describe('MCPClient additional coverage tests', () => {
           error: { code: -1, message: 'Tool not found' }
         });
 
-      await expect(client.callTool('nonexistent.tool', {}))
+  await expect((client as any).callTool('nonexistent.tool', {}))
         .rejects.toThrow('Tool not found');
 
       sendRequestSpy.mockRestore();
     });
 
     test('listTasks handles empty content', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool')
+  const callToolSpy = jest.spyOn(client as any, 'callTool')
         .mockResolvedValue({ content: [] });
 
       const result = await client.listTasks();
@@ -76,7 +76,7 @@ describe('MCPClient additional coverage tests', () => {
     });
 
     test('listTasks handles malformed JSON', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool')
+  const callToolSpy = jest.spyOn(client as any, 'callTool')
         .mockResolvedValue({ content: [{ text: 'invalid json' }] });
 
       const result = await client.listTasks();
@@ -90,7 +90,7 @@ describe('MCPClient additional coverage tests', () => {
     });
 
     test('listTasks handles call tool errors', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool')
+  const callToolSpy = jest.spyOn(client as any, 'callTool')
         .mockRejectedValue(new Error('Network error'));
 
       const result = await client.listTasks();
@@ -104,7 +104,7 @@ describe('MCPClient additional coverage tests', () => {
     });
 
     test('listTasks passes parentId parameter correctly', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool')
+  const callToolSpy = jest.spyOn(client as any, 'callTool')
         .mockResolvedValue({ content: [{ text: '[]' }] });
 
       await client.listTasks('parent123');
@@ -117,7 +117,7 @@ describe('MCPClient additional coverage tests', () => {
     });
 
     test('getTask handles various content formats', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool');
+  const callToolSpy = jest.spyOn(client as any, 'callTool');
 
       // Test with error content containing ❌
       callToolSpy.mockResolvedValueOnce({ content: [{ text: 'Task not found ❌' }] });
@@ -135,7 +135,7 @@ describe('MCPClient additional coverage tests', () => {
 
   describe('Artifact operations', () => {
     test('listArtifacts returns empty array on error', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool')
+  const callToolSpy = jest.spyOn(client as any, 'callTool')
         .mockRejectedValue(new Error('Server error'));
 
       const result = await client.listArtifacts();
@@ -145,7 +145,7 @@ describe('MCPClient additional coverage tests', () => {
     });
 
     test('getArtifact handles errors gracefully', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool')
+  const callToolSpy = jest.spyOn(client as any, 'callTool')
         .mockRejectedValue(new Error('Network error'));
 
       const result = await client.getArtifact('test-id');
@@ -155,17 +155,17 @@ describe('MCPClient additional coverage tests', () => {
     });
 
     test('deleteArtifact handles various response types', async () => {
-      const callToolSpy = jest.spyOn(client, 'callTool');
+  const callToolSpy = jest.spyOn(client as any, 'callTool');
 
       // Test success case
       callToolSpy.mockResolvedValueOnce({ content: [{ text: '✅ Deleted successfully' }] });
       let result = await client.deleteArtifact('test-id');
-      expect(result).toEqual({ success: true });
+  expect(result).toEqual({ success: true, message: '✅ Deleted successfully' });
 
       // Test error case
       callToolSpy.mockResolvedValueOnce({ content: [{ text: '❌ Not found' }] });
-      result = await client.deleteArtifact('test-id');
-      expect(result).toEqual({ success: false, error: '❌ Not found' });
+  result = await client.deleteArtifact('test-id');
+  expect(result).toEqual({ success: false, error: '❌ Not found', message: '❌ Not found' });
 
       // Test exception case
       callToolSpy.mockRejectedValueOnce(new Error('Network error'));

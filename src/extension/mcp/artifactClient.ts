@@ -13,9 +13,12 @@ export class MCPArtifactClient extends MCPTaskClient {
     public async listArtifacts(): Promise<Artifact[]> {
         try {
             const result = await this.callTool('wbs.planMode.listArtifacts', {});
-            const content = (result as any)?.content?.[0]?.text;
-            if (content) {
-                return JSON.parse(content) as Artifact[];
+            const parsed = this.parseToolResponse(result);
+            if (Array.isArray(parsed.parsed)) {
+                return parsed.parsed as Artifact[];
+            }
+            if (parsed.error) {
+                this.outputChannel.appendLine(`[MCP Client] Failed to list artifacts: ${parsed.error}`);
             }
             return [];
         } catch (error) {
@@ -37,19 +40,18 @@ export class MCPArtifactClient extends MCPTaskClient {
         title: string;
         uri?: string | null;
         description?: string | null;
-    }): Promise<{ success: boolean; artifact?: Artifact; error?: string }> {
+    }): Promise<{ success: boolean; artifact?: Artifact; error?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.createArtifact', {
                 title: params.title,
                 uri: params.uri ?? null,
                 description: params.description ?? null
             });
-            const content = (result as any)?.content?.[0]?.text ?? '';
-            if (content.includes('❌')) {
-                return { success: false, error: content };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed && typeof parsed.parsed === 'object') {
+                return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary || parsed.rawText };
             }
-            const artifact = JSON.parse(content) as Artifact;
-            return { success: true, artifact };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return { success: false, error: message };
@@ -73,7 +75,7 @@ export class MCPArtifactClient extends MCPTaskClient {
         uri?: string | null;
         description?: string | null;
         version?: number;
-    }): Promise<{ success: boolean; artifact?: Artifact; conflict?: boolean; error?: string }> {
+    }): Promise<{ success: boolean; artifact?: Artifact; conflict?: boolean; error?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.updateArtifact', {
                 artifactId: params.artifactId,
@@ -82,15 +84,14 @@ export class MCPArtifactClient extends MCPTaskClient {
                 description: params.description ?? null,
                 ifVersion: params.version
             });
-            const content = (result as any)?.content?.[0]?.text ?? '';
-            if (content.includes('modified by another user')) {
-                return { success: false, conflict: true, error: content };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed && typeof parsed.parsed === 'object') {
+                return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary || parsed.rawText };
             }
-            if (content.includes('❌')) {
-                return { success: false, error: content };
+            if (parsed.error && parsed.error.includes('modified by another user')) {
+                return { success: false, conflict: true, error: parsed.error, message: parsed.hintSummary || parsed.rawText };
             }
-            const artifact = JSON.parse(content) as Artifact;
-            return { success: true, artifact };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             return { success: false, error: message };
@@ -106,9 +107,12 @@ export class MCPArtifactClient extends MCPTaskClient {
     public async getArtifact(artifactId: string): Promise<Artifact | null> {
         try {
             const result = await this.callTool('wbs.planMode.getArtifact', { artifactId });
-            const content = (result as any)?.content?.[0]?.text;
-            if (content && !content.includes('❌')) {
-                return JSON.parse(content) as Artifact;
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed && typeof parsed.parsed === 'object') {
+                return parsed.parsed as Artifact;
+            }
+            if (parsed.error) {
+                this.outputChannel.appendLine(`[MCP Client] Failed to get artifact: ${parsed.error}`);
             }
             return null;
         } catch (error) {
@@ -123,14 +127,14 @@ export class MCPArtifactClient extends MCPTaskClient {
      * @param artifactId 削除対象の成果物ID
      * @returns 削除結果
      */
-    public async deleteArtifact(artifactId: string): Promise<{ success: boolean; error?: string }> {
+    public async deleteArtifact(artifactId: string): Promise<{ success: boolean; error?: string; message?: string }> {
         try {
             const result = await this.callTool('wbs.planMode.deleteArtifact', { artifactId });
-            const content = (result as any)?.content?.[0]?.text ?? '';
-            if (content.includes('✅')) {
-                return { success: true };
+            const parsed = this.parseToolResponse(result);
+            if (parsed.parsed) {
+                return { success: true, message: parsed.hintSummary || parsed.rawText };
             }
-            return { success: false, error: content || 'Unknown error' };
+            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }

@@ -58,19 +58,7 @@ export class WBSService {
    */
   async listTasksApi(parentId?: string | null): Promise<any[]> {
     try {
-      // 処理概要: 指定 parentId の直下タスクをサーバから取得して JSON 化して返す
-      // 実装理由: UI のツリー描画に必要なタスクデータを取得するため
-      const args = parentId !== undefined ? { parentId } : {};
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.listTasks', args);
-      const content = result.content?.[0]?.text;
-      if (content) {
-        try {
-          return JSON.parse(content);
-        } catch (error) {
-          console.error('[WBSService] Failed to parse task list:', error, content);
-        }
-      }
-      return [];
+      return await this.mcpClient.listTasks(parentId);
     } catch (error) {
       console.error('[WBSService] Failed to list tasks:', error);
       return [];
@@ -84,14 +72,7 @@ export class WBSService {
    */
   async getTaskApi(taskId: string): Promise<any | null> {
     try {
-      // 処理概要: 指定 taskId の詳細を取得して返す
-      // 実装理由: タスク詳細表示・編集時に最新情報が必要なため
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.getTask', { taskId });
-      const content = result.content?.[0]?.text;
-      if (content && !content.includes('❌')) {
-        return JSON.parse(content);
-      }
-      return null;
+      return await this.mcpClient.getTask(taskId);
     } catch (error) {
       console.error('[WBSService] Failed to get task:', error);
       return null;
@@ -151,52 +132,6 @@ export class WBSService {
   }
 
   /**
-   * 共通: ツールのレスポンスを解析する (content と llmHints を解釈)
-   * @param {any} result ツールの返却オブジェクト
-   * @returns {{ parsed?: any; hintSummary: string; error?: string }} パース結果とヒント要約
-   */
-  private parseToolResponse(result: any): { parsed?: any; hintSummary: string; error?: string } {
-    const content = result?.content?.[0]?.text;
-    const hint = result?.llmHints ?? null;
-    const hintSummary = Array.isArray(hint?.nextActions) ? hint.nextActions.map((action: any) => `- ${action.detail ?? ''}`).join('\n') : '';
-    if (!content) {
-      return { hintSummary, error: typeof result === 'string' ? result : JSON.stringify(result) };
-    }
-    // まず JSON としてパースを試みる（成功ならそれを返す）
-    try {
-      const parsed = JSON.parse(content);
-      return { parsed, hintSummary };
-    } catch (err) {
-      // JSON でなければプレーンテキストの解析にフォールバック
-    }
-    const analysis = this.analyzePlainContent(content);
-    if (analysis?.type === 'conflict' || analysis?.type === 'error') {
-      return { hintSummary, error: content };
-    }
-    if (analysis?.type === 'success') {
-      if (analysis.id) return { parsed: { id: analysis.id }, hintSummary };
-      return { parsed: true, hintSummary };
-    }
-    return { hintSummary, error: typeof content === 'string' ? content : JSON.stringify(content) };
-  }
-
-  /**
-   * プレーンテキストパターンを解析する（成功・エラー・競合・ID抽出）
-   * @param content ツール出力の text フィールド
-   * @returns {{ type: 'conflict'|'error'|'success'|null; id?: string }} 分析結果
-   */
-  private analyzePlainContent(content: any): { type: 'conflict' | 'error' | 'success' | null; id?: string } {
-    if (typeof content !== 'string') return { type: null };
-    if (content.includes('modified by another user')) return { type: 'conflict' };
-    if (content.includes('❌')) return { type: 'error' };
-    if (content.includes('✅')) {
-      const m = content.match(/ID:\s*(\S+)/);
-      return { type: 'success', id: m ? m[1] : undefined };
-    }
-    return { type: null };
-  }
-
-  /**
    * タスクを更新するビジネスロジック
    * @param taskId タスクID
    * @param updates 更新内容
@@ -210,27 +145,26 @@ export class WBSService {
       const prerequisites = this.sanitizeArtifactInputs(updates.prerequisites);
       const completionConditions = this.sanitizeCompletionInputs(updates.completionConditions);
 
-      const toolArguments: Record<string, unknown> = { taskId, ...updates };
-
+      const normalizedUpdates: Record<string, unknown> = { ...updates };
       if (deliverables !== undefined) {
-        toolArguments.deliverables = deliverables;
+        normalizedUpdates.deliverables = deliverables;
+      } else {
+        delete normalizedUpdates.deliverables;
       }
       if (prerequisites !== undefined) {
-        toolArguments.prerequisites = prerequisites;
+        normalizedUpdates.prerequisites = prerequisites;
+      } else {
+        delete normalizedUpdates.prerequisites;
       }
       if (completionConditions !== undefined) {
-        toolArguments.completionConditions = completionConditions;
+        normalizedUpdates.completionConditions = completionConditions;
+      } else {
+        delete normalizedUpdates.completionConditions;
       }
+      delete (normalizedUpdates as any).taskId;
 
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.updateTask', toolArguments);
-      const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) {
-        return { success: true, taskId: parsed.parsed.id ?? taskId, message: parsed.hintSummary };
-      }
-      if (parsed.error && String(parsed.error).includes('modified by another user')) {
-        return { success: false, conflict: true, error: parsed.error };
-      }
-      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
+      const result = await this.mcpClient.updateTask(taskId, normalizedUpdates);
+      return result;
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -259,12 +193,7 @@ export class WBSService {
       if (prerequisites !== undefined) toolArguments.prerequisites = prerequisites;
       if (completionConditions !== undefined) toolArguments.completionConditions = completionConditions;
 
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.createTask', toolArguments);
-      const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) {
-        return { success: true, taskId: parsed.parsed.id, message: parsed.hintSummary };
-      }
-      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
+      return await this.mcpClient.createTask(toolArguments);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
@@ -278,12 +207,7 @@ export class WBSService {
    */
   async deleteTaskApi(taskId: string): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.deleteTask', { taskId });
-      const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) {
-        return { success: true, taskId: parsed.parsed.id ?? taskId, message: parsed.hintSummary };
-      }
-      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
+      return await this.mcpClient.deleteTask(taskId);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -297,12 +221,7 @@ export class WBSService {
    */
   async moveTaskApi(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
-      const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) {
-        return { success: true, taskId: parsed.parsed.id ?? taskId, message: parsed.hintSummary };
-      }
-      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
+      return await this.mcpClient.moveTask(taskId, newParentId);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -422,16 +341,7 @@ export class WBSService {
    */
   async listArtifactsApi(): Promise<Artifact[]> {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.listArtifacts', {});
-      const content = result.content?.[0]?.text;
-      if (content) {
-        try {
-          return JSON.parse(content) as Artifact[];
-        } catch (err) {
-          console.error('[WBSService] Failed to parse artifacts list:', err, content);
-        }
-      }
-      return [];
+      return await this.mcpClient.listArtifacts();
     } catch (error) {
       console.error('[WBSService] Failed to list artifacts:', error);
       return [];
@@ -445,12 +355,7 @@ export class WBSService {
    */
   async getArtifactApi(artifactId: string): Promise<Artifact | null> {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.getArtifact', { artifactId });
-      const content = result.content?.[0]?.text;
-      if (content && !content.includes('❌')) {
-        return JSON.parse(content) as Artifact;
-      }
-      return null;
+      return await this.mcpClient.getArtifact(artifactId);
     } catch (error) {
       console.error('[WBSService] Failed to get artifact:', error);
       return null;
@@ -467,18 +372,11 @@ export class WBSService {
    */
   async createArtifactApi(params: { title: string; uri?: string | null; description?: string | null }) {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.createArtifact', {
+      return await this.mcpClient.createArtifact({
         title: params.title,
         uri: params.uri ?? null,
         description: params.description ?? null
       });
-
-
-      const parsed = this.parseToolResponse(result);
-      if (parsed.parsed && typeof parsed.parsed === 'object') {
-        return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary };
-      }
-      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
@@ -497,22 +395,13 @@ export class WBSService {
    */
   async updateArtifactApi(params: { artifactId: string; title: string; uri?: string | null; description?: string | null; version?: number }) {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.updateArtifact', {
+      return await this.mcpClient.updateArtifact({
         artifactId: params.artifactId,
         title: params.title,
         uri: params.uri ?? null,
         description: params.description ?? null,
-        ifVersion: params.version
+        version: params.version
       });
-      const content = result.content?.[0]?.text ?? '';
-      if (content.includes('modified by another user')) {
-        return { success: false, conflict: true, error: content };
-      }
-      if (content.includes('❌')) {
-        return { success: false, error: content };
-      }
-      const artifact = JSON.parse(content) as Artifact;
-      return { success: true, artifact };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
@@ -526,12 +415,7 @@ export class WBSService {
    */
   async deleteArtifactApi(artifactId: string) {
     try {
-      const result = await (this.mcpClient as any).callTool('wbs.planMode.deleteArtifact', { artifactId });
-      const content = result.content?.[0]?.text ?? '';
-      if (content.includes('✅')) {
-        return { success: true };
-      }
-      return { success: false, error: content || 'Unknown error' };
+      return await this.mcpClient.deleteArtifact(artifactId);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
