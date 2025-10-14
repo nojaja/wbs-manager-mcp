@@ -2,7 +2,9 @@
 // VSCode APIをインポート
 import * as vscode from 'vscode';
 // 型のみのインポート: 循環参照を避けるため型注釈はimport typeを使用
-import type { WBSService } from '../services/WBSService';
+// Use the WBSServicePublic interface to avoid depending on service implementation
+// and keep a clear boundary between view and service.
+import type { WBSServicePublic } from '../services/wbsService.interface';
 import type { MCPClient } from '../mcpClient';
 
 
@@ -40,7 +42,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     // ビジネスロジックサービス（WBS の操作はこのサービス経由で行う）
-    private readonly wbsService?: WBSService;
+    private readonly wbsService?: WBSServicePublic;
     // 従来互換: 直接 MCPClient を受け取る場合の参照
     private readonly mcpClient?: MCPClient;
 
@@ -54,12 +56,12 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * コンストラクタ
      * @param serviceOrClient WBSService か MCPClient のいずれか（互換性のため）
      */
-    constructor(serviceOrClient: WBSService | MCPClient) {
+    constructor(serviceOrClient: WBSServicePublic | MCPClient) {
         // 互換性: serviceOrClient が listTasks を持つなら MCPClient と見なす
         if ((serviceOrClient as any)?.listTasks) {
             this.mcpClient = serviceOrClient as MCPClient;
         } else {
-            this.wbsService = serviceOrClient as WBSService;
+            this.wbsService = serviceOrClient as WBSServicePublic;
         }
     }
 
@@ -571,7 +573,7 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
     * なぜ必要か: Drag&DropのUI制御とデータ更新（サーバ呼び出し）を分離し、責務を明確化するため
      * @param provider ドロップ処理を委譲するWBSツリープロバイダ
      */
-    constructor(private readonly provider: WBSTreeProvider) {}
+    constructor(private readonly provider: WBSTreeProvider) { }
 
     /**
      * ドラッグ開始処理

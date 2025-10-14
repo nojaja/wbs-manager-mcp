@@ -1,4 +1,4 @@
-import { MCPClient } from '../src/extension/mcpClient';
+import { MCPClient } from '../../src/extension/mcpClient';
 import * as vscode from 'vscode';
 
 // vscode.OutputChannel を簡易モック

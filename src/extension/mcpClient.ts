@@ -113,6 +113,8 @@ export class MCPClient {
         const startAt = Date.now();
         const timeout = 5000; // 5秒待つ
         while (!this.writer && Date.now() - startAt < timeout) {
+            // 処理概要: writer のセットを待つポーリングループ
+            // 実装理由: ServerService が writer を設定する前に通信を始めると失敗するため、短時間の待機で安全に初期化する
             await new Promise((resolve) => setTimeout(resolve, 100));
         }
         if (!this.writer) {
@@ -155,6 +157,8 @@ export class MCPClient {
             const parsed = JSON.parse(rawLine);
             this.handleResponseInternal(parsed as JsonRpcResponse);
         } catch (err) {
+            // 処理概要: サーバからの生レスポンスが JSON として解析できない場合のログ出力
+            // 実装理由: 不正な出力が混入してもクライアントが例外で停止しないようにし、デバッグ情報を残すため
             this.outputChannel.appendLine(`[MCP Client] Failed to parse response: ${err}`);
         }
     }
@@ -175,6 +179,8 @@ export class MCPClient {
             const response = parsed as JsonRpcResponse;
             this.handleResponseInternal(response);
         } catch (err) {
+            // 処理概要: パース済みレスポンス処理中に例外が発生した際の保護処理
+            // 実装理由: 外部から渡されたオブジェクトの形式が想定と異なる場合でもクライアントの安定性を保つため
             this.outputChannel.appendLine(`[MCP Client] handleResponse error: ${err}`);
         }
     }
@@ -234,6 +240,8 @@ export class MCPClient {
         // 処理概要: writer を経由してサーバへ JSON-RPC リクエストを送信し、Promise でレスポンスを待つ
         // 実装理由: 非同期通信の結果を呼び出し元へ返すための汎用的な送信ラッパ
         if (!this.writer) {
+            // 処理概要: writer 未登録時の早期エラー返却
+            // 実装理由: 通信手段が未設定のまま送信処理を継続するのを防ぐため
             return Promise.reject(new Error('MCP server not started'));
         }
 
@@ -251,8 +259,9 @@ export class MCPClient {
 
             const requestStr = JSON.stringify(request) + '\n';
             this.outputChannel.appendLine(`[MCP Client] Sending: ${method}`);
-
             // サーバへリクエスト送信
+            // 処理概要: writer を通じて文字列を送信し、送信失敗時は保留リクエストを破棄してエラーを返す
+            // 実装理由: IO 例外が発生した場合にそのリクエストだけを安全に取り消すため
             try {
                 this.writer!(requestStr);
             } catch (error) {
@@ -261,6 +270,8 @@ export class MCPClient {
             }
 
             // タイムアウト設定: 10秒で未応答なら reject
+            // 処理概要: 一定時間応答が無ければ保留を解除して呼び出し元にエラーを返す
+            // 実装理由: サーバの無応答で UI が永久に待ち続けることを防ぐため
             setTimeout(() => {
                 if (this.pendingRequests.has(id)) {
                     this.pendingRequests.delete(id);
@@ -354,18 +365,26 @@ export class MCPClient {
             return this.wbsService.listTasksApi(parentId);
         }
         try {
+            // 処理概要: wbs.listTasks ツールを呼び、テキストレスポンスを JSON に変換して返す
+            // 実装理由: サーバはテキストコンテンツを返すため、クライアント側で構造化データに戻す必要がある
             const args = parentId !== undefined ? { parentId } : {};
-            const result = await this.callTool('wbs.listTasks', args);
+            const result = await this.callTool('wbs.planMode.listTasks', args);
             const content = result.content?.[0]?.text;
             if (content) {
                 try {
+                    // 処理概要: 受け取った文字列をパースして配列にする
+                    // 実装理由: ツール出力は文字列化された JSON であるため、復元が必要
                     return JSON.parse(content);
                 } catch (error) {
+                    // 処理概要: パース失敗時のログ出力
+                    // 実装理由: 受信データが想定外でも例外で処理が止まらないようにするため
                     this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${error} : ${content}`);
                 }
             }
             return [];
         } catch (error) {
+            // 処理概要: callTool 自体の呼び出し失敗時のフォールバック
+            // 実装理由: サーバ通信エラーが発生しても UI を破壊しないように空配列を返す
             this.outputChannel.appendLine(`[MCP Client] Failed to list tasks: ${error}`);
             return [];
         }
@@ -383,7 +402,7 @@ export class MCPClient {
             return this.wbsService.getTaskApi(taskId);
         }
         try {
-            const result = await this.callTool('wbs.getTask', { taskId });
+            const result = await this.callTool('wbs.planMode.getTask', { taskId });
             const content = result.content?.[0]?.text;
             if (content && !content.includes('❌')) {
                 return JSON.parse(content);
@@ -412,7 +431,7 @@ export class MCPClient {
         }
         try {
             // Transport-only fallback: pass updates as-is to the server tool.
-            const result = await this.callTool('wbs.updateTask', { taskId, ...updates });
+            const result = await this.callTool('wbs.planMode.updateTask', { taskId, ...updates });
             const content = result.content?.[0]?.text;
             if (content?.includes('✅')) {
                 return { success: true };
@@ -455,7 +474,7 @@ export class MCPClient {
         }
         try {
             // Transport-only fallback: forward params directly to the tool.
-            const result = await this.callTool('wbs.createTask', params);
+            const result = await this.callTool('wbs.planMode.createTask', params);
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 const idMatch = content.match(/ID:\s*(.+)/);
@@ -480,7 +499,7 @@ export class MCPClient {
         // to an injected service which may call back into this client and cause
         // recursion.
         try {
-            const result = await this.callTool('artifacts.listArtifacts', {});
+            const result = await this.callTool('wbs.planMode.listArtifacts', {});
             const content = result.content?.[0]?.text;
             if (content) {
                 return JSON.parse(content) as Artifact[];
@@ -511,7 +530,7 @@ export class MCPClient {
             return this.wbsService.createArtifactApi(params);
         }
         try {
-            const result = await this.callTool('artifacts.createArtifact', {
+            const result = await this.callTool('wbs.planMode.createArtifact', {
                 title: params.title,
                 uri: params.uri ?? null,
                 description: params.description ?? null
@@ -551,7 +570,7 @@ export class MCPClient {
             return this.wbsService.updateArtifactApi(params);
         }
         try {
-            const result = await this.callTool('artifacts.updateArtifact', {
+            const result = await this.callTool('wbs.planMode.updateArtifact', {
                 artifactId: params.artifactId,
                 title: params.title,
                 uri: params.uri ?? null,
@@ -585,7 +604,7 @@ export class MCPClient {
             return this.wbsService.getArtifactApi(artifactId);
         }
         try {
-            const result = await this.callTool('artifacts.getArtifact', { artifactId });
+            const result = await this.callTool('wbs.planMode.getArtifact', { artifactId });
             const content = result.content?.[0]?.text;
             if (content && !content.includes('❌')) {
                 return JSON.parse(content);
@@ -609,7 +628,7 @@ export class MCPClient {
             return this.wbsService.deleteArtifactApi(artifactId);
         }
         try {
-            const result = await this.callTool('artifacts.deleteArtifact', { artifactId });
+            const result = await this.callTool('wbs.planMode.deleteArtifact', { artifactId });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };
@@ -632,7 +651,7 @@ export class MCPClient {
             return this.wbsService.deleteTaskApi(taskId);
         }
         try {
-            const result = await this.callTool('wbs.deleteTask', { taskId });
+            const result = await this.callTool('wbs.planMode.deleteTask', { taskId });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };
@@ -657,7 +676,7 @@ export class MCPClient {
             return this.wbsService.moveTaskApi(taskId, newParentId);
         }
         try {
-            const result = await this.callTool('wbs.moveTask', { taskId, newParentId: newParentId ?? null });
+            const result = await this.callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
             const content = result.content?.[0]?.text ?? '';
             if (content.includes('✅')) {
                 return { success: true };
@@ -683,5 +702,5 @@ export class MCPClient {
         }
         this.pendingRequests.clear();
     }
-    
+
 }

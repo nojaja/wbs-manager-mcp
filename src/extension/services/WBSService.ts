@@ -1,6 +1,7 @@
 // src/services/WBSService.ts
-import { WBSTreeProvider } from '../views/wbsTree';
-import { ArtifactTreeProvider } from '../views/artifactTree';
+/* eslint-disable jsdoc/require-param */
+import type { WBSTreeProvider } from '../views/wbsTree';
+import type { ArtifactTreeProvider } from '../views/artifactTree';
 import type { MCPClient, Artifact } from '../mcpClient';
 import type { WBSServicePublic } from './wbsService.interface';
 /**
@@ -15,16 +16,25 @@ export class WBSService {
   private readonly mcpClient: MCPClient;
 
   /**
-   * 処理名: コンストラクタ
-   * 処理概要: MCPClient を受け取り内部の provider をデフォルトで生成する
-   * 実装理由(なぜ必要か): 既存の互換性を保ちつつサービスを初期化するため
-   * @param mcpClient MCPClient のインスタンス（ツール呼び出し用）
-    */
-   constructor(mcpClient: MCPClient) {
+   * コンストラクタ
+   * @param mcpClient MCPClient インスタンス
+   * @param [providers] オプションのプロバイダ注入（循環依存回避のため外部から注入可能）
+   * @param [providers.wbsProvider] WBS ツリープロバイダ（任意）
+   * @param [providers.artifactProvider] 成果物ツリープロバイダ（任意）
+   */
+  constructor(mcpClient: MCPClient, providers: { wbsProvider: WBSTreeProvider; artifactProvider: ArtifactTreeProvider }) {
     this.mcpClient = mcpClient;
-    // デフォルトでは既存互換のため provider を生成する
-    this.wbsProvider = new WBSTreeProvider(mcpClient as any);
-    this.artifactProvider = new ArtifactTreeProvider(mcpClient as any);
+    // providers は必須にして外部から注入してもらうDI方式に変更
+    this.wbsProvider = providers.wbsProvider;
+    this.artifactProvider = providers.artifactProvider;
+  }
+
+  /**
+   * providers が未指定のときに同期的にプロバイダを生成する（createRequire を使用）
+   * テスト環境では jest.mock によりモック化された実装が返るため互換性がある
+   */
+  private tryAutoCreateProviders(mcpClient: MCPClient) {
+    console.warn('[WBSService] Auto-creation of providers is no longer supported. Please provide them via dependency injection.');
   }
 
   /**
@@ -49,7 +59,7 @@ export class WBSService {
       // 処理概要: 指定 parentId の直下タスクをサーバから取得して JSON 化して返す
       // 実装理由: UI のツリー描画に必要なタスクデータを取得するため
       const args = parentId !== undefined ? { parentId } : {};
-      const result = await (this.mcpClient as any).callTool('wbs.listTasks', args);
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.listTasks', args);
       const content = result.content?.[0]?.text;
       if (content) {
         try {
@@ -74,7 +84,7 @@ export class WBSService {
     try {
       // 処理概要: 指定 taskId の詳細を取得して返す
       // 実装理由: タスク詳細表示・編集時に最新情報が必要なため
-      const result = await (this.mcpClient as any).callTool('wbs.getTask', { taskId });
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.getTask', { taskId });
       const content = result.content?.[0]?.text;
       if (content && !content.includes('❌')) {
         return JSON.parse(content);
@@ -139,12 +149,58 @@ export class WBSService {
   }
 
   /**
+   * 共通: ツールのレスポンスを解析する (content と llmHints を解釈)
+   * @param {any} result ツールの返却オブジェクト
+   * @returns {{ parsed?: any; hintSummary: string; error?: string }} パース結果とヒント要約
+   */
+  private parseToolResponse(result: any): { parsed?: any; hintSummary: string; error?: string } {
+    const content = result?.content?.[0]?.text;
+    const hint = result?.llmHints ?? null;
+    const hintSummary = Array.isArray(hint?.nextActions) ? hint.nextActions.map((action: any) => `- ${action.detail ?? ''}`).join('\n') : '';
+    if (!content) {
+      return { hintSummary, error: typeof result === 'string' ? result : JSON.stringify(result) };
+    }
+    // まず JSON としてパースを試みる（成功ならそれを返す）
+    try {
+      const parsed = JSON.parse(content);
+      return { parsed, hintSummary };
+    } catch (err) {
+      // JSON でなければプレーンテキストの解析にフォールバック
+    }
+    const analysis = this.analyzePlainContent(content);
+    if (analysis?.type === 'conflict' || analysis?.type === 'error') {
+      return { hintSummary, error: content };
+    }
+    if (analysis?.type === 'success') {
+      if (analysis.id) return { parsed: { id: analysis.id }, hintSummary };
+      return { parsed: true, hintSummary };
+    }
+    return { hintSummary, error: typeof content === 'string' ? content : JSON.stringify(content) };
+  }
+
+  /**
+   * プレーンテキストパターンを解析する（成功・エラー・競合・ID抽出）
+   * @param content ツール出力の text フィールド
+   * @returns {{ type: 'conflict'|'error'|'success'|null; id?: string }} 分析結果
+   */
+  private analyzePlainContent(content: any): { type: 'conflict' | 'error' | 'success' | null; id?: string } {
+    if (typeof content !== 'string') return { type: null };
+    if (content.includes('modified by another user')) return { type: 'conflict' };
+    if (content.includes('❌')) return { type: 'error' };
+    if (content.includes('✅')) {
+      const m = content.match(/ID:\s*(\S+)/);
+      return { type: 'success', id: m ? m[1] : undefined };
+    }
+    return { type: null };
+  }
+
+  /**
    * タスクを更新するビジネスロジック
    * @param taskId タスクID
    * @param updates 更新内容
    * @returns 更新結果
    */
-  async updateTaskApi(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string }> {
+  async updateTaskApi(taskId: string, updates: any): Promise<{ success: boolean; conflict?: boolean; error?: string; taskId?: string; message?: string }> {
     try {
       // 処理概要: 更新内容を正規化してサーバへ渡し、結果を解釈して返す
       // 実装理由: クライアントからの生データを整形してサーバ API と整合する形にするため
@@ -164,15 +220,15 @@ export class WBSService {
         toolArguments.completionConditions = completionConditions;
       }
 
-      const result = await (this.mcpClient as any).callTool('wbs.updateTask', toolArguments);
-      const content = result.content?.[0]?.text;
-      if (content?.includes('✅')) {
-        return { success: true };
-      } else if (content?.includes('modified by another user')) {
-        return { success: false, conflict: true };
-      } else {
-        return { success: false, error: content || 'Unknown error' };
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.updateTask', toolArguments);
+      const parsed = this.parseToolResponse(result);
+      if (parsed.parsed) {
+        return { success: true, taskId: parsed.parsed.id ?? taskId, message: parsed.hintSummary };
       }
+      if (parsed.error && String(parsed.error).includes('modified by another user')) {
+        return { success: false, conflict: true, error: parsed.error };
+      }
+      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -201,14 +257,12 @@ export class WBSService {
       if (prerequisites !== undefined) toolArguments.prerequisites = prerequisites;
       if (completionConditions !== undefined) toolArguments.completionConditions = completionConditions;
 
-  const result = await (this.mcpClient as any).callTool('wbs.createTask', toolArguments);
-      const content = result.content?.[0]?.text ?? '';
-      if (content.includes('✅')) {
-        const idMatch = content.match(/ID:\s*(.+)/);
-        const createdId = idMatch ? idMatch[1].trim() : undefined;
-        return { success: true, taskId: createdId, message: content };
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.createTask', toolArguments);
+      const parsed = this.parseToolResponse(result);
+      if (parsed.parsed) {
+        return { success: true, taskId: parsed.parsed.id, message: parsed.hintSummary };
       }
-      return { success: false, error: content || 'Unknown error', message: content };
+      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
@@ -220,12 +274,14 @@ export class WBSService {
    * @param taskId タスクID
    * @returns 削除結果
    */
-  async deleteTaskApi(taskId: string): Promise<{ success: boolean; error?: string }> {
+  async deleteTaskApi(taskId: string): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
     try {
-  const result = await (this.mcpClient as any).callTool('wbs.deleteTask', { taskId });
-      const content = result.content?.[0]?.text ?? '';
-      if (content.includes('✅')) return { success: true };
-      return { success: false, error: content || 'Unknown error' };
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.deleteTask', { taskId });
+      const parsed = this.parseToolResponse(result);
+      if (parsed.parsed) {
+        return { success: true, taskId: parsed.parsed.id ?? taskId, message: parsed.hintSummary };
+      }
+      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -237,12 +293,14 @@ export class WBSService {
    * @param newParentId 新しい親タスクID（またはnull）
    * @returns 移動結果
    */
-  async moveTaskApi(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string }> {
+  async moveTaskApi(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
     try {
-  const result = await (this.mcpClient as any).callTool('wbs.moveTask', { taskId, newParentId: newParentId ?? null });
-      const content = result.content?.[0]?.text ?? '';
-      if (content.includes('✅')) return { success: true };
-      return { success: false, error: content || 'Unknown error' };
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
+      const parsed = this.parseToolResponse(result);
+      if (parsed.parsed) {
+        return { success: true, taskId: parsed.parsed.id ?? taskId, message: parsed.hintSummary };
+      }
+      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -355,7 +413,7 @@ export class WBSService {
    */
   async listArtifactsApi(): Promise<Artifact[]> {
     try {
-      const result = await (this.mcpClient as any).callTool('artifacts.listArtifacts', {});
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.listArtifacts', {});
       const content = result.content?.[0]?.text;
       if (content) {
         try {
@@ -378,7 +436,7 @@ export class WBSService {
    */
   async getArtifactApi(artifactId: string): Promise<Artifact | null> {
     try {
-      const result = await (this.mcpClient as any).callTool('artifacts.getArtifact', { artifactId });
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.getArtifact', { artifactId });
       const content = result.content?.[0]?.text;
       if (content && !content.includes('❌')) {
         return JSON.parse(content) as Artifact;
@@ -400,17 +458,18 @@ export class WBSService {
    */
   async createArtifactApi(params: { title: string; uri?: string | null; description?: string | null }) {
     try {
-      const result = await (this.mcpClient as any).callTool('artifacts.createArtifact', {
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.createArtifact', {
         title: params.title,
         uri: params.uri ?? null,
         description: params.description ?? null
       });
-      const content = result.content?.[0]?.text ?? '';
-      if (content.includes('❌')) {
-        return { success: false, error: content };
+
+
+      const parsed = this.parseToolResponse(result);
+      if (parsed.parsed && typeof parsed.parsed === 'object') {
+        return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary };
       }
-      const artifact = JSON.parse(content) as Artifact;
-      return { success: true, artifact };
+      return { success: false, error: parsed.error || 'Unknown error', message: parsed.error ?? parsed.hintSummary };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
@@ -429,7 +488,7 @@ export class WBSService {
    */
   async updateArtifactApi(params: { artifactId: string; title: string; uri?: string | null; description?: string | null; version?: number }) {
     try {
-      const result = await (this.mcpClient as any).callTool('artifacts.updateArtifact', {
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.updateArtifact', {
         artifactId: params.artifactId,
         title: params.title,
         uri: params.uri ?? null,
@@ -458,7 +517,7 @@ export class WBSService {
    */
   async deleteArtifactApi(artifactId: string) {
     try {
-      const result = await (this.mcpClient as any).callTool('artifacts.deleteArtifact', { artifactId });
+      const result = await (this.mcpClient as any).callTool('wbs.planMode.deleteArtifact', { artifactId });
       const content = result.content?.[0]?.text ?? '';
       if (content.includes('✅')) {
         return { success: true };

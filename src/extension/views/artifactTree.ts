@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import type { Artifact } from '../mcpClient';
-import type { WBSService } from '../services/WBSService';
+// Avoid importing WBSService type to prevent a type-level dependency that
+// can create circular references for dependency analysis. Use a structural
+// any for the service instance instead.
 import type { MCPClient } from '../mcpClient';
+import type { WBSServicePublic } from '../services/wbsService.interface';
 
 /**
  * プロジェクト成果物ツリープロバイダ
@@ -17,26 +20,26 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
     * 実装理由(なぜ必要か): 互換性のために service / client のどちらでも利用可能にするため
      */
     // 互換: service か client のどちらかを受け取る
-    private readonly wbsService?: WBSService;
+    private readonly wbsService?: WBSServicePublic;
     private readonly mcpClient?: MCPClient;
 
     /**
      * コンストラクタ
      * @param serviceOrClient WBSService もしくは MCPClient（互換性のためどちらでも受け取る）
      */
-    constructor(serviceOrClient: WBSService | MCPClient) {
-            // Prefer treating the object as a WBSService when it exposes the service API
-            // (listArtifactsApi, artifactProvider, or createArtifactApi). Otherwise
-            // treat it as an MCPClient if it exposes the legacy listArtifacts method.
-            const asAny = serviceOrClient as any;
-            if (asAny && (typeof asAny.listArtifactsApi === 'function' || asAny.artifactProvider)) {
-                this.wbsService = serviceOrClient as WBSService;
-            } else if (asAny && typeof asAny.listArtifacts === 'function') {
-                this.mcpClient = serviceOrClient as MCPClient;
-            } else {
-                // Fallback: assume WBSService to prefer the newer service API
-                this.wbsService = serviceOrClient as WBSService;
-            }
+    constructor(serviceOrClient: WBSServicePublic | MCPClient) {
+        // Prefer treating the object as a WBSServicePublic when it exposes
+        // the new service API. Otherwise treat it as an MCPClient for
+        // backward compatibility.
+        const asAny = serviceOrClient as any;
+        if (asAny && (typeof asAny.listArtifactsApi === 'function' || asAny.artifactProvider)) {
+            this.wbsService = serviceOrClient as WBSServicePublic;
+        } else if (asAny && typeof asAny.listArtifacts === 'function') {
+            this.mcpClient = serviceOrClient as MCPClient;
+        } else {
+            // Fallback: prefer the newer service API surface
+            this.wbsService = serviceOrClient as WBSServicePublic;
+        }
     }
 
     /**
@@ -84,9 +87,12 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
      */
     private async fetchArtifacts(): Promise<Artifact[]> {
         if (this.wbsService) {
-            const asAny = this.wbsService as any;
-            if (typeof asAny.listArtifactsApi === 'function') return await asAny.listArtifactsApi();
-            if (this.wbsService.artifactProvider && typeof this.wbsService.artifactProvider.getChildren === 'function') {
+            // Prefer the explicit API on WBSServicePublic when available
+            if (typeof (this.wbsService as any).listArtifactsApi === 'function') {
+                return await this.wbsService.listArtifactsApi();
+            }
+            // Back-compat: some implementations may expose an artifactProvider
+            if ((this.wbsService as any).artifactProvider && typeof (this.wbsService as any).artifactProvider.getChildren === 'function') {
                 return await this.mapArtifactProviderItems();
             }
             return [];
@@ -102,7 +108,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
      * @returns Promise<Artifact[]>
      */
     private async mapArtifactProviderItems(): Promise<Artifact[]> {
-        const items = await this.wbsService!.artifactProvider.getChildren();
+        const items = await (this.wbsService as any)!.artifactProvider.getChildren();
         if (!Array.isArray(items)) return [];
         return (items as any[]).map((it) => it && it.artifact ? it.artifact : undefined).filter(Boolean);
     }
@@ -145,7 +151,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             description: description?.trim() || null
         };
         const result = this.wbsService
-            ? await (this.wbsService.createArtifactApi ? this.wbsService.createArtifactApi(payload) : this.wbsService.createArtifact())
+            ? await this.wbsService.createArtifactApi(payload)
             : await (this.mcpClient as any).createArtifact(payload);
 
         if (!result.success) {
@@ -210,7 +216,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             version: artifact.version
         };
         const result = this.wbsService
-            ? await (this.wbsService.updateArtifactApi ? this.wbsService.updateArtifactApi(payload) : this.wbsService.editArtifact(target))
+            ? await this.wbsService.updateArtifactApi(payload)
             : await (this.mcpClient as any).updateArtifact(payload);
 
         if (!result.success) {
@@ -257,7 +263,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
         }
 
         const result = this.wbsService
-            ? await (this.wbsService.deleteArtifactApi ? this.wbsService.deleteArtifactApi(target.artifact.id) : this.wbsService.deleteArtifact(target))
+            ? await this.wbsService.deleteArtifactApi(target.artifact.id)
             : await (this.mcpClient as any).deleteArtifact(target.artifact.id);
         if (!result.success) {
             // 処理概要: サーバエラーをユーザーへ通知

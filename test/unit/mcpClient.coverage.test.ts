@@ -1,4 +1,4 @@
-import { MCPClient } from '../src/extension/mcpClient';
+import { MCPClient } from '../../src/extension/mcpClient';
 
 describe('MCPClient additional coverage tests', () => {
   let client: MCPClient;
@@ -70,7 +70,7 @@ describe('MCPClient additional coverage tests', () => {
 
       const result = await client.listTasks();
       expect(result).toEqual([]);
-      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', {});
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 
       callToolSpy.mockRestore();
     });
@@ -84,7 +84,7 @@ describe('MCPClient additional coverage tests', () => {
       expect(fakeOutput.appendLine).toHaveBeenCalledWith(
         expect.stringContaining('[MCP Client] Failed to parse task list:')
       );
-      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', {});
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 
       callToolSpy.mockRestore();
     });
@@ -98,7 +98,7 @@ describe('MCPClient additional coverage tests', () => {
       expect(fakeOutput.appendLine).toHaveBeenCalledWith(
         '[MCP Client] Failed to list tasks: Error: Network error'
       );
-      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', {});
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 
       callToolSpy.mockRestore();
     });
@@ -108,10 +108,10 @@ describe('MCPClient additional coverage tests', () => {
         .mockResolvedValue({ content: [{ text: '[]' }] });
 
       await client.listTasks('parent123');
-      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', { parentId: 'parent123' });
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', { parentId: 'parent123' });
 
       await client.listTasks(null);
-      expect(callToolSpy).toHaveBeenCalledWith('wbs.listTasks', { parentId: null });
+      expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', { parentId: null });
 
       callToolSpy.mockRestore();
     });

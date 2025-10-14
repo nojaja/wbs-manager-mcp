@@ -28,11 +28,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:mcpWbs.start",
-    "onView:wbsTree",
-    "onView:artifactTree"
-  ],
   "main": "./out/extension/extension.js",
   "contributes": {
     "commands": [
@@ -150,7 +145,7 @@
     "build": "tsc -p ./",
     "build:webview": "webpack --config webpack.webview.config.js --mode production",
     "watch:webview": "webpack --config webpack.webview.config.js --mode development --watch",
-    "test": "npm run lint && jest --config=jest.config.js --coverage",
+    "test": "npm run lint && jest --config=jest.config.js --coverage && npx depcruise src",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
     "start-server-dev": "node ./out/mcpServer/index.js",
@@ -166,6 +161,7 @@
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^8.46.0",
     "@typescript-eslint/parser": "^8.46.0",
+    "dependency-cruiser": "^16.10.4",
     "eslint": "^9.37.0",
     "eslint-plugin-jsdoc": "^50.8.0",
     "eslint-plugin-sonarjs": "^3.0.5",

@@ -1,5 +1,14 @@
-
+//console.errorでPIDを返す
+console.error('[MCP Server] Starting stdio MCP server... PID:', process.pid);
 import { initializeDatabase, WBSRepository } from './db-simple';
+import { ToolRegistry } from './tools/ToolRegistry';
+
+// Create a global registry instance for tools
+const toolRegistry = new ToolRegistry();
+// Create shared repository instance to inject into tools
+const sharedRepo = new WBSRepository();
+toolRegistry.setDeps({ repo: sharedRepo });
+// Note: we'll load tools dynamically from ./tools in a later step
 
 interface JsonRpcRequest {
     jsonrpc: string;
@@ -25,17 +34,17 @@ interface JsonRpcNotification {
 }
 
 /**
- * 標準入出力MCPサーバクラス
- * 標準入出力経由でリクエスト受付・DB操作・レスポンス返却を行う
- * なぜ必要か: VSCode拡張とサーバ間をシンプルなプロトコルで接続し、DB操作を分離するため
+ * 処理名: Stdio MCP サーバ（クラス）
+ * 処理概要: 標準入出力を使って JSON-RPC 形式のメッセージを受信し、DB 操作／ツール呼び出しを仲介して応答を返すサーバ実装。
+ * 実装理由: VSCode 拡張側と分離してサーバ側の DB やツールを独立して扱うため。標準入出力でのやり取りにより拡張とプロセス間通信を簡潔に保つ。
  */
 class StdioMCPServer {
     private repo: WBSRepository;
 
     /**
-     * コンストラクタ
-     * WBSリポジトリ初期化・標準入出力ハンドラ設定を行う
-     * なぜ必要か: DB操作・リクエスト受付を一元管理するため
+     * 処理名: コンストラクタ
+     * 処理概要: WBSRepository のインスタンスを作成し、標準入出力の受信ハンドラを設定する
+     * 実装理由: サーバが扱うデータ層（リポジトリ）と通信ハンドラを初期化して、以降のメッセージ処理を一元的に行うため
      */
     constructor() {
         this.repo = new WBSRepository();
@@ -43,9 +52,9 @@ class StdioMCPServer {
     }
 
     /**
-     * 標準入出力ハンドラ設定処理
-     * stdinからのデータ受信・パース・メッセージ分岐処理を行う
-    * なぜ必要か: VSCode拡張からのリクエストをリアルタイムで受信・処理するため（標準入出力を通信チャネルとして利用）
+     * 処理名: 標準入出力ハンドラ設定
+     * 処理概要: process.stdin に対してデータイベントと end イベントを登録し、受信したバイト列を行単位で分割して JSON-RPC メッセージとして処理する
+     * 実装理由: ストリームは任意の境界で切れるためバッファリングして行単位で安全にパースし、途中受信や複数メッセージの同時到着を扱うため
      */
     private setupStdioHandlers() {
         process.stdin.setEncoding('utf8');
@@ -56,24 +65,28 @@ class StdioMCPServer {
             let lines = buffer.split('\n');
             buffer = lines.pop() || '';
 
-            // 1行ずつJSON-RPCメッセージとして処理
-            // 処理概要: 受信した行をJSONとしてパースし、通知/リクエストへ振り分け
-            // 実装理由: ストリーム分割の境界問題（途中受信）を避け、確実に1行単位で扱う
+            // 1行ずつ JSON-RPC メッセージとして処理するループ
+            // 処理概要: split によって得た各行を順にパースして handleMessage に渡す
+            // 実装理由: ストリームがメッセージの途中で切れることや複数メッセージが単一チャンクで来るケースに対応するため
             for (const line of lines) {
-                // 空行はスキップ
-                if (line.trim()) {
-                    // 理由: サーバへの不正リクエストやパース失敗時も安全にエラー通知
-                    try {
-                        const message = JSON.parse(line.trim());
-                        this.handleMessage(message);
-                    } catch (error) {
-                        console.error('[MCP Server] Failed to parse message:', error);
-                    }
+                // 空行は意図せぬノイズなので無視する
+                if (!line.trim()) continue;
+
+                // JSON パースは例外を投げる可能性があるため個別に try/catch で保護する
+                // 処理概要: パース成功で handleMessage を呼ぶ。失敗時はログに記録して次の行へ進む
+                // 実装理由: 不正な入力によりサーバ全体が停止するのを防ぎ、問題の行だけを無害化するため
+                try {
+                    const message = JSON.parse(line.trim());
+                    this.handleMessage(message);
+                } catch (error) {
+                    console.error('[MCP Server] Failed to parse message:', error);
                 }
             }
         });
 
         process.stdin.on('end', () => {
+            // 処理概要: stdin の終了を受けてプロセスを終了する
+            // 実装理由: 親プロセス側の入力が終了した場合、サーバ側もクリーンに終了する必要があるため
             console.error('[MCP Server] Stdin ended, exiting...');
             process.exit(0);
         });
@@ -81,7 +94,7 @@ class StdioMCPServer {
         // Handle process termination
         process.on('SIGINT', () => {
             console.error('[MCP Server] Received SIGINT, exiting...');
-            process.exit(0);    
+            process.exit(0);
         });
         process.on('SIGTERM', () => {
             console.error('[MCP Server] Received SIGTERM, exiting...');
@@ -90,17 +103,18 @@ class StdioMCPServer {
     }
 
     /**
-     * メッセージ受信処理
-     * JSON-RPCリクエスト/通知を受信し、リクエストはhandleRequest、通知はhandleNotificationへ振り分ける
-     * なぜ必要か: クライアントからの各種操作要求を正しく分岐・処理するため
+     * 処理名: メッセージ受信ハンドラ
+     * 処理概要: 受信した JSON-RPC メッセージをログ出力し、リクエストか通知かで処理を分岐する
+     * 実装理由: JSON-RPC の仕様に従い、id の有無でレスポンスが必要か判定し適切に handleRequest / handleNotification を呼び出すため
      * @param message 受信メッセージ
      */
     private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
         try {
             console.error(`[MCP Server] Received: ${message.method}`, message.params);
 
-            // idプロパティの有無でリクエスト/通知を分岐
-            // 理由: JSON-RPC仕様に従い、応答要否を正しく判定するため
+            // id プロパティの有無でリクエスト/通知を判定
+            // 処理概要: リクエストはレスポンスを返す必要があるため handleRequest を呼び、通知は handleNotification に委譲する
+            // 実装理由: クライアントとサーバ間での同期的な呼び出し/非同期通知を正しく扱うため
             if ('id' in message) {
                 // Request - needs response
                 const response = await this.handleRequest(message as JsonRpcRequest);
@@ -110,11 +124,11 @@ class StdioMCPServer {
                 await this.handleNotification(message as JsonRpcNotification);
             }
         } catch (error) {
+            // 処理概要: message 処理中の例外はログに出力し、リクエストの場合はエラー応答を返す
+            // 実装理由: 通知は一方向通信なので応答しないが、リクエストは呼び出し元が結果を待っているためエラーを返却する必要がある
             console.error('[MCP Server] Error handling message:', error);
-            // idプロパティがある場合のみエラー応答を返す
-            // 理由: 通知には応答不要、リクエストのみエラー返却
             if ('id' in message) {
-                this.sendResponse(message.method,{
+                this.sendResponse(message.method, {
                     jsonrpc: '2.0',
                     id: message.id,
                     error: {
@@ -127,19 +141,22 @@ class StdioMCPServer {
     }
 
     /**
-     * リクエスト処理
-     * JSON-RPCリクエストのメソッドごとにDB操作やツール呼び出しを行い、レスポンスを返す
-     * なぜ必要か: クライアントからのAPI呼び出しをDB操作やツール呼び出しにマッピングするため
+     * 処理名: リクエストハンドラ
+     * 処理概要: JSON-RPC リクエストのメソッド名に応じて適切なレスポンスを返す。内部的にはツール呼び出しやリソース情報の返却を行う
+     * 実装理由: クライアント API をサーバの機能（ツール実行やリソース提供）にマッピングするため
      * @param request リクエストオブジェクト
      * @returns レスポンスオブジェクト
      */
     private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
         const { method, params, id } = request;
 
-        // メソッド名ごとに処理を分岐
-        // 理由: JSON-RPC仕様に従い、APIごとに適切なレスポンスを返すため
+        // メソッド名ごとに処理を分岐する switch ブロック
+        // 処理概要: 各 API 名に対応したレスポンス/副作用を実行する
+        // 実装理由: 単一エンドポイント（JSON-RPC）で複数機能を提供するため、明示的に分岐して処理を管理する
         switch (method) {
             case 'initialize':
+                // 処理概要: サーバの基本情報・機能一覧を返す
+                // 実装理由: クライアントがサーバの能力やバージョンを把握するため必要
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -156,290 +173,27 @@ class StdioMCPServer {
                 };
 
             case 'tools/list':
+                // 処理概要: 登録済みツール一覧を返す
+                // 実装理由: クライアントが利用可能なツールを列挙して UI 等で表示するため
                 return {
                     jsonrpc: '2.0',
                     id,
                     result: {
-                        tools: [
-                            {
-                                name: 'wbs.createTask',
-                                description: 'Create a new task',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        title: { type: 'string', description: 'Task title' },
-                                        description: { type: 'string', description: 'Task description' },
-                                        assignee: { type: 'string', description: 'Assignee name' },
-                                        estimate: { type: 'string', description: 'Time estimate' },
-                                        completionConditions: {
-                                            type: 'array',
-                                            description: 'Conditions that define task completion',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    description: { type: 'string' }
-                                                },
-                                                required: ['description']
-                                            }
-                                        },
-                                        parentId: { type: 'string', description: 'Parent task ID' },
-                                        deliverables: {
-                                            type: 'array',
-                                            description: 'Artifacts produced or modified by this task',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    artifactId: { type: 'string' },
-                                                    crudOperations: { type: 'string', description: 'C,R,U,D flags' }
-                                                },
-                                                required: ['artifactId']
-                                            }
-                                        },
-                                        prerequisites: {
-                                            type: 'array',
-                                            description: 'Artifacts required before executing this task',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    artifactId: { type: 'string' },
-                                                    crudOperations: { type: 'string', description: 'Access pattern' }
-                                                },
-                                                required: ['artifactId']
-                                            }
-                                        }
-                                    },
-                                    required: ['title']
-                                }
-                            },
-                            {
-                                name: 'wbs.getTask',
-                                description: 'Get task details by ID',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        taskId: { type: 'string', description: 'Task ID' }
-                                    },
-                                    required: ['taskId']
-                                }
-                            },
-                            {
-                                name: 'wbs.updateTask',
-                                description: 'Update a task',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        taskId: { type: 'string', description: 'Task ID' },
-                                        title: { type: 'string', description: 'Task title' },
-                                        description: { type: 'string', description: 'Task description' },
-                                        assignee: { type: 'string', description: 'Assignee name' },
-                                        status: { type: 'string', description: 'Task status' },
-                                        estimate: { type: 'string', description: 'Time estimate' },
-                                        completionConditions: {
-                                            type: 'array',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    description: { type: 'string' }
-                                                },
-                                                required: ['description']
-                                            }
-                                        },
-                                        deliverables: {
-                                            type: 'array',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    artifactId: { type: 'string' },
-                                                    crudOperations: { type: 'string' }
-                                                },
-                                                required: ['artifactId']
-                                            }
-                                        },
-                                        prerequisites: {
-                                            type: 'array',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    artifactId: { type: 'string' },
-                                                    crudOperations: { type: 'string' }
-                                                },
-                                                required: ['artifactId']
-                                            }
-                                        },
-                                        ifVersion: { type: 'number', description: 'Expected version for optimistic locking' }
-                                    },
-                                    required: ['taskId']
-                                }
-                            },
-                            {
-                                name: 'wbs.listTasks',
-                                description: 'List tasks — if a parentId is specified, show its subtasks; otherwise, show top-level tasks.',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        parentId: { type: 'string', description: 'Parent task ID' }
-                                    }
-                                }
-                            },
-                            {
-                                name: 'wbs.deleteTask',
-                                description: 'Delete task and descendants',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        taskId: { type: 'string', description: 'Task ID' }
-                                    },
-                                    required: ['taskId']
-                                }
-                            },
-                            {
-                                name: 'wbs.moveTask',
-                                description: 'Move a task under a different parent task',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        taskId: { type: 'string', description: 'Task ID to move' },
-                                        newParentId: { type: 'string', description: 'New parent task ID (omit for root)' }
-                                    },
-                                    required: ['taskId']
-                                }
-                            }
-                            ,
-                            {
-                                name: 'wbs.impotTask',
-                                description: 'Import multiple tasks',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        tasks: {
-                                            type: 'array',
-                                            description: 'Array of task objects',
-                                            items: {
-                                                type: 'object',
-                                                properties: {
-                                                    title: { type: 'string', description: 'Task title (required)' },
-                                                    description: { type: 'string', description: 'Task description' },
-                                                    parentId: { type: 'string', description: 'Parent task ID (omit for root task)' },
-                                                    assignee: { type: 'string', description: 'Assignee user name' },
-                                                    estimate: { type: 'string', description: 'Estimated effort (text)' },
-                                                    deliverables: {
-                                                        type: 'array',
-                                                        description: 'Deliverable artifact links',
-                                                        items: {
-                                                            type: 'object',
-                                                            properties: {
-                                                                artifactId: { type: 'string', description: 'Artifact identifier' },
-                                                                crudOperations: { type: 'string', description: 'CRUD operations allowed for the artifact' },
-                                                                crud: { type: 'string', description: 'Deprecated alias for crudOperations' }
-                                                            },
-                                                            required: ['artifactId']
-                                                        }
-                                                    },
-                                                    prerequisites: {
-                                                        type: 'array',
-                                                        description: 'Prerequisite artifact links',
-                                                        items: {
-                                                            type: 'object',
-                                                            properties: {
-                                                                artifactId: { type: 'string', description: 'Artifact identifier' },
-                                                                crudOperations: { type: 'string', description: 'CRUD operations allowed for the artifact' }
-                                                            },
-                                                            required: ['artifactId']
-                                                        }
-                                                    },
-                                                    completionConditions: {
-                                                        type: 'array',
-                                                        description: 'Completion condition descriptions',
-                                                        items: {
-                                                            type: 'object',
-                                                            properties: {
-                                                                description: { type: 'string', description: 'Condition detail' }
-                                                            },
-                                                            required: ['description']
-                                                        }
-                                                    }
-                                                },
-                                                required: ['title']
-                                            }
-                                        }
-                                    },
-                                    required: ['tasks']
-                                }
-                            },
-                            {
-                                name: 'artifacts.listArtifacts',
-                                description: 'List artifacts',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {}
-                                }
-                            },
-                            {
-                                name: 'artifacts.getArtifact',
-                                description: 'Get a specific artifact by ID',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        artifactId: { type: 'string', description: 'Artifact ID' }
-                                    },
-                                    required: ['artifactId']
-                                }
-                            },
-                            {
-                                name: 'artifacts.createArtifact',
-                                description: 'Create a new artifact',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        title: { type: 'string', description: 'Artifact title' },
-                                        uri: { type: 'string', description: 'File path or URI' },
-                                        description: { type: 'string', description: 'Artifact description' }
-                                    },
-                                    required: ['title']
-                                }
-                            },
-                            {
-                                name: 'artifacts.updateArtifact',
-                                description: 'Update an existing artifact',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        artifactId: { type: 'string', description: 'Artifact ID' },
-                                        title: { type: 'string', description: 'Artifact title' },
-                                        uri: { type: 'string', description: 'File path or URI' },
-                                        description: { type: 'string', description: 'Artifact description' },
-                                        ifVersion: { type: 'number', description: 'Expected version for optimistic locking' }
-                                    },
-                                    required: ['artifactId']
-                                }
-                            },
-                            {
-                                name: 'artifacts.deleteArtifact',
-                                description: 'Delete a artifact',
-                                inputSchema: {
-                                    type: 'object',
-                                    properties: {
-                                        artifactId: { type: 'string', description: 'Artifact ID' }
-                                    },
-                                    required: ['artifactId']
-                                }
-                            }
-                        ]
+                        tools: toolRegistry.list()
                     }
                 };
 
             case 'tools/call':
-                // 理由: ツール名ごとに個別ハンドラへ分岐
-                // 処理概要: name/argumentsに応じて適切なツール処理を実行
-                // 実装理由: サーバの機能拡張をスイッチ1箇所で集中管理
-                const toolResult = await this.handleToolCall(params);
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: toolResult
-                };
+                {
+                    // 処理概要: 指定されたツール名でツールを実行し結果を返す
+                    // 実装理由: 拡張から具体的な処理（タスク作成/取得等）をリクエストできるようにするため
+                    const toolResult = await toolRegistry.execute(params?.name, params?.arguments ?? {});
+                    return { jsonrpc: '2.0', id, result: toolResult };
+                }
 
             case 'ping':
+                // 処理概要: 単純な疎通確認（空の結果を返す）
+                // 実装理由: クライアントがサーバとの接続状態を確認するため
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -447,6 +201,8 @@ class StdioMCPServer {
                 };
 
             case 'resources/list':
+                // 処理概要: リソース一覧を返す（現状未実装で空配列）
+                // 実装理由: 将来的に外部リソースを列挙する API のプレースホルダ
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -456,6 +212,8 @@ class StdioMCPServer {
                 };
 
             case 'prompts/list':
+                // 処理概要: プロンプト一覧を返す（現状未実装で空配列）
+                // 実装理由: 将来の拡張でプロンプトを提供するためのプレースホルダ
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -465,8 +223,9 @@ class StdioMCPServer {
                 };
 
             default:
-                // 未知のメソッドはエラー応答
-                // 理由: 仕様外の呼び出しを明示的に拒否し、クライアントの誤実装に気づけるようにする
+                // 未知のメソッドは明示的にエラー応答を返す
+                // 処理概要: サポート外のメソッド呼び出しに対して Method not found エラーを返す
+                // 実装理由: クライアント側の誤実装やタイプミスを早期に検出できるようにするため
                 return {
                     jsonrpc: '2.0',
                     id,
@@ -479,489 +238,73 @@ class StdioMCPServer {
     }
 
     /**
-     * 通知処理
-     * JSON-RPC通知のメソッドごとにログ出力等を行う
-     * なぜ必要か: クライアントからの状態通知やイベントを受けてサーバ側で処理するため（応答不要の一方向通信）
+     * 処理名: 通知ハンドラ
+     * 処理概要: JSON-RPC の通知メッセージを受け取り、現状はログ出力のみを行う
+     * 実装理由: 通知は応答不要の一方向メッセージであり、将来的にイベント処理を追加するための受け口を確保する
      * @param notification 通知オブジェクト
      */
     private async handleNotification(notification: JsonRpcNotification) {
         const { method } = notification;
-
-
-
-
-    // 不要なJSDocコメント・空行を削除
-    }
-
-    /**
-     * タスク存在確認・取得処理
-     * 指定IDのタスクが存在すれば返し、なければエラーを返す
-     * なぜ必要か: タスク更新時に存在チェック・楽観ロック用バージョン取得のため
-     * @param taskId タスクID
-     * @returns タスクまたはエラー
-     */
-    private async getTaskForUpdate(taskId: string) {
-        const task = await this.repo.getTask(taskId);
-        if (!task) {
-            return {
-                error: {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Task not found: ${taskId}`
-                    }]
-                }
-            };
-        }
-        return { task };
-    }
-
-    /**
-     * 楽観ロック用バージョン検証処理
-     * バージョン不一致時はエラーを返す
-     * なぜ必要か: 複数ユーザー編集時の競合検出・整合性維持のため
-     * @param args 更新引数
-     * @param currentTask 現在のタスク
-     * @returns エラー応答またはnull
-     */
-    private validateTaskVersion(args: any, currentTask: any) {
-        if (args.ifVersion !== undefined && currentTask.version !== args.ifVersion) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Task has been modified by another user. Expected version ${args.ifVersion}, but current version is ${currentTask.version}`
-                }]
-            };
-        }
-        return null;
-    }
-
-    /**
-     * タスク更新オブジェクト生成処理
-     * 更新引数と現在のタスクから更新用オブジェクトを生成する
-     * なぜ必要か: DB更新時に必要な差分のみを安全にまとめるため
-     * @param args 更新引数
-     * @param currentTask 現在のタスク
-     * @returns 更新オブジェクト
-     */
-    private buildTaskUpdate(args: any, currentTask: any) {
-        return {
-            title: args.title !== undefined ? args.title : currentTask.title,
-            description: args.description !== undefined ? args.description : currentTask.description,
-            assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
-            status: args.status !== undefined ? args.status : currentTask.status,
-            estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,
-            deliverables: Array.isArray(args.deliverables)
-                ? args.deliverables.map((item: any) => ({
-                    artifactId: item?.artifactId,
-                    crudOperations: item?.crudOperations ?? item?.crud ?? null
-                }))
-                : undefined,
-            prerequisites: Array.isArray(args.prerequisites)
-                ? args.prerequisites.map((item: any) => ({
-                    artifactId: item?.artifactId,
-                    crudOperations: item?.crudOperations ?? item?.crud ?? null
-                }))
-                : undefined,
-            completionConditions: Array.isArray(args.completionConditions)
-                ? args.completionConditions
-                    .filter((item: any) => typeof item?.description === 'string' && item.description.trim().length > 0)
-                    .map((item: any) => ({ description: item.description.trim() }))
-                : undefined,
-            ifVersion: args.ifVersion
-        };
-    }
-
-    /**
-     * タスク更新処理
-     * 指定IDのタスクをDBで更新し、結果を返す
-     * なぜ必要か: クライアントからのタスク編集・保存要求に応えるため
-     * @param args タスク更新引数
-     * @returns ツールレスポンス
-     */
-    private async handleUpdateTask(args: any) {
-        try {
-            const taskResult = await this.getTaskForUpdate(args.taskId);
-            if (taskResult.error) {
-                return taskResult.error;
-            }
-
-            const currentTask = taskResult.task;
-            const versionError = this.validateTaskVersion(args, currentTask);
-            if (versionError) {
-                return versionError;
-            }
-
-            const updateData = this.buildTaskUpdate(args, currentTask);
-            const updatedTask = await this.repo.updateTask(args.taskId, updateData);
-
-            return {
-                content: [{
-                    type: 'text',
-                    text: `✅ Task updated successfully!\n\n${JSON.stringify(updatedTask, null, 2)}`
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to update task: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
-
-    /**
-     * タスク一覧取得処理
-     * 指定parentIdのタスク一覧をDBから取得し、ツールレスポンスで返す
-     * なぜ必要か: クライアントからのタスク一覧表示要求に応えるため
-     * @param args タスクリスト引数 (parentId: 親タスクID、省略時はトップレベル)
-     * @returns ツールレスポンス
-     */
-    private async handleListTasks(args: any) {
-        try {
-            const tasks = await this.repo.listTasks(args.parentId);
-            // childCount（子要素数）が必ず含まれるようになった
-            return {
-                content: [{
-                    type: 'text',
-                    text: JSON.stringify(tasks, null, 2)
-                }]
-            };
-        } catch (error) {
-            console.error(`[MCP Server] handleListTasks error: ${error instanceof Error ? error.message : String(error)}`);
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
-
-    /**
-     * タスク作成処理 (ツール呼び出しから)
-    * @param args 引数 (title, description, parentId, assignee, estimate)
-     * @returns ツールレスポンス（作成されたタスクのJSONを含む）
-     */
-    private async handleCreateTask(args: any) {
-        try {
-            const task = await this.repo.createTask(
-                args.title,
-                args.description ?? '',
-                args.parentId ?? null,
-                args.assignee ?? null,
-                args.estimate ?? null,
-                {
-                    deliverables: Array.isArray(args.deliverables) ? args.deliverables.map((item: any) => ({
-                        artifactId: item?.artifactId,
-                        crudOperations: item?.crudOperations ?? item?.crud ?? null
-                    })) : [],
-                    prerequisites: Array.isArray(args.prerequisites) ? args.prerequisites.map((item: any) => ({
-                        artifactId: item?.artifactId,
-                        crudOperations: item?.crudOperations ?? item?.crud ?? null
-                    })) : [],
-                    completionConditions: Array.isArray(args.completionConditions)
-                        ? args.completionConditions
-                            .filter((item: any) => typeof item?.description === 'string' && item.description.trim().length > 0)
-                            .map((item: any) => ({ description: item.description.trim() }))
-                        : []
-                }
-            );
-            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
-        } catch (error) {
-            return { content: [{ type: 'text', text: `❌ Failed to create task: ${error instanceof Error ? error.message : String(error)}` }] };
-        }
-    }
-
-    /**
-     * タスク取得処理 (ツール呼び出しから)
-     * @param args 引数 (taskId)
-     * @returns ツールレスポンス（取得したタスクのJSON、未検出時はエラーメッセージ）
-     */
-    private async handleGetTask(args: any) {
-        try {
-            const task = await this.repo.getTask(args.taskId);
-            if (!task) {
-                return { content: [{ type: 'text', text: `❌ Task not found: ${args.taskId}` }] };
-            }
-            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
-        } catch (error) {
-            return { content: [{ type: 'text', text: `❌ Failed to get task: ${error instanceof Error ? error.message : String(error)}` }] };
-        }
-    }
-
-    /**
-     * タスク削除処理
-     * 指定IDのタスクと子タスクを削除し、結果メッセージを返す
-     * なぜ必要か: クライアントからの削除要求をDB操作に接続するため
-     * @param args 削除引数（taskId）
-     * @returns ツールレスポンス
-     */
-    private async handleDeleteTask(args: any) {
-        try {
-            const deleted = await this.repo.deleteTask(args.taskId);
-            if (!deleted) {
-                return {
-                    content: [{
-                        type: 'text',
-                        text: `❌ Task not found: ${args.taskId}`
-                    }]
-                };
-            }
-            return {
-                content: [{
-                    type: 'text',
-                    text: `✅ Task deleted successfully!\n\nID: ${args.taskId}`
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to delete task: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
-    // project deletion removed: projects table/operations are no longer supported
-
-
-    /**
-     * タスク移動処理
-     * 指定タスクの親タスクを変更し、結果メッセージを返す
-     * なぜ必要か: クライアントからのドラッグ&ドロップ操作で親子関係を付け替える要求に応えるため
-     * @param args 移動引数
-     * @returns ツールレスポンス
-     */
-    private async handleMoveTask(args: any) {
-        try {
-            const task = await this.repo.moveTask(args.taskId, args.newParentId ?? null);
-            return {
-                content: [{
-                    type: 'text',
-                    text: `✅ Task moved successfully!\n\n${JSON.stringify(task, null, 2)}`
-                }]
-            };
-        } catch (error) {
-            return {
-                content: [{
-                    type: 'text',
-                    text: `❌ Failed to move task: ${error instanceof Error ? error.message : String(error)}`
-                }]
-            };
-        }
-    }
-
-    /**
-     * 複数タスク一括登録ツールハンドラ
-     * @param args 引数 (projectId, tasks)
-     * @returns ツールレスポンス
-     */
-    private async handleImpotTask(args: any) {
-        try {
-            const tasks = Array.isArray(args.tasks) ? args.tasks : [];
-            const created = await this.repo.importTasks(tasks);
-            return {
-                content: [{ type: 'text', text: JSON.stringify(created, null, 2) }]
-            };
-        } catch (error) {
-            return {
-                content: [{ type: 'text', text: `❌ Failed to import tasks: ${error instanceof Error ? error.message : String(error)}` }]
-            };
-        }
-    }
-
-    /**
-     * 成果物一覧取得ハンドラ
-     * 成果物一覧をJSONとして返す
-     * なぜ必要か: ツリービュー表示用に成果物一覧を取得するため
-     * @param args 引数（省略可能）
-     * @returns ツールレスポンス
-     */
-    private async handleListArtifacts(args: any) {
-        try {
-            const artifacts = await this.repo.listArtifacts();
-            return {
-                content: [{ type: 'text', text: JSON.stringify(artifacts, null, 2) }]
-            };
-        } catch (error) {
-            return {
-                content: [{ type: 'text', text: `❌ Failed to list artifacts: ${error instanceof Error ? error.message : String(error)}` }]
-            };
-        }
-    }
-
-    /**
-     * 成果物取得ハンドラ
-     * 指定IDの成果物をJSONとして返す
-     * なぜ必要か: 成果物詳細画面で表示するため
-     * @param args 引数（artifactId）
-     * @returns ツールレスポンス
-     */
-    private async handleGetArtifact(args: any) {
-        try {
-            const artifact = await this.repo.getArtifact(args.artifactId);
-            if (!artifact) {
-                return {
-                    content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }]
-                };
-            }
-            return {
-                content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }]
-            };
-        } catch (error) {
-            return {
-                content: [{ type: 'text', text: `❌ Failed to get artifact: ${error instanceof Error ? error.message : String(error)}` }]
-            };
-        }
-    }
-
-    /**
-     * 成果物作成ハンドラ
-     * 成果物を新規登録し、結果を返す
-     * なぜ必要か: 成果物管理からの作成要求に応えるため
-     * @param args 引数（title, uri, description）
-     * @returns ツールレスポンス
-     */
-    private async handleCreateArtifact(args: any) {
-        try {
-            const artifact = await this.repo.createArtifact(
-                args.title,
-                args.uri ?? null,
-                args.description ?? null
-            );
-            return {
-                content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }]
-            };
-        } catch (error) {
-            return {
-                content: [{ type: 'text', text: `❌ Failed to create artifact: ${error instanceof Error ? error.message : String(error)}` }]
-            };
-        }
-    }
-
-    /**
-     * 成果物更新ハンドラ
-     * 既存成果物を更新し、結果を返す
-     * なぜ必要か: 成果物情報の編集をサーバへ反映するため
-     * @param args 引数（artifactId, title, uri, description, ifVersion）
-     * @returns ツールレスポンス
-     */
-    private async handleUpdateArtifact(args: any) {
-        try {
-            const artifact = await this.repo.updateArtifact(args.artifactId, {
-                title: args.title,
-                uri: args.uri ?? null,
-                description: args.description ?? null,
-                ifVersion: args.ifVersion
-            });
-            return {
-                content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }]
-            };
-        } catch (error) {
-            return {
-                content: [{ type: 'text', text: `❌ Failed to update artifact: ${error instanceof Error ? error.message : String(error)}` }]
-            };
-        }
-    }
-
-    /**
-     * 成果物削除ハンドラ
-     * 指定成果物を削除し、結果メッセージを返す
-     * なぜ必要か: 成果物管理からの削除要求に応えるため
-     * @param args 引数（artifactId）
-     * @returns ツールレスポンス
-     */
-    private async handleDeleteArtifact(args: any) {
-        try {
-            const deleted = await this.repo.deleteArtifact(args.artifactId);
-            if (!deleted) {
-                return {
-                    content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }]
-                };
-            }
-            return {
-                content: [{ type: 'text', text: `✅ Artifact deleted successfully!\n\nID: ${args.artifactId}` }]
-            };
-        } catch (error) {
-            return {
-                content: [{ type: 'text', text: `❌ Failed to delete artifact: ${error instanceof Error ? error.message : String(error)}` }]
-            };
-        }
-    }
-
-    /**
-     * ツール呼び出し分岐処理
-     * ツール名ごとに各ハンドラへ処理を振り分ける
-     * なぜ必要か: クライアントからの各種API呼び出しを柔軟に拡張・管理するため
-     * @param params ツール呼び出しパラメータ
-     * @returns Promise<any>
-     */
-    private async handleToolCall(params: any) {
-        const { name, arguments: args = {} } = params ?? {};
-
-        console.error(`[MCP Server] Tool call: ${name}`, args);
-
-        // ツール名ごとに個別ハンドラへ分岐
-        // 理由: 新規ツール追加時の拡張性・保守性向上のため
-        switch (name) {
-            case 'wbs.createTask':
-                return this.handleCreateTask(args);
-            case 'wbs.getTask':
-                return this.handleGetTask(args);
-            case 'wbs.updateTask':
-                return this.handleUpdateTask(args);
-            case 'wbs.listTasks':
-                return this.handleListTasks(args);
-            case 'wbs.deleteTask':
-                return this.handleDeleteTask(args);
-            case 'wbs.moveTask':
-                return this.handleMoveTask(args);
-            case 'wbs.impotTask':
-                return this.handleImpotTask(args);
-            case 'artifacts.listArtifacts':
-                return this.handleListArtifacts(args);
-            case 'artifacts.getArtifact':
-                return this.handleGetArtifact(args);
-            case 'artifacts.createArtifact':
-                return this.handleCreateArtifact(args);
-            case 'artifacts.updateArtifact':
-                return this.handleUpdateArtifact(args);
-            case 'artifacts.deleteArtifact':
-                return this.handleDeleteArtifact(args);
-            default:
-                // 未知のツール名はエラー
-                // 理由: ツール一覧に無い呼び出しを検出し、デバッグ容易性を高める
-                console.error(`[MCP Server] Unknown tool: ${name}`);
-                throw new Error(`Unknown tool: ${name}`);
-        }
+        // 処理概要: 通知を受けてログに記録する（軽量な受け流し実装）
+        // 実装理由: 通知の多数到着や非同期イベントを簡潔に扱うため、現状はログに残すだけにする
+        console.error(`[MCP Server] Notification received: ${method}`);
+        return;
     }
 
 
     /**
-     * レスポンス送信処理
-     * JSON-RPCレスポンスを標準出力へ送信する
-     * なぜ必要か: クライアントへAPI応答を返し、UIを更新させるため
+     * 処理名: レスポンス送信
+     * 処理概要: JSON-RPC レスポンスオブジェクトを文字列化して標準出力に書き出す
+     * 実装理由: 拡張クライアントは標準出力の各行を JSON-RPC レスポンスとして読み取るため、正確に一行ずつ出力する必要がある
      * @param method メソッド名
      * @param response レスポンスオブジェクト
      */
     private sendResponse(method: string, response: JsonRpcResponse) {
         const responseStr = JSON.stringify(response);
-        console.error(`[MCP Server] Sending: ${responseStr}`);
+        const debuggingStr = JSON.stringify(response, null, 2); // for easier debugging
+        console.error(`[MCP Server] Sending: ${debuggingStr}`);
         process.stdout.write(responseStr + '\n');
     }
 }
 
 // Start the MCP server once the database is ready
-(async () => {
-    //console.errorでPIDを返す
-    console.error('[MCP Server] Starting stdio MCP server... PID:', process.pid);
-    // 理由: DB初期化・サーバ起動失敗時もエラー通知し、異常終了させる
-    try {
-        await initializeDatabase();
-        new StdioMCPServer();
-    } catch (error) {
-        console.error('[MCP Server] Failed to start server:', error);
-        process.exit(1);
-    }
-})();
+// NOTE: when running under Jest (JEST_WORKER_ID is set) we skip auto-start to avoid DB contention in tests.
+if (!process.env.JEST_WORKER_ID) {
+    (async () => {
+        // 理由: DB初期化・サーバ起動失敗時もエラー通知し、異常終了させる
+        try {
+            await initializeDatabase();
+            // register built-in tools explicitly (dynamic loading disabled)
+            try {
+                // 明示的に組み込みツールを登録します。動的ロードは不要のため使用しません。
+                // 追加するツールはここに import して register してください。
+                const wbsCreate = await import('./tools/wbsCreateTaskTool');
+                const wbsGet = await import('./tools/wbsGetTaskTool');
+                const wbsUpdate = await import('./tools/wbsUpdateTaskTool');
+                const wbsList = await import('./tools/wbsListTasksTool');
+                const wbsDelete = await import('./tools/wbsDeleteTaskTool');
+                const wbsMove = await import('./tools/wbsMoveTaskTool');
+                const wbsImpot = await import('./tools/wbsImpotTaskTool');
+                const artList = await import('./tools/artifactsListArtifactsTool');
+                const artGet = await import('./tools/artifactsGetArtifactTool');
+                const artCreate = await import('./tools/artifactsCreateArtifactTool');
+                const artUpdate = await import('./tools/artifactsUpdateArtifactTool');
+                const artDelete = await import('./tools/artifactsDeleteArtifactTool');
+                const candidates = [
+                    wbsCreate, wbsGet, wbsUpdate, wbsList, wbsDelete, wbsMove, wbsImpot,
+                    artList, artGet, artCreate, artUpdate, artDelete
+                ];
+                for (const mod of candidates) {
+                    if (mod && mod.instance) toolRegistry.register(mod.instance);
+                }
+                console.error('[MCP Server] Built-in tools registered:', toolRegistry.list().map(t => t.name));
+            } catch (err) {
+                console.error('[MCP Server] Failed to register built-in tools:', err);
+            }
+            new StdioMCPServer();
+        } catch (error) {
+            console.error('[MCP Server] Failed to start server:', error);
+            process.exit(1);
+        }
+    })();
+}

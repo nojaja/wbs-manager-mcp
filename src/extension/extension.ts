@@ -43,11 +43,14 @@ export async function activate(context: vscode.ExtensionContext) {
     // MCPクライアントの初期化（API通信のため）
     mcpClient = new MCPClient(outputChannel);
     serverService = new ServerService(outputChannel);
-    wbsService = new WBSService(mcpClient);
-    // Create providers and inject them into the service
-    const wbsProvider = new (await import('./views/wbsTree')).WBSTreeProvider(wbsService as any);
-    const artifactProvider = new (await import('./views/artifactTree')).ArtifactTreeProvider(wbsService as any);
-    wbsService.setProviders(wbsProvider, artifactProvider);
+    // Create providers first, then inject into WBSService to avoid circular imports
+    const { WBSTreeProvider } = await import('./views/wbsTree');
+    const { ArtifactTreeProvider } = await import('./views/artifactTree');
+    const wbsProvider = new WBSTreeProvider(mcpClient as any);
+    const artifactProvider = new ArtifactTreeProvider(mcpClient as any);
+    wbsService = new WBSService(mcpClient, { wbsProvider: wbsProvider as any, artifactProvider: artifactProvider as any });
+    // Ensure providers are set (backwards compatibility)
+    wbsService.setProviders(wbsProvider as any, artifactProvider as any);
     // Inject WBSService into MCPClient so MCPClient can delegate WBS business logic
     mcpClient.setWbsService(wbsService);
 

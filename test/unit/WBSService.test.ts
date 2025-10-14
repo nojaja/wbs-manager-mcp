@@ -1,10 +1,10 @@
-import { WBSService } from '../src/extension/services/WBSService';
-import { WBSTreeProvider } from '../src/extension/views/wbsTree';
-import { ArtifactTreeProvider } from '../src/extension/views/artifactTree';
+import { WBSService } from '../../src/extension/services/WBSService';
+import { WBSTreeProvider } from '../../src/extension/views/wbsTree';
+import { ArtifactTreeProvider } from '../../src/extension/views/artifactTree';
 
 // モックの設定
-jest.mock('../src/extension/views/wbsTree');
-jest.mock('../src/extension/views/artifactTree');
+jest.mock('../../src/extension/views/wbsTree');
+jest.mock('../../src/extension/views/artifactTree');
 
 const MockedWBSTreeProvider = WBSTreeProvider as jest.MockedClass<typeof WBSTreeProvider>;
 const MockedArtifactTreeProvider = ArtifactTreeProvider as jest.MockedClass<typeof ArtifactTreeProvider>;
@@ -54,7 +54,7 @@ describe('WBSService', () => {
     MockedWBSTreeProvider.mockImplementation(() => mockWbsProvider);
     MockedArtifactTreeProvider.mockImplementation(() => mockArtifactProvider);
 
-    wbsService = new WBSService(mockMcpClient);
+  wbsService = new WBSService(mockMcpClient, { wbsProvider: mockWbsProvider as any, artifactProvider: mockArtifactProvider as any });
   });
 
   describe('API methods (list/get/create/update/delete/move)', () => {
@@ -117,8 +117,6 @@ describe('WBSService', () => {
 
   describe('constructor', () => {
     it('should create WBSService with providers', () => {
-      expect(MockedWBSTreeProvider).toHaveBeenCalledWith(mockMcpClient);
-      expect(MockedArtifactTreeProvider).toHaveBeenCalledWith(mockMcpClient);
       expect(wbsService.wbsProvider).toBe(mockWbsProvider);
       expect(wbsService.artifactProvider).toBe(mockArtifactProvider);
     });

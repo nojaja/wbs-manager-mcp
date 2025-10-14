@@ -1,6 +1,6 @@
 
 import { jest } from '@jest/globals';
-import { WBSService } from '../src/extension/services/WBSService';
+import { WBSService } from '../../src/extension/services/WBSService';
 
 describe('WBS/Artifact ビジネスロジックの現状動作テスト', () => {
   let mcpClient: any;
@@ -8,7 +8,25 @@ describe('WBS/Artifact ビジネスロジックの現状動作テスト', () => 
 
   beforeEach(() => {
     mcpClient = { fetch: jest.fn() };
-    service = new WBSService(mcpClient);
+    const mockWbsProvider = {
+      refresh: jest.fn(),
+      createTask: jest.fn(),
+      deleteTask: jest.fn(),
+      handleTaskDrop: jest.fn(),
+      getTreeItem: jest.fn(),
+      getChildren: jest.fn(),
+      onDidChangeTreeData: {} as any
+    } as any;
+    const mockArtifactProvider = {
+      refresh: jest.fn(),
+      createArtifact: jest.fn(),
+      editArtifact: jest.fn(),
+      deleteArtifact: jest.fn(),
+      getTreeItem: jest.fn(),
+      getChildren: jest.fn(),
+      onDidChangeTreeData: {} as any
+    } as any;
+    service = new WBSService(mcpClient, { wbsProvider: mockWbsProvider, artifactProvider: mockArtifactProvider });
   });
 
 

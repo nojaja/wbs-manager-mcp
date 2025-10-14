@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TaskDetailPanel } from '../src/extension/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
 
 describe('TaskDetailPanel constructor and dispose', () => {
   afterEach(() => {

@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import * as vscode from 'vscode';
 
 // Use CommonJS style mocking to avoid top-level await and ESM Jest features
-jest.mock('../src/extension/server/ServerService', () => ({
+jest.mock('../../src/extension/server/ServerService', () => ({
     ServerService: jest.fn().mockImplementation(() => ({
         validateServerPath: jest.fn().mockReturnValue(true),
         spawnServerProcess: jest.fn().mockReturnValue({}),
@@ -12,7 +12,7 @@ jest.mock('../src/extension/server/ServerService', () => ({
     }))
 }));
 
-jest.mock('../src/extension/mcpClient', () => ({
+jest.mock('../../src/extension/mcpClient', () => ({
     MCPClient: jest.fn().mockImplementation(() => ({
         start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
         stop: jest.fn()
@@ -20,8 +20,8 @@ jest.mock('../src/extension/mcpClient', () => ({
 }));
 
 // Import the mocked constructors
-const { ServerService } = require('../src/extension/server/ServerService');
-const { MCPClient } = require('../src/extension/mcpClient');
+const { ServerService } = require('../../src/extension/server/ServerService');
+const { MCPClient } = require('../../src/extension/mcpClient');
 
 describe('startLocalServer integration', () => {
     let context: any;
