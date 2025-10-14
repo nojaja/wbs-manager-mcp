@@ -96,7 +96,7 @@ describe('MCPClient additional coverage tests', () => {
       const result = await client.listTasks();
       expect(result).toEqual([]);
       expect(fakeOutput.appendLine).toHaveBeenCalledWith(
-        '[MCP Client] Failed to list tasks: Error: Network error'
+        '[MCP Client] Failed to list tasks: Network error'
       );
       expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 

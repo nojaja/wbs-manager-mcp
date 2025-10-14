@@ -1,4 +1,8 @@
 import { MCPClient } from '../../src/extension/mcpClient';
+import { MCPBaseClient } from '../../src/extension/mcp/baseClient';
+import { MCPInitializeClient } from '../../src/extension/mcp/initializeClient';
+import { MCPTaskClient } from '../../src/extension/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/mcp/artifactClient';
 
 const fakeOutput = { appendLine: jest.fn() } as any;
 
@@ -8,6 +12,12 @@ describe('MCPClient', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     client = new MCPClient(fakeOutput);
+  });
+  test('MCPClient composes specialized layers', () => {
+    expect(client).toBeInstanceOf(MCPArtifactClient);
+    expect(client).toBeInstanceOf(MCPTaskClient);
+    expect(client).toBeInstanceOf(MCPInitializeClient);
+    expect(client).toBeInstanceOf(MCPBaseClient);
   });
 
   afterEach(() => {

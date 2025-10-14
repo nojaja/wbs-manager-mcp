@@ -49,8 +49,6 @@ export async function activate(context: vscode.ExtensionContext) {
     wbsService = new WBSService(mcpClient, { wbsProvider: wbsProvider as any, artifactProvider: artifactProvider as any });
     // Ensure providers are set (backwards compatibility)
     wbsService.setProviders(wbsProvider as any, artifactProvider as any);
-    // Inject WBSService into MCPClient so MCPClient can delegate WBS business logic
-    mcpClient.setWbsService(wbsService);
 
     // サーバ・クライアント自動起動
     // 処理概要: 開発用ローカルサーバを自動で起動し、クライアント接続を確立する
