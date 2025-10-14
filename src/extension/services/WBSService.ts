@@ -1,5 +1,4 @@
 // src/services/WBSService.ts
-/* eslint-disable jsdoc/require-param */
 import type { WBSTreeProvider } from '../views/wbsTree';
 import type { ArtifactTreeProvider } from '../views/artifactTree';
 import type { MCPClient, Artifact } from '../mcpClient';
@@ -32,6 +31,8 @@ export class WBSService {
   /**
    * providers が未指定のときに同期的にプロバイダを生成する（createRequire を使用）
    * テスト環境では jest.mock によりモック化された実装が返るため互換性がある
+   * @param mcpClient MCPClient インスタンス
+   * @returns void
    */
   private tryAutoCreateProviders(mcpClient: MCPClient) {
     console.warn('[WBSService] Auto-creation of providers is no longer supported. Please provide them via dependency injection.');
@@ -41,6 +42,12 @@ export class WBSService {
    * 外部から provider を注入する（extension.ts から呼び出す想定）
    * @param wbsProvider WBS の TreeDataProvider 実装
    * @param artifactProvider 成果物の TreeDataProvider 実装
+   */
+  /**
+   * プロバイダを設定
+   * @param wbsProvider WBSツリーのプロバイダ
+   * @param artifactProvider 成果物ツリーのプロバイダ
+   * @returns void
    */
   setProviders(wbsProvider: WBSTreeProvider, artifactProvider: ArtifactTreeProvider) {
     this.wbsProvider = wbsProvider;
@@ -307,9 +314,10 @@ export class WBSService {
   }
 
 
+
   /**
-   * WBSツリーをリフレッシュ
-   * @returns {Promise<void>}
+   * WBSツリーの再描画を要求する
+   * @returns Promise<void> | undefined
    */
   refreshWbsTree() {
     if (this.wbsProvider && typeof this.wbsProvider.refresh === 'function') {
@@ -322,10 +330,11 @@ export class WBSService {
       console.error('[WBSService] wbsProvider not set; cannot refresh WBS tree');
     }
   }
+
   /**
    * タスクを作成
-   * @param selected 選択ノード
-   * @returns {Promise<any>}
+   * @param selected 親ノードなど選択対象
+   * @returns any
    */
   createTask(selected?: any) {
     if (this.wbsProvider && typeof this.wbsProvider.createTask === 'function') {
@@ -334,10 +343,11 @@ export class WBSService {
     console.error('[WBSService] wbsProvider not set; createTask no-op');
     return { success: false } as any;
   }
+
   /**
    * タスクを削除
    * @param target 削除対象
-   * @returns {Promise<any>}
+   * @returns any
    */
   deleteTask(target: any) {
     if (this.wbsProvider && typeof this.wbsProvider.deleteTask === 'function') {
@@ -346,10 +356,11 @@ export class WBSService {
     console.error('[WBSService] wbsProvider not set; deleteTask no-op');
     return { success: false } as any;
   }
+
   /**
    * 子タスクを追加
    * @param target 親ノード
-   * @returns {Promise<any>}
+   * @returns any
    */
   addChildTask(target: any) {
     if (this.wbsProvider && typeof this.wbsProvider.createTask === 'function') {
@@ -358,9 +369,10 @@ export class WBSService {
     console.error('[WBSService] wbsProvider not set; addChildTask no-op');
     return { success: false } as any;
   }
+
   /**
-   * 成果物ツリーをリフレッシュ
-   * @returns {Promise<void>}
+   * 成果物ツリーの再描画を要求する
+   * @returns Promise<void> | undefined
    */
   refreshArtifactTree() {
     if (this.artifactProvider && typeof this.artifactProvider.refresh === 'function') {
@@ -384,19 +396,21 @@ export class WBSService {
     console.error('[WBSService] artifactProvider not set; createArtifact no-op');
     return undefined;
   }
+
   /**
-   * 成果物編集（UI層でArtifactDetailPanel.createOrShowを呼ぶためパススルー）
+   * 成果物編集（UI層でパネルを呼び出す想定）
    * @param item 編集対象
-   * @returns {any}
+   * @returns any
    */
   editArtifact(item: any) {
     // パススルー（既存テストは item を返すことを期待している）
     return item;
   }
+
   /**
    * 成果物を削除
    * @param target 削除対象
-   * @returns {Promise<any>}
+   * @returns any
    */
   deleteArtifact(target: any) {
     if (this.artifactProvider && typeof this.artifactProvider.deleteArtifact === 'function') {

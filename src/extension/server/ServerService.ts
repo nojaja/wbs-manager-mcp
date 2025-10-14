@@ -141,7 +141,9 @@ export class ServerService {
         (this.registeredClient as any).handleResponse(parsed);
       }
     } catch (err) {
-      this.outputChannel.appendLine(`[Server] Non-JSON output: ${trimmed}`);
+      // 非JSONの標準出力はそのまま表示し、ユーザーに見えるように出力チャネルを表示する
+      this.outputChannel.appendLine(trimmed);
+      this.outputChannel.show?.();
     }
   }
 
