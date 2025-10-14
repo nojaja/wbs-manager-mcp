@@ -407,7 +407,6 @@ export class WBSService {
     return item;
   }
 
-   */
   /**
    * 成果物を削除
    * @param target 削除対象
