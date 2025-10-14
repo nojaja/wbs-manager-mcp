@@ -164,11 +164,6 @@ export class ServerService {
   /**
    * MCPClient を登録し、必要ならば書き込み関数を渡す
    * ServerService はプロセスの stdin/stdout を管理し、stdout の parsed JSON をクライアントに渡す
-   * @param client MCPClient 相当のオブジェクト
-   */
-  /**
-   * MCPClient を登録し、必要ならば書き込み関数を渡す
-   * ServerService はプロセスの stdin/stdout を管理し、stdout の parsed JSON をクライアントに渡す
    * @param client.handleResponse サーバからの parsed JSON を受け取るコールバック
    * @param client.onServerExit サーバ終了を通知するコールバック
    * @param client.setWriter サーバへ文字列を書き込む関数を受け取る setter

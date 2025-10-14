@@ -39,11 +39,6 @@ export class WBSService {
   }
 
   /**
-   * 外部から provider を注入する（extension.ts から呼び出す想定）
-   * @param wbsProvider WBS の TreeDataProvider 実装
-   * @param artifactProvider 成果物の TreeDataProvider 実装
-   */
-  /**
    * プロバイダを設定
    * @param wbsProvider WBSツリーのプロバイダ
    * @param artifactProvider 成果物ツリーのプロバイダ

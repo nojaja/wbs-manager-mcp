@@ -88,20 +88,6 @@ export class MCPClient {
     // MCPClient is transport-only and will delegate to an injected WBSService when present.
 
     /**
-     * サーバプロセス起動処理
-     * MCPサーバプロセスを起動し、初期化・接続を行う
-     * なぜ必要か: 拡張機能から独立したサーバプロセスでDB・API処理を行うため
-     * @param serverPath サーバ実行ファイルのパス
-     * @param options オプション（cwd, env）
-     * @param options.cwd
-     * @param options.env
-     */
-    /**
-     * サーバプロセス接続処理
-     * 既存のサーバプロセスに接続し、初期化・通信を行う
-     * @param serverProcess 既に起動済みのサーバプロセス
-     */
-    /**
      * MCPClient を初期化する。
      * 以前は ChildProcess を受け取り stdout を直接監視していたが、ServerService がプロセスを管理するため
      * start は引数なしで呼び出され、ServerService から writer と parsed responses が渡されることを期待する。
@@ -163,10 +149,6 @@ export class MCPClient {
         }
     }
 
-    /**
-     * ServerService から受け取った JSON-RPC オブジェクトを処理する
-     * @param parsed サーバからパース済みの JSON-RPC オブジェクト
-     */
     /**
      * ServerService から受け取った JSON-RPC オブジェクトを処理する
      * @param parsed サーバからパース済みの JSON-RPC オブジェクト

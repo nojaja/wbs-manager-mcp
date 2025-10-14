@@ -30,12 +30,10 @@ let wbsService: WBSService;
 /**
  * VSCode拡張機能のアクティベート処理
  * 拡張機能の初期化、MCPクライアント・サーバ起動、ツリービュー・コマンド登録を行う
+ * 実装理由(なぜ必要か): 拡張機能が有効化された際に動作に必要なインスタンスや UI を初期化するため
  * @param context VSCode拡張機能のコンテキスト
  */
 export async function activate(context: vscode.ExtensionContext) {
-    // 処理名: 拡張機能アクティベート処理
-    // 処理概要: 拡張機能の初期化、クライアント/サービスの生成、ビューやコマンドの登録を行う
-    // 実装理由(なぜ必要か): 拡張機能が有効化された際に動作に必要なインスタンスや UI を初期化するため
     // 出力チャネルの初期化（ログ表示用）
     outputChannel = vscode.window.createOutputChannel('MCP-WBS');
     outputChannel.appendLine('MCP WBS Extension activated');

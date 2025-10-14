@@ -307,8 +307,8 @@ export class ArtifactTreeItem extends vscode.TreeItem {
 
     /**
      * ツールチップ生成
-    * 成果物のID/URI/説明からツールチップ用の文字列を構築する
-    * なぜ必要か: マウスホバーで詳細情報を素早く確認できるようにするため
+     * 成果物のID/URI/説明からツールチップ用の文字列を構築する
+     * なぜ必要か: マウスホバーで詳細情報を素早く確認できるようにするため
      * @param artifact 成果物情報
      * @returns ツールチップ文字列
      */
