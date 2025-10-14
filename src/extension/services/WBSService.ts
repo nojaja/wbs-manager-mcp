@@ -1,31 +1,57 @@
 // src/services/WBSService.ts
 import type { WBSTreeProvider } from '../views/wbsTree';
 import type { ArtifactTreeProvider } from '../views/artifactTree';
-import type { MCPClient, Artifact } from '../mcpClient';
-import type { WBSServicePublic } from './wbsService.interface';
+import type { Artifact } from '../mcp/types';
+import type { WBSServicePublic, CreateTaskParams, UpdateTaskParams } from './wbsService.interface';
+
+type TaskClientContract = {
+  listTasks(parentId?: string | null): Promise<any[]>;
+  getTask(taskId: string): Promise<any | null>;
+  createTask(params: Record<string, unknown>): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }>;
+  updateTask(taskId: string, updates: Record<string, unknown>): Promise<{ success: boolean; conflict?: boolean; error?: string; taskId?: string; message?: string }>;
+  deleteTask(taskId: string): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }>;
+  moveTask(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }>;
+};
+
+type ArtifactClientContract = {
+  listArtifacts(): Promise<Artifact[]>;
+  getArtifact(artifactId: string): Promise<Artifact | null>;
+  createArtifact(params: { title: string; uri?: string | null; description?: string | null }): Promise<{ success: boolean; artifact?: Artifact; error?: string; message?: string }>;
+  updateArtifact(params: { artifactId: string; title?: string; uri?: string | null; description?: string | null; version?: number }): Promise<{ success: boolean; artifact?: Artifact; conflict?: boolean; error?: string; message?: string }>;
+  deleteArtifact(artifactId: string): Promise<{ success: boolean; error?: string; message?: string }>;
+};
+
+interface WBSServiceDependencies {
+  taskClient: TaskClientContract;
+  artifactClient: ArtifactClientContract;
+}
 /**
  * WBS・成果物ビジネスロジックの集約サービス
  */
-export class WBSService {
+export class WBSService implements WBSServicePublic {
   /** WBSツリープロバイダ */
   wbsProvider!: WBSTreeProvider;
   /** 成果物ツリープロバイダ */
   artifactProvider!: ArtifactTreeProvider;
-  /** 内部で保持する MCPClient（ツール呼び出し用） */
-  private readonly mcpClient: MCPClient;
+  /** タスク向けリポジトリクライアント */
+  private readonly taskClient: TaskClientContract;
+  /** 成果物向けリポジトリクライアント */
+  private readonly artifactClient: ArtifactClientContract;
 
   /**
    * コンストラクタ
-   * @param mcpClient MCPClient インスタンス
+   * @param clients タスク・成果物用の MCP クライアント群
    * @param [providers] オプションのプロバイダ注入（循環依存回避のため外部から注入可能）
    * @param [providers.wbsProvider] WBS ツリープロバイダ（任意）
    * @param [providers.artifactProvider] 成果物ツリープロバイダ（任意）
    */
-  constructor(mcpClient: MCPClient, providers: { wbsProvider: WBSTreeProvider; artifactProvider: ArtifactTreeProvider }) {
-    this.mcpClient = mcpClient;
-    // providers は必須にして外部から注入してもらうDI方式に変更
-    this.wbsProvider = providers.wbsProvider;
-    this.artifactProvider = providers.artifactProvider;
+  constructor(clients: WBSServiceDependencies, providers?: { wbsProvider: WBSTreeProvider; artifactProvider: ArtifactTreeProvider }) {
+    this.taskClient = clients.taskClient;
+    this.artifactClient = clients.artifactClient;
+    if (providers) {
+      this.wbsProvider = providers.wbsProvider;
+      this.artifactProvider = providers.artifactProvider;
+    }
   }
 
   /**
@@ -34,7 +60,7 @@ export class WBSService {
    * @param mcpClient MCPClient インスタンス
    * @returns void
    */
-  private tryAutoCreateProviders(mcpClient: MCPClient) {
+  private tryAutoCreateProviders(): void {
     console.warn('[WBSService] Auto-creation of providers is no longer supported. Please provide them via dependency injection.');
   }
 
@@ -58,7 +84,7 @@ export class WBSService {
    */
   async listTasksApi(parentId?: string | null): Promise<any[]> {
     try {
-      return await this.mcpClient.listTasks(parentId);
+      return await this.taskClient.listTasks(parentId ?? null);
     } catch (error) {
       console.error('[WBSService] Failed to list tasks:', error);
       return [];
@@ -72,7 +98,7 @@ export class WBSService {
    */
   async getTaskApi(taskId: string): Promise<any | null> {
     try {
-      return await this.mcpClient.getTask(taskId);
+      return await this.taskClient.getTask(taskId);
     } catch (error) {
       console.error('[WBSService] Failed to get task:', error);
       return null;
@@ -163,7 +189,7 @@ export class WBSService {
       }
       delete (normalizedUpdates as any).taskId;
 
-      const result = await this.mcpClient.updateTask(taskId, normalizedUpdates);
+      const result = await this.taskClient.updateTask(taskId, normalizedUpdates);
       return result;
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -193,7 +219,7 @@ export class WBSService {
       if (prerequisites !== undefined) toolArguments.prerequisites = prerequisites;
       if (completionConditions !== undefined) toolArguments.completionConditions = completionConditions;
 
-      return await this.mcpClient.createTask(toolArguments);
+      return await this.taskClient.createTask(toolArguments);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { success: false, error: message };
@@ -207,7 +233,7 @@ export class WBSService {
    */
   async deleteTaskApi(taskId: string): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
     try {
-      return await this.mcpClient.deleteTask(taskId);
+      return await this.taskClient.deleteTask(taskId);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -221,7 +247,7 @@ export class WBSService {
    */
   async moveTaskApi(taskId: string, newParentId: string | null): Promise<{ success: boolean; error?: string; taskId?: string; message?: string }> {
     try {
-      return await this.mcpClient.moveTask(taskId, newParentId);
+      return await this.taskClient.moveTask(taskId, newParentId);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
@@ -341,7 +367,7 @@ export class WBSService {
    */
   async listArtifactsApi(): Promise<Artifact[]> {
     try {
-      return await this.mcpClient.listArtifacts();
+      return await this.artifactClient.listArtifacts();
     } catch (error) {
       console.error('[WBSService] Failed to list artifacts:', error);
       return [];
@@ -355,7 +381,7 @@ export class WBSService {
    */
   async getArtifactApi(artifactId: string): Promise<Artifact | null> {
     try {
-      return await this.mcpClient.getArtifact(artifactId);
+      return await this.artifactClient.getArtifact(artifactId);
     } catch (error) {
       console.error('[WBSService] Failed to get artifact:', error);
       return null;
@@ -372,7 +398,7 @@ export class WBSService {
    */
   async createArtifactApi(params: { title: string; uri?: string | null; description?: string | null }) {
     try {
-      return await this.mcpClient.createArtifact({
+      return await this.artifactClient.createArtifact({
         title: params.title,
         uri: params.uri ?? null,
         description: params.description ?? null
@@ -395,7 +421,7 @@ export class WBSService {
    */
   async updateArtifactApi(params: { artifactId: string; title: string; uri?: string | null; description?: string | null; version?: number }) {
     try {
-      return await this.mcpClient.updateArtifact({
+      return await this.artifactClient.updateArtifact({
         artifactId: params.artifactId,
         title: params.title,
         uri: params.uri ?? null,
@@ -415,7 +441,7 @@ export class WBSService {
    */
   async deleteArtifactApi(artifactId: string) {
     try {
-      return await this.mcpClient.deleteArtifact(artifactId);
+      return await this.artifactClient.deleteArtifact(artifactId);
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }

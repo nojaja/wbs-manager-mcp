@@ -103,9 +103,19 @@ describe('ServerService', () => {
   });
 
   describe('setupServerProcessHandlers', () => {
+    let mockClient: {
+      handleResponseFromServer: jest.Mock;
+      handleResponse: jest.Mock;
+    };
+
     beforeEach(() => {
       mockedChildProcess.spawn.mockReturnValue(mockChildProcess as any);
       serverService.spawnServerProcess('/path/to/server.js', '/workspace');
+      mockClient = {
+        handleResponseFromServer: jest.fn(),
+        handleResponse: jest.fn()
+      };
+      serverService.registerClient(mockClient);
     });
 
     it('should setup stdout handler', () => {
@@ -119,6 +129,8 @@ describe('ServerService', () => {
   stdoutCallback(Buffer.from('test output\n'));
 
   expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('test output');
+      expect(mockClient.handleResponseFromServer).toHaveBeenCalledWith('test output');
+      expect(mockClient.handleResponse).not.toHaveBeenCalled();
       expect(mockOutputChannel.show).toHaveBeenCalled();
     });
 

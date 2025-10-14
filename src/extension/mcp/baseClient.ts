@@ -27,7 +27,7 @@ type PendingRequest = {
  * 送信キューとレスポンスのマッチング、通知送信、エラー処理を一元化する。
  */
 export class MCPBaseClient {
-    protected requestId = 0;
+    private static globalRequestId = 0;
     protected readonly pendingRequests = new Map<number, PendingRequest>();
     protected writer: ((payload: string) => void) | null = null;
 
@@ -209,7 +209,7 @@ export class MCPBaseClient {
             return Promise.reject(new Error('MCP server not started'));
         }
 
-        const id = ++this.requestId;
+        const id = MCPBaseClient.nextRequestId();
         const request: JsonRpcRequest = {
             jsonrpc: '2.0',
             id,
@@ -280,5 +280,14 @@ export class MCPBaseClient {
         } else {
             pending.resolve(response);
         }
+    }
+
+    /**
+     * クライアント間で一意となる次のリクエスト ID を生成する。
+     * @returns 新しいリクエスト ID
+     */
+    private static nextRequestId(): number {
+        MCPBaseClient.globalRequestId += 1;
+        return MCPBaseClient.globalRequestId;
     }
 }

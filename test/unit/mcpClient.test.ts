@@ -1,23 +1,20 @@
-import { MCPClient } from '../../src/extension/mcpClient';
 import { MCPBaseClient } from '../../src/extension/mcp/baseClient';
-import { MCPInitializeClient } from '../../src/extension/mcp/initializeClient';
 import { MCPTaskClient } from '../../src/extension/mcp/taskClient';
 import { MCPArtifactClient } from '../../src/extension/mcp/artifactClient';
+import { MCPInitializeClient } from '../../src/extension/mcp/initializeClient';
 
 const fakeOutput = { appendLine: jest.fn() } as any;
 
-describe('MCPClient', () => {
-  let client: MCPClient;
+describe('MCP repository clients', () => {
+  let taskClient: MCPTaskClient;
+  let artifactClient: MCPArtifactClient;
+  let initializeClient: MCPInitializeClient;
 
   beforeEach(() => {
     jest.useFakeTimers();
-    client = new MCPClient(fakeOutput);
-  });
-  test('MCPClient composes specialized layers', () => {
-    expect(client).toBeInstanceOf(MCPArtifactClient);
-    expect(client).toBeInstanceOf(MCPTaskClient);
-    expect(client).toBeInstanceOf(MCPInitializeClient);
-    expect(client).toBeInstanceOf(MCPBaseClient);
+    taskClient = new MCPTaskClient(fakeOutput);
+    artifactClient = new MCPArtifactClient(fakeOutput);
+    initializeClient = new MCPInitializeClient(fakeOutput);
   });
 
   afterEach(() => {
@@ -25,126 +22,123 @@ describe('MCPClient', () => {
     jest.restoreAllMocks();
   });
 
-  test('sendRequest rejects when server not started', async () => {
-    // @ts-ignore - access private via cast
-    const sendRequest = (client as any).sendRequest.bind(client);
-    await expect(sendRequest('foo')).rejects.toThrow('MCP server not started');
+  test('specialised clients extend the base transport', () => {
+    expect(taskClient).toBeInstanceOf(MCPBaseClient);
+    expect(artifactClient).toBeInstanceOf(MCPBaseClient);
+    expect(initializeClient).toBeInstanceOf(MCPBaseClient);
   });
 
-  test('handleResponse resolves pending request', async () => {
-    // inject writer instead of mocking private serverProcess
-    const fakeStdout: any = { setEncoding: () => {}, on: () => {} };
-    const fakeStdin = { write: jest.fn((s, cb) => cb && cb()) };
-    (client as any).setWriter((s: string) => {
-      // emulate async write callback success
-      fakeStdin.write(s, () => {});
+  test('sendRequest rejects when writer not registered', async () => {
+    await expect((taskClient as any).sendRequest('foo')).rejects.toThrow('MCP server not started');
+  });
+
+  test('responses resolve only once matching pending id', async () => {
+    const payloads: string[] = [];
+    taskClient.setWriter((chunk: string) => {
+      payloads.push(chunk);
     });
 
-    const p = (client as any).sendRequest('tools/call', { name: 'x' });
+    const responsePromise = (taskClient as any).sendRequest('tools/call', { name: 'x' });
+    expect(payloads).toHaveLength(1);
 
-    // grab pending id
-    // @ts-ignore
-    const pendingEntries = (client as any).pendingRequests.entries();
-    let id: number | undefined;
-    for (const [k] of pendingEntries) { id = k; break; }
+    const sent = JSON.parse(payloads[0]) as { id: number };
+    (taskClient as any).handleResponse({ jsonrpc: '2.0', id: sent.id, result: { ok: true } });
 
-    // send response
-    (client as any).handleResponse({ jsonrpc: '2.0', id, result: { content: [{ text: '"ok"' }] } });
-
-    await expect(p).resolves.toBeDefined();
+    await expect(responsePromise).resolves.toEqual({ jsonrpc: '2.0', id: sent.id, result: { ok: true } });
   });
 
+  test('request identifiers are unique across client instances', async () => {
+    const captured: Array<{ source: string; id: number }> = [];
+    const writer = (source: string) => (payload: string) => {
+      captured.push({ source, id: JSON.parse(payload).id });
+    };
+    taskClient.setWriter(writer('task'));
+    artifactClient.setWriter(writer('artifact'));
 
-  test('getTask returns parsed object when content valid', async () => {
-    const mockResult = { content: [{ text: JSON.stringify({ id: 't1', title: 'Task' }) }] };
-    jest.spyOn(client as any, 'callTool').mockResolvedValue(mockResult);
-    const task = await client.getTask('t1');
+    const taskPromise = (taskClient as any).sendRequest('tools/call', {});
+    const artifactPromise = (artifactClient as any).sendRequest('tools/call', {});
+
+    expect(new Set(captured.map((c) => c.id)).size).toBe(2);
+
+    for (const entry of captured) {
+      if (entry.source === 'task') {
+        (taskClient as any).handleResponse({ jsonrpc: '2.0', id: entry.id, result: {} });
+      } else {
+        (artifactClient as any).handleResponse({ jsonrpc: '2.0', id: entry.id, result: {} });
+      }
+    }
+
+    await expect(taskPromise).resolves.toEqual(expect.objectContaining({ id: captured.find((c) => c.source === 'task')?.id }));
+    await expect(artifactPromise).resolves.toEqual(expect.objectContaining({ id: captured.find((c) => c.source === 'artifact')?.id }));
+  });
+
+  test('task client parsing success path for getTask', async () => {
+    jest.spyOn(taskClient as any, 'callTool').mockResolvedValue({ content: [{ text: JSON.stringify({ id: 't1', title: 'Task' }) }] });
+    const task = await taskClient.getTask('t1');
     expect(task).toEqual({ id: 't1', title: 'Task' });
   });
 
-  test('getTask returns null when content has ❌', async () => {
-    const mockResult = { content: [{ text: 'Error ❌' }] };
-    jest.spyOn(client as any, 'callTool').mockResolvedValue(mockResult);
-    const task = await client.getTask('t1');
+  test('task client handles error plain text', async () => {
+    jest.spyOn(taskClient as any, 'callTool').mockResolvedValue({ content: [{ text: 'Error ❌' }] });
+    const task = await taskClient.getTask('t1');
     expect(task).toBeNull();
   });
 
-  test('updateTask handles success, conflict and error', async () => {
-    const success = { content: [{ text: '\u2705 OK' }] };
-    const conflict = { content: [{ text: 'modified by another user' }] };
-    const fail = { content: [{ text: 'some error' }] };
+  test('task client updateTask returns structured responses', async () => {
+    const spy = jest.spyOn(taskClient as any, 'callTool');
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ ok' }] });
+    const ok = await taskClient.updateTask('t1', {});
+    expect(ok).toEqual({ success: true, taskId: 't1', message: '✅ ok' });
 
-    const spy = jest.spyOn(client as any, 'callTool');
-    spy.mockResolvedValueOnce(success);
-    const r1 = await client.updateTask('t1', {});
-    expect(r1).toEqual({ success: true, taskId: 't1', message: '✅ OK' });
-
-    spy.mockResolvedValueOnce(conflict);
-    const r2 = await client.updateTask('t1', {});
-    expect(r2).toEqual({ success: false, conflict: true, error: 'modified by another user', message: 'modified by another user' });
-
-    spy.mockResolvedValueOnce(fail);
-    const r3 = await client.updateTask('t1', {});
-    expect(r3).toEqual({ success: false, error: 'some error', message: 'some error' });
-
-    spy.mockRestore();
-  });
-
-  test('createTask parses success response', async () => {
-    const message = '✅ Task created successfully!\nID: new-task-id';
-    const spy = jest.spyOn(client as any, 'callTool').mockResolvedValue({ content: [{ text: message }] });
-    const result = await client.createTask({});
-    expect(result).toEqual({ success: true, taskId: 'new-task-id', message });
-    // MCPClient is transport-only when WBSService is not injected; expect raw params
-    expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', {});
-    spy.mockRestore();
-  });
-
-  test('createTask handles error response', async () => {
-    const message = '❌ Failed to create task';
-    const spy = jest.spyOn(client as any, 'callTool').mockResolvedValue({ content: [{ text: message }] });
-    const result = await client.createTask({ parentId: 't1', title: ' ' });
-    expect(result).toEqual({ success: false, error: message, message });
-    // MCPClient forwards the provided params as-is when no WBSService is present
-    expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', { parentId: 't1', title: ' ' });
-    spy.mockRestore();
-  });
-
-  test('deleteTask handles success and error paths', async () => {
-    const spy = jest.spyOn(client as any, 'callTool');
-    spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
-    const ok = await client.deleteTask('t5');
-    expect(ok).toEqual({ success: true, taskId: 't5', message: '✅ removed' });
-    expect(spy).toHaveBeenCalledWith('wbs.planMode.deleteTask', { taskId: 't5' });
-
-    spy.mockResolvedValueOnce({ content: [{ text: '❌ missing' }] });
-    const fail = await client.deleteTask('t5');
-    expect(fail).toEqual({ success: false, error: '❌ missing', message: '❌ missing' });
-
-    spy.mockRejectedValueOnce(new Error('boom'));
-    const err = await client.deleteTask('t5');
-    expect(err).toEqual({ success: false, error: 'boom' });
-
-    spy.mockRestore();
-  });
-
-
-  test('moveTask handles success and error paths', async () => {
-    const spy = jest.spyOn(client as any, 'callTool');
-    spy.mockResolvedValueOnce({ content: [{ text: '✅ moved' }] });
-    const ok = await client.moveTask('t1', 'p2');
-    expect(ok).toEqual({ success: true, taskId: 't1', message: '✅ moved' });
-    expect(spy).toHaveBeenCalledWith('wbs.planMode.moveTask', { taskId: 't1', newParentId: 'p2' });
+    spy.mockResolvedValueOnce({ content: [{ text: 'modified by another user' }] });
+    const conflict = await taskClient.updateTask('t1', {});
+    expect(conflict).toEqual({ success: false, conflict: true, error: 'modified by another user', message: 'modified by another user' });
 
     spy.mockResolvedValueOnce({ content: [{ text: '❌ fail' }] });
-    const fail = await client.moveTask('t1', 'p2');
+    const fail = await taskClient.updateTask('t1', {});
     expect(fail).toEqual({ success: false, error: '❌ fail', message: '❌ fail' });
-
-    spy.mockRejectedValueOnce(new Error('boom'));
-    const err = await client.moveTask('t1', null);
-    expect(err).toEqual({ success: false, error: 'boom' });
 
     spy.mockRestore();
   });
 
+  test('task client create/delete/move propagate parameters', async () => {
+    const spy = jest.spyOn(taskClient as any, 'callTool');
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ Task created\nID: new-id' }] });
+    const created = await taskClient.createTask({ parentId: 'root', title: 'Task' });
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', { parentId: 'root', title: 'Task' });
+    expect(created).toEqual({ success: true, taskId: 'new-id', message: '✅ Task created\nID: new-id' });
+
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
+    const deleted = await taskClient.deleteTask('t1');
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.deleteTask', { taskId: 't1' });
+    expect(deleted.success).toBe(true);
+
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ moved' }] });
+    const moved = await taskClient.moveTask('t1', null);
+    expect(spy).toHaveBeenCalledWith('wbs.planMode.moveTask', { taskId: 't1', newParentId: null });
+    expect(moved.success).toBe(true);
+
+    spy.mockRestore();
+  });
+
+  test('artifact client list/create/update/delete behaviour mirrors task client', async () => {
+    const spy = jest.spyOn(artifactClient as any, 'callTool');
+    spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify([{ id: 'a1' }]) }] });
+    const artifacts = await artifactClient.listArtifacts();
+    expect(artifacts).toEqual([{ id: 'a1' }]);
+
+    spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 'a1' }) }] });
+    const created = await artifactClient.createArtifact({ title: 'A' });
+    expect(created.success).toBe(true);
+
+    spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 'a1' }) }] });
+    const updated = await artifactClient.updateArtifact({ artifactId: 'a1' });
+    expect(updated.success).toBe(true);
+
+    spy.mockResolvedValueOnce({ content: [{ text: '✅ deleted' }] });
+    const deleted = await artifactClient.deleteArtifact('a1');
+    expect(deleted.success).toBe(true);
+
+    spy.mockRestore();
+  });
 });

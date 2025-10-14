@@ -1,26 +1,25 @@
 import { jest } from '@jest/globals';
 import * as vscode from 'vscode';
 import { ArtifactTreeItem, ArtifactTreeProvider } from '../../src/extension/views/artifactTree';
-import { MCPClient, Artifact } from '../../src/extension/mcpClient';
+import type { Artifact } from '../../src/extension/mcp/types';
+import type { WBSServicePublic } from '../../src/extension/services/wbsService.interface';
 
 jest.mock('vscode');
 
 describe('ProjectArtifactTreeProvider', () => {
-  const baseProject = { id: 'project-1' };
-  type ArtifactClient = Pick<MCPClient,
-     'listArtifacts' | 'createArtifact' | 'updateArtifact' | 'deleteArtifact'>;
-  let mcpClient: jest.Mocked<ArtifactClient>;
+  type ArtifactService = Pick<WBSServicePublic, 'listArtifactsApi' | 'createArtifactApi' | 'updateArtifactApi' | 'deleteArtifactApi'>;
+  let wbsService: jest.Mocked<ArtifactService>;
   let provider: ArtifactTreeProvider;
 
   beforeEach(() => {
-    const artifactClientMock: jest.Mocked<ArtifactClient> = {
-      listArtifacts: jest.fn(async () => []),
-      createArtifact: jest.fn(async () => ({ success: true } as Awaited<ReturnType<MCPClient['createArtifact']>>)),
-      updateArtifact: jest.fn(async () => ({ success: true } as Awaited<ReturnType<MCPClient['updateArtifact']>>)),
-      deleteArtifact: jest.fn(async () => ({ success: true } as Awaited<ReturnType<MCPClient['deleteArtifact']>>))
+    const artifactServiceMock: jest.Mocked<ArtifactService> = {
+      listArtifactsApi: jest.fn(async () => []),
+      createArtifactApi: jest.fn(async () => ({ success: true })),
+      updateArtifactApi: jest.fn(async () => ({ success: true })),
+      deleteArtifactApi: jest.fn(async () => ({ success: true }))
     };
-    mcpClient = artifactClientMock;
-    provider = new ArtifactTreeProvider(mcpClient as unknown as MCPClient);
+    wbsService = artifactServiceMock;
+    provider = new ArtifactTreeProvider(wbsService as unknown as WBSServicePublic);
     jest.clearAllMocks();
   });
 
@@ -38,13 +37,13 @@ describe('ProjectArtifactTreeProvider', () => {
         version: 3
       }
     ];
-    mcpClient.listArtifacts.mockResolvedValueOnce(artifacts);
+    wbsService.listArtifactsApi.mockResolvedValueOnce(artifacts);
 
     const children = await provider.getChildren();
 
-  expect(children).toHaveLength(1);
-  expect(children?.[0].artifact.title).toBe('仕様書');
-  expect(children?.[0]).toBeInstanceOf(ArtifactTreeItem);
+    expect(children).toHaveLength(1);
+    expect(children?.[0].artifact.title).toBe('仕様書');
+    expect(children?.[0]).toBeInstanceOf(ArtifactTreeItem);
   });
 
   test('createArtifact collects input and calls client', async () => {
@@ -57,7 +56,7 @@ describe('ProjectArtifactTreeProvider', () => {
 
     await provider.createArtifact();
 
-    expect(mcpClient.createArtifact).toHaveBeenCalledWith({
+    expect(wbsService.createArtifactApi).toHaveBeenCalledWith({
       title: '新アーティファクト',
       uri: 'src/output.pdf',
       description: '成果物詳細'
@@ -82,11 +81,11 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('最新バージョン');
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage');
 
-    mcpClient.updateArtifact.mockResolvedValueOnce({ success: false, conflict: true });
+    wbsService.updateArtifactApi.mockResolvedValueOnce({ success: false, conflict: true });
 
     await provider.editArtifact(item);
 
-    expect(mcpClient.updateArtifact).toHaveBeenCalledWith({
+    expect(wbsService.updateArtifactApi).toHaveBeenCalledWith({
       artifactId: artifact.id,
       title: '既存成果物 v2',
       uri: 'docs/new.md',
@@ -109,7 +108,7 @@ describe('ProjectArtifactTreeProvider', () => {
 
     await provider.deleteArtifact(item);
 
-    expect(mcpClient.deleteArtifact).toHaveBeenCalledWith(artifact.id);
+    expect(wbsService.deleteArtifactApi).toHaveBeenCalledWith(artifact.id);
   });
 
   test('getChildren returns empty array for non-root element', async () => {
@@ -131,7 +130,7 @@ describe('ProjectArtifactTreeProvider', () => {
 
     await provider.createArtifact();
 
-    expect(mcpClient.createArtifact).not.toHaveBeenCalled();
+    expect(wbsService.createArtifactApi).not.toHaveBeenCalled();
     showInputMock.mockRestore();
   });
 
@@ -157,7 +156,7 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('test.md')
       .mockResolvedValueOnce('Test description');
     
-    mcpClient.createArtifact.mockResolvedValueOnce({ success: false, error: 'Creation failed' });
+    wbsService.createArtifactApi.mockResolvedValueOnce({ success: false, error: 'Creation failed' });
 
     await provider.createArtifact();
 
@@ -175,7 +174,7 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('test.md')
       .mockResolvedValueOnce('Test description');
     
-    mcpClient.createArtifact.mockResolvedValueOnce({ success: false });
+    wbsService.createArtifactApi.mockResolvedValueOnce({ success: false });
 
     await provider.createArtifact();
 
@@ -193,12 +192,12 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('  Test Title  ')
       .mockResolvedValueOnce('  test.md  ')
       .mockResolvedValueOnce('  Test description  ');
-    
-    mcpClient.createArtifact.mockResolvedValueOnce({ success: true, artifact: { id: 'a1', title: 'Test Title', version: 1 } });
+
+    wbsService.createArtifactApi.mockResolvedValueOnce({ success: true, artifact: { id: 'a1', title: 'Test Title', version: 1 } });
 
     await provider.createArtifact();
 
-    expect(mcpClient.createArtifact).toHaveBeenCalledWith({
+    expect(wbsService.createArtifactApi).toHaveBeenCalledWith({
       title: 'Test Title',
       uri: 'test.md',
       description: 'Test description'
@@ -218,12 +217,12 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('Test Title')
       .mockResolvedValueOnce('')
       .mockResolvedValueOnce('');
-    
-    mcpClient.createArtifact.mockResolvedValueOnce({ success: true });
+
+    wbsService.createArtifactApi.mockResolvedValueOnce({ success: true });
 
     await provider.createArtifact();
 
-    expect(mcpClient.createArtifact).toHaveBeenCalledWith({
+    expect(wbsService.createArtifactApi).toHaveBeenCalledWith({
       title: 'Test Title',
       uri: null,
       description: null
@@ -238,7 +237,7 @@ describe('ProjectArtifactTreeProvider', () => {
     await provider.editArtifact();
 
     expect(warnSpy).toHaveBeenCalledWith('編集する成果物を選択してください。');
-    expect(mcpClient.updateArtifact).not.toHaveBeenCalled();
+    expect(wbsService.updateArtifactApi).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
@@ -251,7 +250,7 @@ describe('ProjectArtifactTreeProvider', () => {
 
     await provider.editArtifact(item);
 
-    expect(mcpClient.updateArtifact).not.toHaveBeenCalled();
+    expect(wbsService.updateArtifactApi).not.toHaveBeenCalled();
     showInputMock.mockRestore();
   });
 
@@ -283,7 +282,7 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('updated.md')
       .mockResolvedValueOnce('Updated description');
     
-    mcpClient.updateArtifact.mockResolvedValueOnce({ success: false, error: 'Update failed' });
+    wbsService.updateArtifactApi.mockResolvedValueOnce({ success: false, error: 'Update failed' });
 
     await provider.editArtifact(item);
 
@@ -307,11 +306,11 @@ describe('ProjectArtifactTreeProvider', () => {
       .mockResolvedValueOnce('  updated.md  ')
       .mockResolvedValueOnce('  Updated description  ');
     
-    mcpClient.updateArtifact.mockResolvedValueOnce({ success: true, artifact: { id: 'a1', title: 'Updated Title', version: 2 } });
+    wbsService.updateArtifactApi.mockResolvedValueOnce({ success: true, artifact: { id: 'a1', title: 'Updated Title', version: 2 } });
 
     await provider.editArtifact(item);
 
-    expect(mcpClient.updateArtifact).toHaveBeenCalledWith({
+    expect(wbsService.updateArtifactApi).toHaveBeenCalledWith({
       artifactId: 'a1',
       title: 'Updated Title',
       uri: 'updated.md',
@@ -332,7 +331,7 @@ describe('ProjectArtifactTreeProvider', () => {
     await provider.deleteArtifact();
 
     expect(warnSpy).toHaveBeenCalledWith('削除する成果物を選択してください。');
-    expect(mcpClient.deleteArtifact).not.toHaveBeenCalled();
+    expect(wbsService.deleteArtifactApi).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
@@ -343,7 +342,7 @@ describe('ProjectArtifactTreeProvider', () => {
 
     await provider.deleteArtifact(item);
 
-    expect(mcpClient.deleteArtifact).not.toHaveBeenCalled();
+    expect(wbsService.deleteArtifactApi).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
@@ -353,7 +352,7 @@ describe('ProjectArtifactTreeProvider', () => {
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValueOnce('削除' as any);
     const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
     
-    mcpClient.deleteArtifact.mockResolvedValueOnce({ success: false, error: 'Delete failed' });
+    wbsService.deleteArtifactApi.mockResolvedValueOnce({ success: false, error: 'Delete failed' });
 
     await provider.deleteArtifact(item);
 
@@ -370,7 +369,7 @@ describe('ProjectArtifactTreeProvider', () => {
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
     const refreshSpy = jest.spyOn(provider, 'refresh');
     
-    mcpClient.deleteArtifact.mockResolvedValueOnce({ success: true });
+    wbsService.deleteArtifactApi.mockResolvedValueOnce({ success: true });
 
     await provider.deleteArtifact(item);
 

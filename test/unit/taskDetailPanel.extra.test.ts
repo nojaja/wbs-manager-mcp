@@ -1,6 +1,6 @@
 import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
 
-// We will mock mcpClient.updateTask and mcpClient.getTask to simulate saveTask flows
+// We will mock WBSService updateTaskApi and getTaskApi to simulate saveTask flows
 
 describe('TaskDetailPanel save flows', () => {
   const fakePanel: any = {
@@ -12,39 +12,39 @@ describe('TaskDetailPanel save flows', () => {
   };
 
   test('saveTask success path triggers load and info message', async () => {
-    const fakeMcp: any = {
-      getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-      updateTask: jest.fn().mockResolvedValue({ success: true })
+    const fakeService: any = {
+      getTaskApi: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
+      updateTaskApi: jest.fn().mockResolvedValue({ success: true })
     };
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
     // call private saveTask
     await (panel as any).saveTask({ title: 'New' });
 
-    expect(fakeMcp.updateTask).toHaveBeenCalled();
+    expect(fakeService.updateTaskApi).toHaveBeenCalled();
   });
 
   test('saveTask conflict path triggers reload option', async () => {
-    const fakeMcp: any = {
-      getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-      updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true })
+    const fakeService: any = {
+      getTaskApi: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
+      updateTaskApi: jest.fn().mockResolvedValue({ success: false, conflict: true })
     };
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
     await (panel as any).saveTask({ title: 'New' });
 
-    expect(fakeMcp.updateTask).toHaveBeenCalled();
+    expect(fakeService.updateTaskApi).toHaveBeenCalled();
   });
 
   test('saveTask failure shows error', async () => {
-    const fakeMcp: any = {
-      getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-      updateTask: jest.fn().mockResolvedValue({ success: false, error: 'fail' })
+    const fakeService: any = {
+      getTaskApi: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
+      updateTaskApi: jest.fn().mockResolvedValue({ success: false, error: 'fail' })
     };
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
     await (panel as any).saveTask({ title: 'New' });
 
-    expect(fakeMcp.updateTask).toHaveBeenCalled();
+    expect(fakeService.updateTaskApi).toHaveBeenCalled();
   });
 });

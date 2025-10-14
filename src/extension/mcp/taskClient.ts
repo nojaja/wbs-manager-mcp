@@ -1,10 +1,10 @@
-import { MCPInitializeClient } from './initializeClient';
+import { MCPBaseClient } from './baseClient';
 import type { ArtifactReferenceInput, CompletionConditionInput } from './types';
 
 /**
  * タスク関連のJSON-RPC呼び出しを集約するクラス。
  */
-export class MCPTaskClient extends MCPInitializeClient {
+export class MCPTaskClient extends MCPBaseClient {
     /**
      * 指定されたparentId直下のタスク一覧を取得する。
      *

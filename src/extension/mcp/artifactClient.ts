@@ -1,10 +1,10 @@
-import { MCPTaskClient } from './taskClient';
+import { MCPBaseClient } from './baseClient';
 import type { Artifact } from './types';
 
 /**
  * 成果物関連のJSON-RPC呼び出しを集約するクラス。
  */
-export class MCPArtifactClient extends MCPTaskClient {
+export class MCPArtifactClient extends MCPBaseClient {
     /**
      * 成果物一覧を取得する。
      *

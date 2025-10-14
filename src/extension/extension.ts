@@ -14,7 +14,9 @@ import { TaskDetailPanel } from './panels/taskDetailPanel';
 // 成果物詳細パネル（WebView表示用）
 import { ArtifactDetailPanel } from './panels/artifactDetailPanel';
 // MCPクライアント（API通信・管理用）
-import { MCPClient } from './mcpClient';
+import { MCPInitializeClient } from './mcp/initializeClient';
+import { MCPTaskClient } from './mcp/taskClient';
+import { MCPArtifactClient } from './mcp/artifactClient';
 
 
 
@@ -23,7 +25,9 @@ import { MCPClient } from './mcpClient';
 let outputChannel: vscode.OutputChannel;
 
 // MCPクライアントのインスタンス
-let mcpClient: MCPClient;
+let initializeClient: MCPInitializeClient;
+let taskClient: MCPTaskClient;
+let artifactClient: MCPArtifactClient;
 let serverService: ServerService;
 let wbsService: WBSService;
 
@@ -39,15 +43,20 @@ export async function activate(context: vscode.ExtensionContext) {
     outputChannel.appendLine('MCP WBS Extension activated');
 
     // MCPクライアントの初期化（API通信のため）
-    mcpClient = new MCPClient(outputChannel);
+    initializeClient = new MCPInitializeClient(outputChannel);
+    taskClient = new MCPTaskClient(outputChannel);
+    artifactClient = new MCPArtifactClient(outputChannel);
     serverService = new ServerService(outputChannel);
-    // Create providers first, then inject into WBSService to avoid circular imports
+    // Create service first so providers can depend on it without circular wiring
+    wbsService = new WBSService({
+        taskClient,
+        artifactClient
+    });
     const { WBSTreeProvider } = await import('./views/wbsTree');
     const { ArtifactTreeProvider } = await import('./views/artifactTree');
-    const wbsProvider = new WBSTreeProvider(mcpClient as any);
-    const artifactProvider = new ArtifactTreeProvider(mcpClient as any);
-    wbsService = new WBSService(mcpClient, { wbsProvider: wbsProvider as any, artifactProvider: artifactProvider as any });
-    // Ensure providers are set (backwards compatibility)
+    const wbsProvider = new WBSTreeProvider(wbsService as any);
+    const artifactProvider = new ArtifactTreeProvider(wbsService as any);
+    // Ensure providers are set for refresh hooks
     wbsService.setProviders(wbsProvider as any, artifactProvider as any);
 
     // サーバ・クライアント自動起動
@@ -79,12 +88,9 @@ export async function activate(context: vscode.ExtensionContext) {
     // コマンド登録: ツリーリフレッシュ
     const refreshTreeCommand = vscode.commands.registerCommand('wbsTree.refresh', async () => {
         // 処理名: ツリーリフレッシュコマンド
-        // 処理概要: MCPClient の接続を確認し、WBS ツリーの再読み込みを行う
-        // 実装理由: クライアント未接続時でも UI を復旧させるため
-        if (!mcpClient) {
-            // 処理概要: MCPClient が未初期化なら新規作成してサーバ起動処理を行う
-            // 実装理由: サーバ停止→起動後に UI が正常に通信できるようにするため
-            mcpClient = new MCPClient(outputChannel);
+        // 処理概要: サーバプロセスを確認し、必要なら再起動してからツリーを再読み込みする
+        // 実装理由: サーバ停止後でも UI の復旧を自動化するため
+        if (!serverService.getServerProcess()) {
             await startLocalServer(context);
         }
         wbsService.refreshWbsTree();
@@ -184,9 +190,9 @@ export async function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
     // MCPクライアントの停止
     // 理由: プロセス・リソースリーク防止のため
-    if (mcpClient) {
-        mcpClient.stop();
-    }
+    initializeClient?.stop();
+    taskClient?.stop();
+    artifactClient?.stop();
     // サーバプロセスの停止
     // 理由: サーバプロセスが残存しないように明示的にkill
     if (serverService) {
@@ -225,8 +231,12 @@ async function startLocalServer(context: vscode.ExtensionContext) {
 
     try {
         // サーバプロセス起動
-        // ServerService に起動と MCPClient の接続を委譲
-        await serverService.startAndAttachClient(mcpClient, serverPath, workspaceRoot);
+        // ServerService に起動と MCP クライアント群の接続を委譲
+        await serverService.startAndAttachClient(
+            [initializeClient, taskClient, artifactClient],
+            serverPath,
+            workspaceRoot
+        );
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         outputChannel.appendLine(`Failed to start server: ${errorMessage}`);

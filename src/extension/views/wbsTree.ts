@@ -5,7 +5,6 @@ import * as vscode from 'vscode';
 // Use the WBSServicePublic interface to avoid depending on service implementation
 // and keep a clear boundary between view and service.
 import type { WBSServicePublic } from '../services/wbsService.interface';
-import type { MCPClient } from '../mcpClient';
 
 
 /**
@@ -42,27 +41,20 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     // ビジネスロジックサービス（WBS の操作はこのサービス経由で行う）
-    private readonly wbsService?: WBSServicePublic;
-    // 従来互換: 直接 MCPClient を受け取る場合の参照
-    private readonly mcpClient?: MCPClient;
+    private readonly wbsService: WBSServicePublic;
 
     /**
      * コンストラクタ
      * MCPクライアントを受け取り初期化する
-     * @param mcpClient MCPクライアント
+    * @param service WBSサービス
      * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
      */
     /**
      * コンストラクタ
-     * @param serviceOrClient WBSService か MCPClient のいずれか（互換性のため）
-     */
-    constructor(serviceOrClient: WBSServicePublic | MCPClient) {
-        // 互換性: serviceOrClient が listTasks を持つなら MCPClient と見なす
-        if ((serviceOrClient as any)?.listTasks) {
-            this.mcpClient = serviceOrClient as MCPClient;
-        } else {
-            this.wbsService = serviceOrClient as WBSServicePublic;
-        }
+    * @param service WBSService（リポジトリ呼び出しを提供）
+    */
+    constructor(service: WBSServicePublic) {
+        this.wbsService = service;
     }
 
     /**
@@ -104,9 +96,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         } else if (element.contextValue === 'task' && element.task) {
             // 処理概要: 指定タスクの子タスクをサービスから取得して TreeItem に変換する
             // 実装理由: 子タスクは必要に応じて遅延ロードすることで、初期描画コストを削減するため
-            const children = this.wbsService
-                ? await this.wbsService.listTasksApi(element.task.id)
-                : await (this.mcpClient as any).listTasks(element.task.id);
+            const children = await this.wbsService.listTasksApi(element.task.id);
             return children.map((child: Task) => new TreeItem(
                 this.getTaskLabel(child),
                 child.id,
@@ -131,9 +121,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: WBS サービスまたは MCP クライアントを使ってルートタスクを取得する
             // 実装理由: バックエンドから最新のタスク一覧を取得して UI に反映するため
-            const tasks = this.wbsService
-                ? await this.wbsService.listTasksApi(null)
-                : await (this.mcpClient as any).listTasks(null);
+            const tasks = await this.wbsService.listTasksApi(null);
             return tasks.map((task: Task) => new TreeItem(
                 this.getTaskLabel(task),
                 task.id,
@@ -173,9 +161,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: サービス経由でタスク作成 API を呼び出す
             // 実装理由: バックエンドにタスク情報を永続化するため
-            const response = this.wbsService
-                ? await this.wbsService.createTaskApi({ parentId: parentId ?? null, title: 'New Task' })
-                : await (this.mcpClient as any).createTask({ parentId: parentId ?? null, title: 'New Task' });
+            const response = await this.wbsService.createTaskApi({ parentId: parentId ?? null, title: 'New Task' });
             if (!response.success) {
                 // 処理概要: API が失敗を返した場合はエラーメッセージを表示して失敗を返す
                 // 実装理由: ユーザに失敗理由を伝え、UI を一貫した状態に保つため
@@ -231,9 +217,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: サービス経由で削除 API を呼び出す
             // 実装理由: サーバに永続データの変更を反映させるため
-            const response = this.wbsService
-                ? await this.wbsService.deleteTaskApi(target.task.id)
-                : await (this.mcpClient as any).deleteTask(target.task.id);
+            const response = await this.wbsService.deleteTaskApi(target.task.id);
             if (!response.success) {
                 // 処理概要: API が失敗を返した場合はエラーメッセージを表示
                 // 実装理由: ユーザに失敗理由を通知し UI の整合性を保つため
@@ -352,9 +336,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 取得したタスク（存在しない場合はundefined）
      */
     private async fetchTaskById(taskId: string): Promise<Task | undefined> {
-        return this.wbsService
-            ? await this.wbsService.getTaskApi(taskId)
-            : await (this.mcpClient as any).getTask(taskId);
+        return await this.wbsService.getTaskApi(taskId);
     }
 
     /**
@@ -364,9 +346,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 実行結果を示すPromise（完了時にresolve）
      */
     private async performMove(taskId: string, parentId: string | null): Promise<void> {
-        const result = this.wbsService
-            ? await this.wbsService.moveTaskApi(taskId, parentId)
-            : await (this.mcpClient as any).moveTask(taskId, parentId);
+        const result = await this.wbsService.moveTaskApi(taskId, parentId);
 
         if (result.success) {
             this.refresh();

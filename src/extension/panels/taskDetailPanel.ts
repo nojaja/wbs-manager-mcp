@@ -1,9 +1,9 @@
 
 // VSCode API
 import * as vscode from 'vscode';
-// MCPクライアント（API通信・管理用）
-import type { WBSService } from '../services/WBSService';
-import type { MCPClient, TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../mcpClient';
+// サービスインターフェース
+import type { WBSServicePublic } from '../services/wbsService.interface';
+import type { TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../mcp/types';
 
 interface Task {
     id: string;
@@ -30,8 +30,7 @@ export class TaskDetailPanel {
     private _disposables: vscode.Disposable[] = [];
     private _taskId: string;
     private _task: Task | null = null;
-    private wbsService?: WBSService;
-    private mcpClient?: MCPClient;
+    private readonly wbsService: WBSServicePublic;
     private _extensionUri?: vscode.Uri;
 
     /**
@@ -40,9 +39,9 @@ export class TaskDetailPanel {
      * なぜ必要か: 複数タブを乱立させず、1つの詳細パネルでタスク編集を集中管理するため
     * @param extensionUri 拡張機能のURI
     * @param taskId タスクID
-    * @param serviceOrClient WBSService か MCPClient のいずれか
+    * @param service WBSService 公開インターフェース
      */
-    public static createOrShow(extensionUri: vscode.Uri, taskId: string, serviceOrClient: WBSService | MCPClient) {
+    public static createOrShow(extensionUri: vscode.Uri, taskId: string, service: WBSServicePublic) {
         // 処理名: パネル作成/表示
         // 処理概要: 既存パネルがあれば再利用し、無ければ新規作成して詳細を表示する
         // 実装理由: 同一タスクの複数パネルを防ぎリソース消費を抑えるため
@@ -80,7 +79,7 @@ export class TaskDetailPanel {
             }
         );
 
-        TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, serviceOrClient);
+    TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, service);
     }
 
     /**
@@ -90,19 +89,13 @@ export class TaskDetailPanel {
     * @param panel Webviewパネル
     * @param extensionUri 拡張機能のURI
     * @param taskId タスクID
-    * @param serviceOrClient WBSService か MCPClient のいずれか
+    * @param service WBSService 公開インターフェース
      */
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, serviceOrClient: WBSService | MCPClient) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, service: WBSServicePublic) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._taskId = taskId;
-        // 処理概要: 注入オブジェクトが MCPClient か WBSService かを判定して保持
-        // 実装理由: 互換性を保つためにどちらの API もサポートする
-        if ((serviceOrClient as any)?.getTask) {
-            this.mcpClient = serviceOrClient as MCPClient;
-        } else {
-            this.wbsService = serviceOrClient as WBSService;
-        }
+        this.wbsService = service;
 
         // 初期ロード
         this.loadTask();
@@ -148,12 +141,10 @@ export class TaskDetailPanel {
      */
     private async loadTask() {
         // 処理名: タスク読込
-        // 処理概要: WBSService or MCPClient からタスク情報を取得し Webview に反映する
+    // 処理概要: WBSService からタスク情報を取得し Webview に反映する
         // 実装理由: 詳細表示時に常に最新の情報を表示するため
         try {
-            this._task = this.wbsService
-                ? await this.wbsService.getTaskApi(this._taskId)
-                : await this.mcpClient!.getTask(this._taskId);
+            this._task = await this.wbsService.getTaskApi(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
                 // サジェスト用成果物一覧を取得（オプション）
@@ -161,9 +152,7 @@ export class TaskDetailPanel {
                 try {
                     // 処理概要: サジェストデータを取得するが、失敗時は機能継続
                     // 実装理由: サジェストは補助機能であり、取得失敗で主機能を妨げないため
-                    artifacts = this.wbsService
-                        ? await this.wbsService.listArtifactsApi()
-                        : await this.mcpClient!.listArtifacts();
+                    artifacts = await this.wbsService.listArtifactsApi();
                 } catch (e) {
                     // サジェスト取得失敗時はログを残さず処理を続行
                 }
@@ -238,9 +227,7 @@ export class TaskDetailPanel {
         // 実装理由: 編集結果を永続化し、ユーザにフィードバックを与えるため
         try {
             const updates = this.buildUpdateObject(data);
-            const result = this.wbsService
-                ? await this.wbsService.updateTaskApi(this._taskId, updates)
-                : await this.mcpClient!.updateTask(this._taskId, updates);
+            const result = await this.wbsService.updateTaskApi(this._taskId, updates);
 
             if (result.success) {
                 // 処理概要: 成功時は再読み込みとツリー更新を行う

@@ -3,11 +3,11 @@ import { jest } from '@jest/globals';
 import { WBSService } from '../../src/extension/services/WBSService';
 
 describe('WBS/Artifact ビジネスロジックの現状動作テスト', () => {
-  let mcpClient: any;
   let service: WBSService;
 
   beforeEach(() => {
-    mcpClient = { fetch: jest.fn() };
+    const mockTaskClient = {} as any;
+    const mockArtifactClient = {} as any;
     const mockWbsProvider = {
       refresh: jest.fn(),
       createTask: jest.fn(),
@@ -26,7 +26,7 @@ describe('WBS/Artifact ビジネスロジックの現状動作テスト', () => 
       getChildren: jest.fn(),
       onDidChangeTreeData: {} as any
     } as any;
-    service = new WBSService(mcpClient, { wbsProvider: mockWbsProvider, artifactProvider: mockArtifactProvider });
+    service = new WBSService({ taskClient: mockTaskClient, artifactClient: mockArtifactClient }, { wbsProvider: mockWbsProvider, artifactProvider: mockArtifactProvider });
   });
 
 

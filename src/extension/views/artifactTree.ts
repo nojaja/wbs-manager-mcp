@@ -1,9 +1,5 @@
 import * as vscode from 'vscode';
-import type { Artifact } from '../mcpClient';
-// Avoid importing WBSService type to prevent a type-level dependency that
-// can create circular references for dependency analysis. Use a structural
-// any for the service instance instead.
-import type { MCPClient } from '../mcpClient';
+import type { Artifact } from '../mcp/types';
 import type { WBSServicePublic } from '../services/wbsService.interface';
 
 /**
@@ -16,30 +12,18 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
 
     /**
     * 処理名: コンストラクタ
-    * 処理概要: WBSService もしくは MCPClient を受け取り内部参照を設定する
-    * 実装理由(なぜ必要か): 互換性のために service / client のどちらでも利用可能にするため
+     * 処理概要: WBSService を受け取り内部参照を設定する
+     * 実装理由(なぜ必要か): サービス層を介して成果物操作を集約するため
      */
     // 互換: service か client のどちらかを受け取る
-    private readonly wbsService?: WBSServicePublic;
-    private readonly mcpClient?: MCPClient;
+    private readonly wbsService: WBSServicePublic;
 
     /**
      * コンストラクタ
-     * @param serviceOrClient WBSService もしくは MCPClient（互換性のためどちらでも受け取る）
+     * @param service WBSService（成果物API を提供）
      */
-    constructor(serviceOrClient: WBSServicePublic | MCPClient) {
-        // Prefer treating the object as a WBSServicePublic when it exposes
-        // the new service API. Otherwise treat it as an MCPClient for
-        // backward compatibility.
-        const asAny = serviceOrClient as any;
-        if (asAny && (typeof asAny.listArtifactsApi === 'function' || asAny.artifactProvider)) {
-            this.wbsService = serviceOrClient as WBSServicePublic;
-        } else if (asAny && typeof asAny.listArtifacts === 'function') {
-            this.mcpClient = serviceOrClient as MCPClient;
-        } else {
-            // Fallback: prefer the newer service API surface
-            this.wbsService = serviceOrClient as WBSServicePublic;
-        }
+    constructor(service: WBSServicePublic) {
+        this.wbsService = service;
     }
 
     /**
@@ -86,31 +70,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
      * @returns Promise<Artifact[]>
      */
     private async fetchArtifacts(): Promise<Artifact[]> {
-        if (this.wbsService) {
-            // Prefer the explicit API on WBSServicePublic when available
-            if (typeof (this.wbsService as any).listArtifactsApi === 'function') {
-                return await this.wbsService.listArtifactsApi();
-            }
-            // Back-compat: some implementations may expose an artifactProvider
-            if ((this.wbsService as any).artifactProvider && typeof (this.wbsService as any).artifactProvider.getChildren === 'function') {
-                return await this.mapArtifactProviderItems();
-            }
-            return [];
-        }
-        if (this.mcpClient && typeof (this.mcpClient as any).listArtifacts === 'function') {
-            return await (this.mcpClient as any).listArtifacts();
-        }
-        return [];
-    }
-
-    /**
-     * artifactProvider.getChildren() の戻り値 (ArtifactTreeItem[]) を Artifact[] に変換する
-     * @returns Promise<Artifact[]>
-     */
-    private async mapArtifactProviderItems(): Promise<Artifact[]> {
-        const items = await (this.wbsService as any)!.artifactProvider.getChildren();
-        if (!Array.isArray(items)) return [];
-        return (items as any[]).map((it) => it && it.artifact ? it.artifact : undefined).filter(Boolean);
+        return await this.wbsService.listArtifactsApi();
     }
 
     /**
@@ -150,9 +110,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             uri: uri?.trim() || null,
             description: description?.trim() || null
         };
-        const result = this.wbsService
-            ? await this.wbsService.createArtifactApi(payload)
-            : await (this.mcpClient as any).createArtifact(payload);
+        const result = await this.wbsService.createArtifactApi(payload);
 
         if (!result.success) {
             // 処理概要: サーバエラー時はメッセージ表示のみ
@@ -215,9 +173,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             description: description?.trim() || null,
             version: artifact.version
         };
-        const result = this.wbsService
-            ? await this.wbsService.updateArtifactApi(payload)
-            : await (this.mcpClient as any).updateArtifact(payload);
+        const result = await this.wbsService.updateArtifactApi(payload);
 
         if (!result.success) {
             // 処理概要: 競合時は警告の上で再読み込み、それ以外はエラー表示
@@ -262,9 +218,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             return;
         }
 
-        const result = this.wbsService
-            ? await this.wbsService.deleteArtifactApi(target.artifact.id)
-            : await (this.mcpClient as any).deleteArtifact(target.artifact.id);
+        const result = await this.wbsService.deleteArtifactApi(target.artifact.id);
         if (!result.success) {
             // 処理概要: サーバエラーをユーザーへ通知
             // 実装理由: 失敗を隠さず次の行動（再試行/問い合わせ）につなげる

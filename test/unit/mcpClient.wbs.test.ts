@@ -1,91 +1,46 @@
-import { MCPClient } from '../../src/extension/mcpClient';
-import * as vscode from 'vscode';
+import { MCPTaskClient } from '../../src/extension/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/mcp/artifactClient';
 
-// vscode.OutputChannel を簡易モック
-class DummyOutputChannel implements vscode.OutputChannel {
-    name = 'dummy';
-    append = (value: string) => {};
-    appendLine = (value: string) => {};
-    clear = () => {};
-    // show はオーバーロードがあるため柔軟に受け取る
-    show = (columnOrPreserve?: any, preserveFocus?: boolean) => {};
-    hide = () => {};
-    dispose = () => {};
-    // replace は OutputChannel に必須
-    replace = (value: string) => {};
-}
+const outputChannel = { appendLine: jest.fn() } as any;
 
-describe('MCPClient WBS-related methods (behavioural)', () => {
-    let client: MCPClient;
-    let output: DummyOutputChannel;
+describe('MCP task/artifact client parsing edge cases', () => {
+    let taskClient: MCPTaskClient;
+    let artifactClient: MCPArtifactClient;
 
     beforeEach(() => {
-        output = new DummyOutputChannel();
-        client = new MCPClient(output);
-        // writer must be set to avoid start() waiting issues in some flows
-        client.setWriter(() => {});
+        taskClient = new MCPTaskClient(outputChannel);
+        artifactClient = new MCPArtifactClient(outputChannel);
     });
 
-    test('listTasks returns parsed array on success', async () => {
-        // モック呼び出しを差し替え
-        (client as any).callTool = jest.fn().mockResolvedValue({ content: [{ text: JSON.stringify([{ id: 't1', title: 'Task 1' }]) }] });
-        const res = await client.listTasks(null);
-        expect(res).toEqual([{ id: 't1', title: 'Task 1' }]);
-    });
-
-    test('listTasks returns empty array on parse error or missing content', async () => {
-        (client as any).callTool = jest.fn().mockResolvedValue({ content: [{ text: 'not-json' }] });
-        const res = await client.listTasks(null);
+    test('listTasks returns empty array when parse fails', async () => {
+        jest.spyOn(taskClient as any, 'callTool').mockResolvedValue({ content: [{ text: 'not-json' }] });
+        const res = await taskClient.listTasks(null);
         expect(res).toEqual([]);
     });
 
-    test('getTask returns object on success and null on error', async () => {
-        (client as any).callTool = jest.fn()
-            .mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 't1', title: 'Task 1' }) }] })
-            .mockResolvedValueOnce({ content: [{ text: '❌ error' }] });
-
-        const ok = await client.getTask('t1');
-        expect(ok).toEqual({ id: 't1', title: 'Task 1' });
-
-        const ng = await client.getTask('t1');
-        expect(ng).toBeNull();
+    test('listArtifacts logs and returns empty array when parsed payload not array', async () => {
+        const logSpy = jest.spyOn(outputChannel, 'appendLine');
+        jest.spyOn(artifactClient as any, 'callTool').mockResolvedValue({ content: [{ text: JSON.stringify({ foo: 'bar' }) }] });
+        const res = await artifactClient.listArtifacts();
+        expect(res).toEqual([]);
+        expect(logSpy).toHaveBeenCalled();
     });
 
-    test('createTask returns success and extracts ID', async () => {
-        (client as any).callTool = jest.fn().mockResolvedValue({ content: [{ text: '✅ Created\nID: 123' }] });
-        const res = await client.createTask({ title: 'A' });
-        expect(res.success).toBe(true);
-        expect(res.taskId).toBe('123');
+    test('createArtifact surfaces failure message from parseToolResponse', async () => {
+        jest.spyOn(artifactClient as any, 'callTool').mockResolvedValue({ content: [{ text: '❌ duplicate' }] });
+        const result = await artifactClient.createArtifact({ title: 'Doc' });
+        expect(result).toEqual({ success: false, error: '❌ duplicate', message: '❌ duplicate' });
     });
 
-    test('updateTask detects success, conflict and error', async () => {
-        (client as any).callTool = jest.fn()
-            .mockResolvedValueOnce({ content: [{ text: '✅' }] })
-            .mockResolvedValueOnce({ content: [{ text: 'modified by another user' }] })
-            .mockResolvedValueOnce({ content: [{ text: '❌ some error' }] });
-
-        const ok = await client.updateTask('t1', {});
-        expect(ok.success).toBe(true);
-
-        const conflict = await client.updateTask('t1', {});
-        expect(conflict.success).toBe(false);
-        expect(conflict.conflict).toBe(true);
-
-        const err = await client.updateTask('t1', {});
-        expect(err.success).toBe(false);
-        expect(err.error).toBeDefined();
+    test('updateTask propagates thrown error as failure', async () => {
+        jest.spyOn(taskClient as any, 'callTool').mockRejectedValue(new Error('network'));
+        const result = await taskClient.updateTask('t1', {});
+        expect(result).toEqual({ success: false, error: 'network' });
     });
 
-    test('moveTask returns success on ✅', async () => {
-        (client as any).callTool = jest.fn().mockResolvedValue({ content: [{ text: '✅' }] });
-        const res = await client.moveTask('t1', 'p1');
-        expect(res.success).toBe(true);
+    test('deleteArtifact handles thrown error gracefully', async () => {
+        jest.spyOn(artifactClient as any, 'callTool').mockRejectedValue('boom');
+        const res = await artifactClient.deleteArtifact('a1');
+        expect(res).toEqual({ success: false, error: 'boom' });
     });
-
-    test('deleteTask returns success on ✅', async () => {
-        (client as any).callTool = jest.fn().mockResolvedValue({ content: [{ text: '✅' }] });
-        const res = await client.deleteTask('t1');
-        expect(res.success).toBe(true);
-    });
-
 });

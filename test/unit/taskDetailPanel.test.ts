@@ -13,8 +13,10 @@ const fakePanelFactory = {
 };
 
 describe('TaskDetailPanel', () => {
-  const fakeMcp: any = {
-    getTask: jest.fn().mockResolvedValue(null)
+  const fakeService: any = {
+    getTaskApi: jest.fn().mockResolvedValue(null),
+    listArtifactsApi: jest.fn().mockResolvedValue([]),
+    updateTaskApi: jest.fn().mockResolvedValue({ success: true })
   };
 
   beforeEach(() => {
@@ -22,7 +24,7 @@ describe('TaskDetailPanel', () => {
   });
 
   test('getHtmlForWebview contains task data payload and script', async () => {
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
     const html = (panel as any).getHtmlForWebview({ id: 't1', title: 'Hello', status: 'pending', version: 1 });
     // Title and container exist
     expect(html).toContain('<title>Task Detail</title>');
@@ -37,7 +39,7 @@ describe('TaskDetailPanel', () => {
   });
 
   test('buildUpdateObject forwards new collections and version', () => {
-    const panel: any = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', fakeMcp);
+  const panel: any = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', fakeService);
     panel._task = { version: 42 };
     const updates = panel.buildUpdateObject({
       deliverables: [{ artifactId: 'spec', crudOperations: 'UD' }],

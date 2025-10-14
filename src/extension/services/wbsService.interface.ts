@@ -1,5 +1,5 @@
 // Interface definitions for WBSService public API
-import type { Artifact } from '../mcpClient';
+import type { Artifact } from '../mcp/types';
 
 export type Task = any; // 詳細は domain モデルで拡張可能
 
@@ -28,6 +28,7 @@ export interface WBSServicePublic {
 
   // Artifacts
   listArtifactsApi(): Promise<Artifact[]>;
+  getArtifactApi(artifactId: string): Promise<Artifact | null>;
   createArtifactApi(params: { title: string; uri?: string | null; description?: string | null }): Promise<{ success: boolean; artifact?: Artifact; error?: string }>;
   updateArtifactApi(params: { artifactId: string; title: string; uri?: string | null; description?: string | null; version?: number }): Promise<{ success: boolean; artifact?: Artifact; conflict?: boolean; error?: string }>;
   deleteArtifactApi(artifactId: string): Promise<{ success: boolean; error?: string }>;
