@@ -6,7 +6,10 @@ import { MCPClient } from '../../src/extension/mcpClient';
 
 class DummyPanel {
     public title = '';
-    public webview = { html: '' } as any;
+    public webview = {
+        html: '',
+        asWebviewUri: (u: any) => String(u)
+    } as any;
 }
 
 class DummyMCP extends MCPClient {
@@ -31,14 +34,18 @@ describe('TaskDetailPanel suggestions', () => {
         // Create instance via bypassing constructor by using Object.create
         const dummy = Object.create(TaskDetailPanel.prototype) as any;
         // attach minimal fields used by getHtmlForWebview
-    const html = (TaskDetailPanel as any).prototype.getHtmlForWebview.call(dummy, task, artifacts);
+        dummy._panel = new DummyPanel() as any;
+        dummy._extensionUri = { toString: () => '' } as any;
+        const html = (TaskDetailPanel as any).prototype.getHtmlForWebview.call(dummy, task, artifacts);
 
         expect(html).toBeDefined();
-        expect(html).toContain('datalist');
-        expect(html).toContain('id="addDeliverable"');
-        expect(html).toContain('id="addPrerequisite"');
-        // artifacts titles should appear as options
-        expect(html).toContain('Spec Doc');
-        expect(html).toContain('Design');
+        // Minimal page structure and script
+        expect(html).toContain('<div id="app"></div>');
+        expect(html).toContain('task.bundle.js');
+        // Payload includes artifacts
+        const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
+        expect(m).toBeTruthy();
+        const payload = JSON.parse(m![1]);
+        expect(payload.artifacts.map((a: any) => a.title)).toEqual(['Spec Doc', 'Design']);
     });
 });
