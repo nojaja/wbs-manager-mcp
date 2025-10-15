@@ -1,4 +1,5 @@
 import { ToolRegistry } from '../tools/ToolRegistry';
+import Logger from '../logger';
 import type { JsonRpcRequest, JsonRpcResponse, JsonRpcNotification } from '../parser/Parser';
 import { RpcError } from '../tools/Tool';
 
@@ -59,7 +60,7 @@ export class Dispatcher {
       if (err instanceof RpcError) {
         return { jsonrpc: '2.0', id, error: { code: err.code, message: err.message, data: err.data } };
       }
-      console.error('[MCP Server] Unexpected tool error:', name, err);
+      Logger.error('[MCP Server] Unexpected tool error:', null, { tool: name, err: err instanceof Error ? err.message : String(err) });
       return { jsonrpc: '2.0', id, error: { code: -32603, message: err instanceof Error ? err.message : String(err) } };
     }
   }
@@ -178,7 +179,7 @@ export class Dispatcher {
   * @param {JsonRpcNotification} notification
    */
   private async handleNotification(notification: JsonRpcNotification) {
-    console.error('[MCP Server] Notification received:', notification.method);
+    Logger.debug('[MCP Server] Notification received: ' + String(notification.method));
     // no-op for now
   }
 }

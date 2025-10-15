@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import Logger from '../logger';
 import type { Tool, ToolDeps } from './Tool';
 
 /**
@@ -38,7 +39,7 @@ export class ToolRegistry {
             }
         } catch (err) {
             // 初期化失敗はログに記録し、登録を取り消す
-            console.error('[ToolRegistry] tool.init failed for', tool.meta.name, err);
+            Logger.error('[ToolRegistry] tool.init failed for', null, { tool: tool.meta.name, err: err instanceof Error ? err.message : String(err) });
             this.tools.delete(tool.meta.name);
             // 呼び出し側で初期化失敗を認識できるように再スロー
             throw err;
@@ -99,29 +100,38 @@ export class ToolRegistry {
      * @returns {Promise<void>} 非同期完了
      */
     async loadFromDirectory(dir: string) {
-        // 指定パスを絶対化して検査
         const abs = path.resolve(dir);
         if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return;
-        // 対象ファイルを列挙（.js/.mjs）
         const files = fs.readdirSync(abs).filter(f => f.endsWith('.js') || f.endsWith('.mjs'));
-        // 各ファイルを順にインポートしてツールインスタンスを検出・登録する
+
+        // process files sequentially to keep function simple
         for (const f of files) {
+            // delegate to helper to reduce cognitive complexity
+            await this.loadFileAsTool(abs, f);
+        }
+    }
+
+    /**
+     * Helper: import a module file and register its exported tool instance if present.
+     */
+    /**
+     * Import a tool module file and register its exported instance if present.
+     * @param {string} abs Absolute directory path
+     * @param {string} f File name to import
+     */
+    private async loadFileAsTool(abs: string, f: string) {
+        try {
+            const modPath = new URL(path.join(abs, f)).href;
+            const mod = await import(modPath);
+            const instance = mod.default || mod.tool || mod.instance;
+            if (!instance) return;
             try {
-                const modPath = new URL(path.join(abs, f)).href;
-                const mod = await import(modPath);
-                // エクスポート形態の違いに対応してインスタンスを探す
-                const instance = mod.default || mod.tool || mod.instance;
-                if (instance) {
-                    try {
-                        await this.register(instance as Tool);
-                    } catch (err) {
-                        console.error('[ToolRegistry] register failed for dynamic tool', f, err);
-                    }
-                }
+                await this.register(instance as Tool);
             } catch (err) {
-                // 動的ロードは実行時エラーが発生しやすいため、失敗をログに残して次に進む
-                console.error('[ToolRegistry] Failed to load tool', f, err);
+                Logger.error('[ToolRegistry] register failed for dynamic tool', null, { file: f, err: err instanceof Error ? err.message : String(err) });
             }
+        } catch (err) {
+            Logger.error('[ToolRegistry] Failed to load tool', null, { file: f, err: err instanceof Error ? err.message : String(err) });
         }
     }
 
@@ -134,18 +144,27 @@ export class ToolRegistry {
      */
     async setDeps(deps: ToolDeps) {
         this.deps = deps || {};
-        // Re-initialize existing tools with new deps. Await each init to avoid races.
         const tools = Array.from(this.tools.values());
         for (const tool of tools) {
-            try {
-                if (typeof (tool as any).init === 'function') {
-                    await (tool as any).init(this.deps);
-                }
-            } catch (err) {
-                console.error('[ToolRegistry] tool.init failed during setDeps for', tool.meta?.name, err);
-                // If init fails during deps update, remove the faulty tool to keep registry consistent
-                if (tool.meta?.name) this.tools.delete(tool.meta.name);
+            // delegate complex init logic to helper
+            await this.initToolWithDeps(tool, this.deps);
+        }
+    }
+
+    /**
+     * Initialize a single tool with provided deps.
+     * @param {Tool} tool
+     * @param {ToolDeps} deps
+     * @returns {Promise<void>}
+     */
+    private async initToolWithDeps(tool: Tool, deps: ToolDeps) {
+        try {
+            if (typeof (tool as any).init === 'function') {
+                await (tool as any).init(deps);
             }
+        } catch (err) {
+            Logger.error('[ToolRegistry] tool.init failed during setDeps for', null, { tool: tool.meta?.name, err: err instanceof Error ? err.message : String(err) });
+            if (tool.meta?.name) this.tools.delete(tool.meta.name);
         }
     }
 
@@ -160,7 +179,7 @@ export class ToolRegistry {
                     await (tool as any).dispose();
                 }
             } catch (err) {
-                console.error('[ToolRegistry] tool.dispose failed for', tool.meta?.name, err);
+                Logger.error('[ToolRegistry] tool.dispose failed for', null, { tool: tool.meta?.name, err: err instanceof Error ? err.message : String(err) });
             }
         }
         this.tools.clear();

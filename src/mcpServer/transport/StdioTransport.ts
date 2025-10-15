@@ -11,6 +11,11 @@ export type MessageHandler = (line: string) => void;
  * Read lines from stdin (using readline) and provide a send() method to write
  * one-line JSON messages to stdout. Emits debug logs to stderr.
  */
+import Logger from '../logger';
+
+/**
+ * StdioTransport provides line-based stdin reading and stdout JSON writing.
+ */
 export class StdioTransport {
   private rl: readline.Interface | null = null;
   private handler: MessageHandler | null = null;
@@ -26,7 +31,7 @@ export class StdioTransport {
     });
 
     this.rl.on('close', () => {
-      console.error('[MCP Server] StdioTransport: stdin closed');
+      Logger.info('[MCP Server] StdioTransport: stdin closed');
       process.exit(0);
     });
   }
@@ -49,9 +54,9 @@ export class StdioTransport {
     const str = JSON.stringify(obj);
     // debug friendly pretty print to stderr
     try {
-      console.error('[MCP Server] Sending:', JSON.stringify(obj, null, 2));
+      Logger.debug('[MCP Server] Sending', null, { pretty: JSON.stringify(obj, null, 2) });
     } catch (e) {
-      console.error('[MCP Server] Sending (stringify failed)');
+      Logger.error('[MCP Server] Sending (stringify failed)', null, { err: e instanceof Error ? e.message : String(e) });
     }
     process.stdout.write(str + '\n');
   }
