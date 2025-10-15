@@ -214,7 +214,9 @@ module.exports = {
     /* Which modules not to follow further when encountered */
     doNotFollow: {
       /* path: an array of regular expressions in strings to match against */
-      path: ['node_modules']
+      path: ['node_modules'],
+      /* also don't follow Node.js core modules in the graph output */
+      dependencyTypes: ['core']
     },
 
     /* Which modules to exclude */
@@ -223,10 +225,10 @@ module.exports = {
     //   path: '',
     // },
 
-    /* Which modules to exclusively include (array of regular expressions in strings)
-       dependency-cruiser will skip everything not matching this pattern
-    */
-    // includeOnly : [''],
+   /* Which modules to exclusively include (array of regular expressions in strings)
+     dependency-cruiser will skip everything not matching this pattern
+   */
+   includeOnly : ['^src'],
 
     /* List of module systems to cruise.
        When left out dependency-cruiser will fall back to the list of _all_

@@ -142,7 +142,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run test && npm run build",
-    "build": "npm run build:ts && npm run build:webview && npm run docs && npx depcruise src --output-type dot > dependency-cruiser.dot",
+    "build": "npm run build:ts && npm run build:webview && npm run docs && npx depcruise src --output-type dot > ./docs/dependency-cruiser.dot",
     "build:ts": "tsc -p ./",
     "build:webview": "webpack --config webpack.webview.config.js --mode production",
     "watch:webview": "webpack --config webpack.webview.config.js --mode development --watch",
