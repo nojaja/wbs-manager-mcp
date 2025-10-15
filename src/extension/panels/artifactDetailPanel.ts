@@ -50,22 +50,22 @@ export class ArtifactDetailPanel {
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
-                    localResourceRoots: ((): vscode.Uri[] => {
-                        const roots: vscode.Uri[] = [extensionUri];
-                        const joinPath = (vscode as any)?.Uri?.joinPath;
-                        if (typeof joinPath === 'function') {
-                            try {
-                                roots.push(joinPath(extensionUri, 'dist', 'webview'));
-                            } catch {
-                                // ignore in test environment
-                            }
+                localResourceRoots: ((): vscode.Uri[] => {
+                    const roots: vscode.Uri[] = [extensionUri];
+                    const joinPath = (vscode as any)?.Uri?.joinPath;
+                    if (typeof joinPath === 'function') {
+                        try {
+                            roots.push(joinPath(extensionUri, 'dist', 'webview'));
+                        } catch {
+                            // ignore in test environment
                         }
-                        return roots;
-                    })()
+                    }
+                    return roots;
+                })()
             }
         );
 
-    ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, deps);
+        ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, deps);
     }
 
     /**
@@ -196,22 +196,22 @@ export class ArtifactDetailPanel {
      * @param extensionUri
      * @returns HTML文字列
      */
-        private getHtmlForWebview(artifact: Artifact, extensionUri?: vscode.Uri): string {
-                const webview: any = this._panel.webview as any;
-                const baseUri: any = (extensionUri ?? this._extensionUri!) as any;
-                const joinPath = (vscode as any)?.Uri?.joinPath;
-                let scriptUri: any = '/dist/webview/artifact.bundle.js';
-                try {
-                    if (typeof joinPath === 'function' && typeof webview?.asWebviewUri === 'function') {
-                        const scriptPath = joinPath(baseUri, 'dist', 'webview', 'artifact.bundle.js');
-                        scriptUri = webview.asWebviewUri(scriptPath);
-                    }
-                } catch {
-                    // fallback for test environment
-                    scriptUri = '/dist/webview/artifact.bundle.js';
-                }
-                const payload = JSON.stringify({ artifact });
-                return `<!DOCTYPE html>
+    private getHtmlForWebview(artifact: Artifact, extensionUri?: vscode.Uri): string {
+        const webview: any = this._panel.webview as any;
+        const baseUri: any = (extensionUri ?? this._extensionUri!) as any;
+        const joinPath = (vscode as any)?.Uri?.joinPath;
+        let scriptUri: any = '/dist/webview/artifact.bundle.js';
+        try {
+            if (typeof joinPath === 'function' && typeof webview?.asWebviewUri === 'function') {
+                const scriptPath = joinPath(baseUri, 'dist', 'webview', 'artifact.bundle.js');
+                scriptUri = webview.asWebviewUri(scriptPath);
+            }
+        } catch {
+            // fallback for test environment
+            scriptUri = '/dist/webview/artifact.bundle.js';
+        }
+        const payload = JSON.stringify({ artifact });
+        return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -225,7 +225,7 @@ export class ArtifactDetailPanel {
     <script src="${scriptUri}"></script>
 </body>
 </html>`;
-        }
+    }
 
     /**
      * HTMLエスケープ処理

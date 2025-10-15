@@ -2,37 +2,37 @@ export type ArtifactReferenceInput = { artifactId: string; crudOperations?: stri
 export type CompletionConditionInput = { description: string };
 
 export interface CreateTaskParams {
-  title?: string;
-  description?: string;
-  parentId?: string | null;
-  assignee?: string | null;
-  estimate?: string | null;
-  deliverables?: ArtifactReferenceInput[];
-  prerequisites?: ArtifactReferenceInput[];
-  completionConditions?: CompletionConditionInput[];
+    title?: string;
+    description?: string;
+    parentId?: string | null;
+    assignee?: string | null;
+    estimate?: string | null;
+    deliverables?: ArtifactReferenceInput[];
+    prerequisites?: ArtifactReferenceInput[];
+    completionConditions?: CompletionConditionInput[];
 }
 
 export interface UpdateTaskParams extends Partial<CreateTaskParams> {
-  taskId?: string;
-  [key: string]: unknown;
+    taskId?: string;
+    [key: string]: unknown;
 }
 
 export interface CreateTaskPayload {
-  title: string;
-  description: string;
-  parentId: string | null;
-  assignee: string | null;
-  estimate: string | null;
-  deliverables?: ArtifactReferenceInput[];
-  prerequisites?: ArtifactReferenceInput[];
-  completionConditions?: CompletionConditionInput[];
+    title: string;
+    description: string;
+    parentId: string | null;
+    assignee: string | null;
+    estimate: string | null;
+    deliverables?: ArtifactReferenceInput[];
+    prerequisites?: ArtifactReferenceInput[];
+    completionConditions?: CompletionConditionInput[];
 }
 
 export interface UpdateTaskPayload {
-  [key: string]: unknown;
-  deliverables?: ArtifactReferenceInput[];
-  prerequisites?: ArtifactReferenceInput[];
-  completionConditions?: CompletionConditionInput[];
+    [key: string]: unknown;
+    deliverables?: ArtifactReferenceInput[];
+    prerequisites?: ArtifactReferenceInput[];
+    completionConditions?: CompletionConditionInput[];
 }
 
 /**
@@ -44,23 +44,23 @@ export interface UpdateTaskPayload {
  * @returns 正規化されたオブジェクトまたは null
  */
 function normalizeArtifactInput(input: ArtifactReferenceInput | undefined) {
-  if (!input || typeof input.artifactId !== 'string') {
-    return null;
-  }
-
-  const artifactId = input.artifactId.trim();
-  if (artifactId.length === 0) {
-    return null;
-  }
-
-  if (typeof input.crudOperations === 'string') {
-    const crud = input.crudOperations.trim();
-    if (crud.length > 0) {
-      return { artifactId, crudOperations: crud } as const;
+    if (!input || typeof input.artifactId !== 'string') {
+        return null;
     }
-  }
 
-  return { artifactId } as const;
+    const artifactId = input.artifactId.trim();
+    if (artifactId.length === 0) {
+        return null;
+    }
+
+    if (typeof input.crudOperations === 'string') {
+        const crud = input.crudOperations.trim();
+        if (crud.length > 0) {
+            return { artifactId, crudOperations: crud } as const;
+        }
+    }
+
+    return { artifactId } as const;
 }
 
 /**
@@ -69,18 +69,18 @@ function normalizeArtifactInput(input: ArtifactReferenceInput | undefined) {
  * @returns サニタイズ済み配列または undefined (入力が配列でない場合)
  */
 export function sanitizeArtifactReferences(inputs?: ArtifactReferenceInput[]) {
-  if (!Array.isArray(inputs)) {
-    return undefined;
-  }
-
-  const normalized: ArtifactReferenceInput[] = [];
-  for (const input of inputs) {
-    const sanitized = normalizeArtifactInput(input);
-    if (sanitized) {
-      normalized.push(sanitized);
+    if (!Array.isArray(inputs)) {
+        return undefined;
     }
-  }
-  return normalized;
+
+    const normalized: ArtifactReferenceInput[] = [];
+    for (const input of inputs) {
+        const sanitized = normalizeArtifactInput(input);
+        if (sanitized) {
+            normalized.push(sanitized);
+        }
+    }
+    return normalized;
 }
 
 /**
@@ -89,18 +89,18 @@ export function sanitizeArtifactReferences(inputs?: ArtifactReferenceInput[]) {
  * @returns サニタイズ済み配列または undefined (入力が配列でない場合)
  */
 export function sanitizeCompletionConditions(inputs?: CompletionConditionInput[]) {
-  if (!Array.isArray(inputs)) {
-    return undefined;
-  }
-
-  const normalized: CompletionConditionInput[] = [];
-  for (const input of inputs) {
-    const description = typeof input?.description === 'string' ? input.description.trim() : '';
-    if (description.length > 0) {
-      normalized.push({ description });
+    if (!Array.isArray(inputs)) {
+        return undefined;
     }
-  }
-  return normalized;
+
+    const normalized: CompletionConditionInput[] = [];
+    for (const input of inputs) {
+        const description = typeof input?.description === 'string' ? input.description.trim() : '';
+        if (description.length > 0) {
+            normalized.push({ description });
+        }
+    }
+    return normalized;
 }
 
 /**
@@ -110,29 +110,29 @@ export function sanitizeCompletionConditions(inputs?: CompletionConditionInput[]
  * @returns CreateTaskPayload (サーバ送信用の完全なオブジェクト)
  */
 export function buildCreateTaskPayload(params: CreateTaskParams): CreateTaskPayload {
-  const deliverables = sanitizeArtifactReferences(params.deliverables);
-  const prerequisites = sanitizeArtifactReferences(params.prerequisites);
-  const completionConditions = sanitizeCompletionConditions(params.completionConditions);
+    const deliverables = sanitizeArtifactReferences(params.deliverables);
+    const prerequisites = sanitizeArtifactReferences(params.prerequisites);
+    const completionConditions = sanitizeCompletionConditions(params.completionConditions);
 
-  const payload: CreateTaskPayload = {
-    title: params.title ?? 'New Task',
-    description: params.description ?? '',
-    parentId: params.parentId ?? null,
-    assignee: params.assignee ?? null,
-    estimate: params.estimate ?? null
-  };
+    const payload: CreateTaskPayload = {
+        title: params.title ?? 'New Task',
+        description: params.description ?? '',
+        parentId: params.parentId ?? null,
+        assignee: params.assignee ?? null,
+        estimate: params.estimate ?? null
+    };
 
-  if (deliverables !== undefined) {
-    payload.deliverables = deliverables;
-  }
-  if (prerequisites !== undefined) {
-    payload.prerequisites = prerequisites;
-  }
-  if (completionConditions !== undefined) {
-    payload.completionConditions = completionConditions;
-  }
+    if (deliverables !== undefined) {
+        payload.deliverables = deliverables;
+    }
+    if (prerequisites !== undefined) {
+        payload.prerequisites = prerequisites;
+    }
+    if (completionConditions !== undefined) {
+        payload.completionConditions = completionConditions;
+    }
 
-  return payload;
+    return payload;
 }
 
 /**
@@ -143,30 +143,30 @@ export function buildCreateTaskPayload(params: CreateTaskParams): CreateTaskPayl
  * @returns UpdateTaskPayload サーバ送信用の差分オブジェクト
  */
 export function buildUpdateTaskPayload(updates: UpdateTaskParams): UpdateTaskPayload {
-  const deliverables = sanitizeArtifactReferences(updates.deliverables);
-  const prerequisites = sanitizeArtifactReferences(updates.prerequisites);
-  const completionConditions = sanitizeCompletionConditions(updates.completionConditions);
+    const deliverables = sanitizeArtifactReferences(updates.deliverables);
+    const prerequisites = sanitizeArtifactReferences(updates.prerequisites);
+    const completionConditions = sanitizeCompletionConditions(updates.completionConditions);
 
-  const normalized: UpdateTaskPayload = { ...updates };
-  delete normalized.taskId;
+    const normalized: UpdateTaskPayload = { ...updates };
+    delete normalized.taskId;
 
-  if (deliverables !== undefined) {
-    normalized.deliverables = deliverables;
-  } else {
-    delete normalized.deliverables;
-  }
+    if (deliverables !== undefined) {
+        normalized.deliverables = deliverables;
+    } else {
+        delete normalized.deliverables;
+    }
 
-  if (prerequisites !== undefined) {
-    normalized.prerequisites = prerequisites;
-  } else {
-    delete normalized.prerequisites;
-  }
+    if (prerequisites !== undefined) {
+        normalized.prerequisites = prerequisites;
+    } else {
+        delete normalized.prerequisites;
+    }
 
-  if (completionConditions !== undefined) {
-    normalized.completionConditions = completionConditions;
-  } else {
-    delete normalized.completionConditions;
-  }
+    if (completionConditions !== undefined) {
+        normalized.completionConditions = completionConditions;
+    } else {
+        delete normalized.completionConditions;
+    }
 
-  return normalized;
+    return normalized;
 }

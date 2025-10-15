@@ -85,7 +85,7 @@ export class TaskDetailPanel {
             }
         );
 
-    TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, deps);
+        TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, deps);
     }
 
     /**
@@ -235,9 +235,9 @@ export class TaskDetailPanel {
         // 処理概要: Webview から送られたフォームデータを整形してサーバへ更新リクエストを送り、結果に応じた UI 操作を行う
         // 実装理由: 編集結果を永続化し、ユーザにフィードバックを与えるため
         try {
-        const updates = this.buildUpdateObject(data);
-        const normalized = buildUpdateTaskPayload(updates);
-        const result = await this.taskClient.updateTask(this._taskId, normalized);
+            const updates = this.buildUpdateObject(data);
+            const normalized = buildUpdateTaskPayload(updates);
+            const result = await this.taskClient.updateTask(this._taskId, normalized);
 
             if (result.success) {
                 // 処理概要: 成功時は再読み込みとツリー更新を行う
@@ -270,23 +270,23 @@ export class TaskDetailPanel {
      * @param extensionUri
      * @returns HTML文字列
      */
-        private getHtmlForWebview(task: Task, artifacts: Artifact[] = [], extensionUri?: vscode.Uri): string {
-                // Always load the built webview bundle and inject the initial payload.
-                const webview: any = this._panel.webview as any;
-                const baseUri: any = (extensionUri ?? this._extensionUri!) as any;
-                const joinPath = (vscode as any)?.Uri?.joinPath;
-                let scriptUri: any = '/dist/webview/task.bundle.js';
-                try {
-                    if (typeof joinPath === 'function' && typeof webview?.asWebviewUri === 'function') {
-                        const scriptPath = joinPath(baseUri, 'dist', 'webview', 'task.bundle.js');
-                        scriptUri = webview.asWebviewUri(scriptPath);
-                    }
-                } catch {
-                    // In test environments without full VS Code API, fall back to relative path
-                    scriptUri = '/dist/webview/task.bundle.js';
-                }
-                const payload = JSON.stringify({ task, artifacts });
-                return `<!DOCTYPE html>
+    private getHtmlForWebview(task: Task, artifacts: Artifact[] = [], extensionUri?: vscode.Uri): string {
+        // Always load the built webview bundle and inject the initial payload.
+        const webview: any = this._panel.webview as any;
+        const baseUri: any = (extensionUri ?? this._extensionUri!) as any;
+        const joinPath = (vscode as any)?.Uri?.joinPath;
+        let scriptUri: any = '/dist/webview/task.bundle.js';
+        try {
+            if (typeof joinPath === 'function' && typeof webview?.asWebviewUri === 'function') {
+                const scriptPath = joinPath(baseUri, 'dist', 'webview', 'task.bundle.js');
+                scriptUri = webview.asWebviewUri(scriptPath);
+            }
+        } catch {
+            // In test environments without full VS Code API, fall back to relative path
+            scriptUri = '/dist/webview/task.bundle.js';
+        }
+        const payload = JSON.stringify({ task, artifacts });
+        return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -300,7 +300,7 @@ export class TaskDetailPanel {
     <script src="${scriptUri}"></script>
 </body>
 </html>`;
-        }
+    }
 
     /**
      * HTMLエスケープ処理

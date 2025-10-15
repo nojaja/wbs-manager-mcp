@@ -34,7 +34,7 @@ export class MCPBaseClient {
     /**
      * @param outputChannel ログ出力先となるVSCodeのOutputChannel
      */
-    constructor(protected readonly outputChannel: vscode.OutputChannel) {}
+    constructor(protected readonly outputChannel: vscode.OutputChannel) { }
 
     /**
      * ServerService から受け取った書き込み関数を登録する。

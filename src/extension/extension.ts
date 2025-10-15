@@ -71,9 +71,9 @@ export async function activate(context: vscode.ExtensionContext) {
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         // 処理概要: 明示的にローカルサーバを再起動/起動するコマンド
         // 実装理由: サーバ停止後の再接続や設定反映のためにユーザが手動で起動できるようにする
-    await serverService.startLocalServer(context, [initializeClient, taskClient, artifactClient]);
-    wbsProvider.refresh();
-    artifactProvider.refresh();
+        await serverService.startLocalServer(context, [initializeClient, taskClient, artifactClient]);
+        wbsProvider.refresh();
+        artifactProvider.refresh();
     });
 
     // コマンド登録: ツリーリフレッシュ

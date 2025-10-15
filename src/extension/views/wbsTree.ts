@@ -332,7 +332,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 取得したタスク（存在しない場合はundefined）
      */
     private async fetchTaskById(taskId: string): Promise<Task | undefined> {
-    return await this.taskClient.getTask(taskId);
+        return await this.taskClient.getTask(taskId);
     }
 
     /**
@@ -342,7 +342,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 実行結果を示すPromise（完了時にresolve）
      */
     private async performMove(taskId: string, parentId: string | null): Promise<void> {
-    const result = await this.taskClient.moveTask(taskId, parentId);
+        const result = await this.taskClient.moveTask(taskId, parentId);
 
         if (result.success) {
             this.refresh();

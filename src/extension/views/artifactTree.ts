@@ -109,7 +109,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             uri: uri?.trim() || null,
             description: description?.trim() || null
         };
-    const result = await this.artifactClient.createArtifact(payload);
+        const result = await this.artifactClient.createArtifact(payload);
 
         if (!result.success) {
             // 処理概要: サーバエラー時はメッセージ表示のみ
@@ -172,7 +172,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             description: description?.trim() || null,
             version: artifact.version
         };
-    const result = await this.artifactClient.updateArtifact(payload);
+        const result = await this.artifactClient.updateArtifact(payload);
 
         if (!result.success) {
             // 処理概要: 競合時は警告の上で再読み込み、それ以外はエラー表示
@@ -217,7 +217,7 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
             return;
         }
 
-    const result = await this.artifactClient.deleteArtifact(target.artifact.id);
+        const result = await this.artifactClient.deleteArtifact(target.artifact.id);
         if (!result.success) {
             // 処理概要: サーバエラーをユーザーへ通知
             // 実装理由: 失敗を隠さず次の行動（再試行/問い合わせ）につなげる
