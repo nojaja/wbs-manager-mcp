@@ -10,13 +10,18 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
     webviewOptions: {}
   };
 
+  const createDeps = () => ({
+    taskClient: {
+      getTask: jest.fn(),
+      updateTask: jest.fn()
+    },
+    artifactClient: {
+      listArtifacts: jest.fn().mockResolvedValue([])
+    }
+  });
+
   test('getHtmlForWebview embeds task payload and references bundle', () => {
-    const fakeService: any = {
-      getTaskApi: jest.fn(),
-      listArtifactsApi: jest.fn().mockResolvedValue([]),
-      updateTaskApi: jest.fn()
-    };
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', createDeps());
 
     const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', assignee: 'A', estimate: '3d' };
     const html = (panel as any).getHtmlForWebview(task);
@@ -33,12 +38,7 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('getHtmlForWebview includes pending status in payload', () => {
-    const fakeService: any = {
-      getTaskApi: jest.fn(),
-      listArtifactsApi: jest.fn().mockResolvedValue([]),
-      updateTaskApi: jest.fn()
-    };
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', fakeService);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', createDeps());
     const task = { id: 't2', title: 'Y', status: 'pending', version: 1 };
     const html = (panel as any).getHtmlForWebview(task);
     const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
@@ -48,12 +48,7 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('escapeHtml escapes special characters', () => {
-    const fakeService: any = {
-      getTaskApi: jest.fn(),
-      listArtifactsApi: jest.fn().mockResolvedValue([]),
-      updateTaskApi: jest.fn()
-    };
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't3', fakeService);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't3', createDeps());
     const unsafe = '& < > " \'';
     const escaped = (panel as any).escapeHtml(unsafe);
     expect(escaped).toContain('&amp;');

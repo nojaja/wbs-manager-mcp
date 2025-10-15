@@ -1,8 +1,12 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import type { WBSService } from '../services/WBSService';
+import type { ArtifactClientLike } from '../services/clientContracts';
 import type { Artifact } from '../mcp/types';
+
+type ArtifactDetailDependencies = {
+    artifactClient: Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact'>;
+} | Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact'>;
 
 /**
  * 成果物詳細パネルクラス
@@ -15,7 +19,7 @@ export class ArtifactDetailPanel {
     private _disposables: vscode.Disposable[] = [];
     private _artifactId: string;
     private _artifact: Artifact | null = null;
-    private wbsService?: WBSService;
+    private readonly artifactClient: Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact'>;
     private _extensionUri?: vscode.Uri;
 
     /**
@@ -24,9 +28,9 @@ export class ArtifactDetailPanel {
      * なぜ必要か: 複数タブを乱立させず、1つの詳細パネルで成果物編集を集中管理するため
     * @param extensionUri 拡張機能のURI
     * @param artifactId 成果物ID
-    * @param serviceOrClient WBSService または互換的な MCP クライアントオブジェクト
+    * @param deps 成果物操作を提供する依存関係
      */
-    public static createOrShow(extensionUri: vscode.Uri, artifactId: string, serviceOrClient: any) {
+    public static createOrShow(extensionUri: vscode.Uri, artifactId: string, deps: ArtifactDetailDependencies) {
         // 処理名: 成果物詳細パネル作成/表示
         // 処理概要: 既存パネルがあれば再利用、無ければ新規作成して成果物詳細を表示
         // 実装理由: 同一資源の複数パネル生成を防ぎ一貫した編集体験を提供するため
@@ -61,55 +65,27 @@ export class ArtifactDetailPanel {
             }
         );
 
-        ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, serviceOrClient);
+    ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, deps);
     }
 
     /**
-     * コンストラクタ
-     * Webviewパネル・成果物ID・WBSServiceを受け取り初期化する
-     * なぜ必要か: パネルの状態・成果物情報・API通信を一元管理するため
+    * コンストラクタ
+    * Webviewパネル・成果物ID・クライアント依存を受け取り初期化する
+    * なぜ必要か: パネルの状態・成果物情報・API通信を一元管理するため
     * @param panel Webviewパネル
     * @param extensionUri 拡張機能のURI
     * @param artifactId 成果物ID
-    * @param serviceOrClient WBSService または互換的な MCP クライアントオブジェクト
+    * @param deps 成果物操作を提供する依存関係
      */
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, serviceOrClient: any) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, deps: ArtifactDetailDependencies) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._artifactId = artifactId;
-        // 注入されたオブジェクトが WBSService API を提供していればそのまま使用
-        // そうでなければ legacy な MCP クライアント（getArtifact/updateArtifact）を
-        // getArtifactApi/updateArtifactApi へ変換するアダプタを作成して互換性を保つ
-        const svc = serviceOrClient as any;
-        if (svc && typeof svc.getArtifactApi === 'function' && typeof svc.updateArtifactApi === 'function') {
-            this.wbsService = svc as WBSService;
-        } else if (svc && typeof svc.getArtifact === 'function') {
-            // ラップして WBSService ライクなインターフェースを提供
-            this.wbsService = {
-                // minimal adapter for methods used by this panel
-                /**
-                 * Adapter: legacy getArtifact -> getArtifactApi
-                 * @param id artifact id
-                 * @returns Promise resolving to Artifact or null
-                 */
-                async getArtifactApi(id: string) {
-                    return svc.getArtifact(id);
-                },
-                /**
-                 * Adapter: legacy updateArtifact -> updateArtifactApi
-                 * @param updates update payload
-                 * @returns Promise resolving to update result object
-                 */
-                async updateArtifactApi(updates: any) {
-                    if (typeof svc.updateArtifact === 'function') {
-                        return svc.updateArtifact(updates);
-                    }
-                    // If updateArtifact is not available on legacy client, throw a descriptive error
-                    throw new Error('legacy client does not implement updateArtifact');
-                }
-            } as unknown as WBSService;
+        // deps can be either { artifactClient } or the client itself (tests may pass client directly)
+        if (deps && typeof (deps as any).getArtifact === 'function') {
+            this.artifactClient = deps as Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact'>;
         } else {
-            this.wbsService = svc as WBSService;
+            this.artifactClient = (deps as any).artifactClient;
         }
 
         this.loadArtifact();
@@ -155,7 +131,7 @@ export class ArtifactDetailPanel {
         // 処理概要: サービス/クライアントから成果物情報を取得し Webview に埋め込む
         // 実装理由: 詳細表示時に最新の成果物情報を提示するため
         try {
-            this._artifact = await this.wbsService!.getArtifactApi(this._artifactId);
+            this._artifact = await this.artifactClient.getArtifact(this._artifactId);
             if (this._artifact) {
                 this._panel.title = `Artifact: ${this._artifact.title}`;
                 this._panel.webview.html = this.getHtmlForWebview(this._artifact, this._extensionUri);
@@ -183,7 +159,7 @@ export class ArtifactDetailPanel {
                 description: data.description || null,
                 version: this._artifact?.version
             };
-            const result = await this.wbsService!.updateArtifactApi(updates);
+            const result = await this.artifactClient.updateArtifact(updates);
 
             if (result.success) {
                 // 処理概要: 成功時は再読込とツリー更新を行う

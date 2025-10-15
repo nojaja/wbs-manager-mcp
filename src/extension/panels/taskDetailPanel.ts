@@ -1,8 +1,13 @@
 
 // VSCode API
 import * as vscode from 'vscode';
-// サービスインターフェース
-import type { WBSServicePublic } from '../services/wbsService.interface';
+import type { ArtifactClientLike, TaskClientLike } from '../services/clientContracts';
+import { buildUpdateTaskPayload, type UpdateTaskParams } from '../tasks/taskPayload';
+
+type TaskDetailDependencies = {
+    taskClient: Pick<TaskClientLike, 'getTask' | 'updateTask'>;
+    artifactClient?: Pick<ArtifactClientLike, 'listArtifacts'>;
+};
 import type { TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../mcp/types';
 
 interface Task {
@@ -30,7 +35,8 @@ export class TaskDetailPanel {
     private _disposables: vscode.Disposable[] = [];
     private _taskId: string;
     private _task: Task | null = null;
-    private readonly wbsService: WBSServicePublic;
+    private readonly taskClient: Pick<TaskClientLike, 'getTask' | 'updateTask'>;
+    private readonly artifactClient?: Pick<ArtifactClientLike, 'listArtifacts'>;
     private _extensionUri?: vscode.Uri;
 
     /**
@@ -39,9 +45,9 @@ export class TaskDetailPanel {
      * なぜ必要か: 複数タブを乱立させず、1つの詳細パネルでタスク編集を集中管理するため
     * @param extensionUri 拡張機能のURI
     * @param taskId タスクID
-    * @param service WBSService 公開インターフェース
+    * @param deps タスクおよび成果物操作に利用するクライアント群
      */
-    public static createOrShow(extensionUri: vscode.Uri, taskId: string, service: WBSServicePublic) {
+    public static createOrShow(extensionUri: vscode.Uri, taskId: string, deps: TaskDetailDependencies) {
         // 処理名: パネル作成/表示
         // 処理概要: 既存パネルがあれば再利用し、無ければ新規作成して詳細を表示する
         // 実装理由: 同一タスクの複数パネルを防ぎリソース消費を抑えるため
@@ -79,23 +85,24 @@ export class TaskDetailPanel {
             }
         );
 
-    TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, service);
+    TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, deps);
     }
 
     /**
-     * コンストラクタ
-     * Webviewパネル・タスクID・WBSServiceを受け取り初期化する
+    * コンストラクタ
+     * Webviewパネル・タスクID・クライアント依存を受け取り初期化する
      * なぜ必要か: パネルの状態・タスク情報・API通信を一元管理するため
     * @param panel Webviewパネル
     * @param extensionUri 拡張機能のURI
     * @param taskId タスクID
-    * @param service WBSService 公開インターフェース
+    * @param deps タスクおよび成果物操作に利用するクライアント群
      */
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, service: WBSServicePublic) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, deps: TaskDetailDependencies) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._taskId = taskId;
-        this.wbsService = service;
+        this.taskClient = deps.taskClient;
+        this.artifactClient = deps.artifactClient;
 
         // 初期ロード
         this.loadTask();
@@ -141,10 +148,10 @@ export class TaskDetailPanel {
      */
     private async loadTask() {
         // 処理名: タスク読込
-    // 処理概要: WBSService からタスク情報を取得し Webview に反映する
+        // 処理概要: タスククライアントからタスク情報を取得し Webview に反映する
         // 実装理由: 詳細表示時に常に最新の情報を表示するため
         try {
-            this._task = await this.wbsService.getTaskApi(this._taskId);
+            this._task = await this.taskClient.getTask(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
                 // サジェスト用成果物一覧を取得（オプション）
@@ -152,7 +159,9 @@ export class TaskDetailPanel {
                 try {
                     // 処理概要: サジェストデータを取得するが、失敗時は機能継続
                     // 実装理由: サジェストは補助機能であり、取得失敗で主機能を妨げないため
-                    artifacts = await this.wbsService.listArtifactsApi();
+                    if (this.artifactClient) {
+                        artifacts = await this.artifactClient.listArtifacts();
+                    }
                 } catch (e) {
                     // サジェスト取得失敗時はログを残さず処理を続行
                 }
@@ -170,8 +179,8 @@ export class TaskDetailPanel {
      * @param data フォームデータ
      * @returns 更新オブジェクト
      */
-    private buildUpdateObject(data: any): any {
-        const updates: any = {};
+    private buildUpdateObject(data: any): UpdateTaskParams {
+        const updates: UpdateTaskParams = {};
         // 各フォーム項目が未定義でなければ更新オブジェクトに追加
         // 理由: サーバAPIに不要なフィールド送信を防ぐ
         if (data.title !== undefined) updates.title = data.title;
@@ -226,8 +235,9 @@ export class TaskDetailPanel {
         // 処理概要: Webview から送られたフォームデータを整形してサーバへ更新リクエストを送り、結果に応じた UI 操作を行う
         // 実装理由: 編集結果を永続化し、ユーザにフィードバックを与えるため
         try {
-            const updates = this.buildUpdateObject(data);
-            const result = await this.wbsService.updateTaskApi(this._taskId, updates);
+        const updates = this.buildUpdateObject(data);
+        const normalized = buildUpdateTaskPayload(updates);
+        const result = await this.taskClient.updateTask(this._taskId, normalized);
 
             if (result.success) {
                 // 処理概要: 成功時は再読み込みとツリー更新を行う

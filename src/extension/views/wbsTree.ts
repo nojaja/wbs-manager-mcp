@@ -2,9 +2,8 @@
 // VSCode APIをインポート
 import * as vscode from 'vscode';
 // 型のみのインポート: 循環参照を避けるため型注釈はimport typeを使用
-// Use the WBSServicePublic interface to avoid depending on service implementation
-// and keep a clear boundary between view and service.
-import type { WBSServicePublic } from '../services/wbsService.interface';
+import type { TaskClientLike } from '../services/clientContracts';
+import { buildCreateTaskPayload } from '../tasks/taskPayload';
 
 
 /**
@@ -41,20 +40,16 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     // ビジネスロジックサービス（WBS の操作はこのサービス経由で行う）
-    private readonly wbsService: WBSServicePublic;
+    private readonly taskClient: TaskClientLike;
 
     /**
      * コンストラクタ
-     * MCPクライアントを受け取り初期化する
-    * @param service WBSサービス
+    * MCPクライアントを受け取り初期化する
+    * @param taskClient タスク操作を提供するクライアント
      * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
-     */
-    /**
-     * コンストラクタ
-    * @param service WBSService（リポジトリ呼び出しを提供）
     */
-    constructor(service: WBSServicePublic) {
-        this.wbsService = service;
+    constructor(taskClient: TaskClientLike) {
+        this.taskClient = taskClient;
     }
 
     /**
@@ -96,7 +91,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         } else if (element.contextValue === 'task' && element.task) {
             // 処理概要: 指定タスクの子タスクをサービスから取得して TreeItem に変換する
             // 実装理由: 子タスクは必要に応じて遅延ロードすることで、初期描画コストを削減するため
-            const children = await this.wbsService.listTasksApi(element.task.id);
+            const children = await this.taskClient.listTasks(element.task.id);
             return children.map((child: Task) => new TreeItem(
                 this.getTaskLabel(child),
                 child.id,
@@ -121,7 +116,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: WBS サービスまたは MCP クライアントを使ってルートタスクを取得する
             // 実装理由: バックエンドから最新のタスク一覧を取得して UI に反映するため
-            const tasks = await this.wbsService.listTasksApi(null);
+            const tasks = await this.taskClient.listTasks(null);
             return tasks.map((task: Task) => new TreeItem(
                 this.getTaskLabel(task),
                 task.id,
@@ -161,7 +156,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: サービス経由でタスク作成 API を呼び出す
             // 実装理由: バックエンドにタスク情報を永続化するため
-            const response = await this.wbsService.createTaskApi({ parentId: parentId ?? null, title: 'New Task' });
+            const payload = buildCreateTaskPayload({ parentId: parentId ?? null, title: 'New Task' });
+            const response = await this.taskClient.createTask(payload);
             if (!response.success) {
                 // 処理概要: API が失敗を返した場合はエラーメッセージを表示して失敗を返す
                 // 実装理由: ユーザに失敗理由を伝え、UI を一貫した状態に保つため
@@ -217,7 +213,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: サービス経由で削除 API を呼び出す
             // 実装理由: サーバに永続データの変更を反映させるため
-            const response = await this.wbsService.deleteTaskApi(target.task.id);
+            const response = await this.taskClient.deleteTask(target.task.id);
             if (!response.success) {
                 // 処理概要: API が失敗を返した場合はエラーメッセージを表示
                 // 実装理由: ユーザに失敗理由を通知し UI の整合性を保つため
@@ -336,7 +332,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 取得したタスク（存在しない場合はundefined）
      */
     private async fetchTaskById(taskId: string): Promise<Task | undefined> {
-        return await this.wbsService.getTaskApi(taskId);
+    return await this.taskClient.getTask(taskId);
     }
 
     /**
@@ -346,7 +342,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 実行結果を示すPromise（完了時にresolve）
      */
     private async performMove(taskId: string, parentId: string | null): Promise<void> {
-        const result = await this.wbsService.moveTaskApi(taskId, parentId);
+    const result = await this.taskClient.moveTask(taskId, parentId);
 
         if (result.success) {
             this.refresh();

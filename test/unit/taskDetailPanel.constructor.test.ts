@@ -16,10 +16,14 @@ describe('TaskDetailPanel constructor and dispose', () => {
 
     const fakeUri: any = { path: '' };
     TaskDetailPanel.createOrShow(fakeUri, 't1', {
-      getTaskApi: jest.fn(),
-      listArtifactsApi: jest.fn(),
-      updateTaskApi: jest.fn()
-    } as any);
+      taskClient: {
+        getTask: jest.fn(),
+        updateTask: jest.fn()
+      },
+      artifactClient: {
+        listArtifacts: jest.fn()
+      }
+    });
 
     expect(fakePanelInstance._panel.reveal).toHaveBeenCalled();
     expect(fakePanelInstance.updateTask).toHaveBeenCalledWith('t1');
@@ -36,13 +40,17 @@ describe('TaskDetailPanel constructor and dispose', () => {
       dispose: jest.fn()
     };
 
-    const fakeService: any = {
-      getTaskApi: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-      listArtifactsApi: jest.fn().mockResolvedValue([]),
-      updateTaskApi: jest.fn().mockResolvedValue({ success: true })
+    const deps = {
+      taskClient: {
+        getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
+        updateTask: jest.fn().mockResolvedValue({ success: true })
+      },
+      artifactClient: {
+        listArtifacts: jest.fn().mockResolvedValue([])
+      }
     };
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
 
     // simulate a save message
     expect(messageHandlers.length).toBeGreaterThan(0);
@@ -51,7 +59,7 @@ describe('TaskDetailPanel constructor and dispose', () => {
     messageHandlers[0](saveMsg);
 
     // updateTask should have been called via saveTask
-  expect(fakeService.updateTaskApi).toHaveBeenCalled();
+  expect(deps.taskClient.updateTask).toHaveBeenCalled();
   });
 
   test('dispose clears currentPanel and disposables', () => {
@@ -64,12 +72,16 @@ describe('TaskDetailPanel constructor and dispose', () => {
       dispose: jest.fn()
     };
 
-    const fakeService: any = {
-      getTaskApi: jest.fn(),
-      listArtifactsApi: jest.fn(),
-      updateTaskApi: jest.fn()
+    const deps = {
+      taskClient: {
+        getTask: jest.fn(),
+        updateTask: jest.fn()
+      },
+      artifactClient: {
+        listArtifacts: jest.fn()
+      }
     };
-    const inst = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeService);
+    const inst = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
     // push a disposable and call dispose
     (inst as any)._disposables.push(disposable as any);
 
