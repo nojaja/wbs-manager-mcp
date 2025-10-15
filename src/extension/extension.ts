@@ -62,7 +62,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // サーバ・クライアント自動起動
     // 処理概要: 開発用ローカルサーバを自動で起動し、クライアント接続を確立する
     // 実装理由: ユーザが手動でサーバを起動する手間を省き、即時に UI が動作する状態にするため
-    await startLocalServer(context);
+    await serverService.startLocalServer(context, [initializeClient, taskClient, artifactClient]);
 
     // ツリービュー初期化
     const dragAndDropController = new WBSTreeDragAndDropController(wbsProvider);
@@ -80,7 +80,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const startServerCommand = vscode.commands.registerCommand('mcpWbs.start', async () => {
         // 処理概要: 明示的にローカルサーバを再起動/起動するコマンド
         // 実装理由: サーバ停止後の再接続や設定反映のためにユーザが手動で起動できるようにする
-        await startLocalServer(context);
+    await serverService.startLocalServer(context, [initializeClient, taskClient, artifactClient]);
         wbsService.refreshWbsTree();
         wbsService.refreshArtifactTree();
     });
@@ -91,7 +91,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // 処理概要: サーバプロセスを確認し、必要なら再起動してからツリーを再読み込みする
         // 実装理由: サーバ停止後でも UI の復旧を自動化するため
         if (!serverService.getServerProcess()) {
-            await startLocalServer(context);
+            await serverService.startLocalServer(context, [initializeClient, taskClient, artifactClient]);
         }
         wbsService.refreshWbsTree();
     });
@@ -207,39 +207,4 @@ export function deactivate() {
  * なぜ必要か: サーバ・クライアント・設定の一括起動/初期化を自動化し、ユーザー操作を簡略化するため
  * @param context VSCode拡張機能のコンテキスト
  */
-async function startLocalServer(context: vscode.ExtensionContext) {
-    // 既にサーバが起動していれば何もしない
-    // 理由: 多重起動による競合・リソース浪費を防ぐため
-    if (serverService.getServerProcess()) {
-        vscode.window.showInformationMessage('MCP server is already running');
-        return;
-    }
-
-    // サーバ実行ファイルのパスを決定
-    const serverPath = path.join(context.extensionPath, 'out', 'mcpServer', 'index.js');
-    // ワークスペースルートを決定
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    const workspaceRoot = workspaceFolders && workspaceFolders.length > 0
-        ? workspaceFolders[0].uri.fsPath
-        : context.extensionPath;
-
-    // サーバファイル存在チェック
-    // 理由: ファイルがなければ以降の処理をスキップし、エラー通知のみ行う
-    if (!serverService.validateServerPath(serverPath)) {
-        return;
-    }
-
-    try {
-        // サーバプロセス起動
-        // ServerService に起動と MCP クライアント群の接続を委譲
-        await serverService.startAndAttachClient(
-            [initializeClient, taskClient, artifactClient],
-            serverPath,
-            workspaceRoot
-        );
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        outputChannel.appendLine(`Failed to start server: ${errorMessage}`);
-        vscode.window.showErrorMessage(`Failed to start MCP server: ${errorMessage}`);
-    }
-}
+// startLocalServer の実装は ServerService に移管されました

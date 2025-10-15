@@ -2,6 +2,7 @@
 import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
 type ClientRegistration = {
   handleResponseFromServer?: (resp: string) => void;
@@ -327,6 +328,37 @@ export class ServerService {
    */
   getServerProcess() {
     return this.serverProcess;
+  }
+
+  /**
+   * extension.ts から移管されたローカルサーバ起動ユーティリティ
+   * @param context VSCode のコンテキスト
+   * @param clients 登録するクライアント配列
+   */
+  async startLocalServer(context: vscode.ExtensionContext, clients?: ClientRegistration[]) {
+    // 既に起動済みなら何もしない
+    if (this.getServerProcess()) {
+      vscode.window.showInformationMessage('MCP server is already running');
+      return;
+    }
+
+    const serverPath = path.join(context.extensionPath, 'out', 'mcpServer', 'index.js');
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    const workspaceRoot = workspaceFolders && workspaceFolders.length > 0
+      ? workspaceFolders[0].uri.fsPath
+      : context.extensionPath;
+
+    if (!this.validateServerPath(serverPath)) {
+      return;
+    }
+
+    try {
+      await this.startAndAttachClient(clients ?? [], serverPath, workspaceRoot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.outputChannel.appendLine(`Failed to start server: ${message}`);
+      vscode.window.showErrorMessage(`Failed to start MCP server: ${message}`);
+    }
   }
 
   /**
