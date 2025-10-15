@@ -71,10 +71,10 @@ describe('WBSTreeProvider', () => {
   test('handleTaskDrop moves task when valid', async () => {
     const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
-    fakeTaskClient.getTask.mockResolvedValue({
-      id: 't1',
-      parent_id: 'old',
-      childCount: 0
+    fakeTaskClient.getTask.mockImplementation(async (id: string) => {
+      if (id === 't1') return { id: 't1', parent_id: 'old', childCount: 0 };
+      if (id === 'parentB') return { id: 'parentB', parent_id: null, childCount: 0 };
+      return undefined;
     });
     fakeTaskClient.moveTask.mockResolvedValue({ success: true });
 
@@ -89,16 +89,19 @@ describe('WBSTreeProvider', () => {
 
   test('handleTaskDrop prevents moving under descendant', async () => {
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage');
-    fakeTaskClient.getTask.mockResolvedValue({
-      id: 't1',
-      parent_id: 'old',
-      childCount: 1
+    // Setup chain: child -> parent -> t1 (dragged), so moving t1 under child should be prevented
+    fakeTaskClient.getTask.mockImplementation(async (id: string) => {
+      if (id === 't1') return { id: 't1', parent_id: 'old', childCount: 1 };
+      if (id === 'child') return { id: 'child', parent_id: 'parent', childCount: 0 };
+      if (id === 'parent') return { id: 'parent', parent_id: 't1', childCount: 0 };
+      return undefined;
     });
 
     await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 'child', childCount: 0 } } as any);
 
-    // containsTaskは常にfalseを返すため、moveTaskが呼ばれる仕様に合わせて修正
-    expect(fakeTaskClient.moveTask).toHaveBeenCalled();
+    // Should be prevented and show warning; moveTask must NOT be called
+    expect(fakeTaskClient.moveTask).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
@@ -252,15 +255,15 @@ describe('WBSTreeProvider', () => {
 
   test('handleTaskDrop handles move task API error', async () => {
     const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
-    fakeTaskClient.getTask.mockResolvedValue({
-      id: 't1',
-      parent_id: 'old',
-      childCount: 0
+    fakeTaskClient.getTask.mockImplementation(async (id: string) => {
+      if (id === 't1') return { id: 't1', parent_id: 'old', childCount: 0 };
+      if (id === 't2') return { id: 't2', parent_id: null, childCount: 0 };
+      return undefined;
     });
     fakeTaskClient.moveTask.mockResolvedValue({ success: false, error: 'Move failed' });
-    
+
     await provider.handleTaskDrop('t1', { contextValue: 'task', task: { id: 't2', childCount: 0 } } as any);
-    
+
     expect(errorSpy).toHaveBeenCalledWith('タスクの移動に失敗しました: Move failed');
     errorSpy.mockRestore();
   });
