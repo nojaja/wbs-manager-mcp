@@ -1,14 +1,14 @@
 
 // VSCode API
 import * as vscode from 'vscode';
-import type { ArtifactClientLike, TaskClientLike } from '../services/clientContracts';
-import { buildUpdateTaskPayload, type UpdateTaskParams } from '../tasks/taskPayload';
+import type { ArtifactClientLike, TaskClientLike } from '../../services/clientContracts';
+import { buildUpdateTaskPayload, type UpdateTaskParams } from '../../tasks/taskPayload';
 
 type TaskDetailDependencies = {
     taskClient: Pick<TaskClientLike, 'getTask' | 'updateTask'>;
     artifactClient?: Pick<ArtifactClientLike, 'listArtifacts'>;
 };
-import type { TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../mcp/types';
+import type { TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../../repositories/mcp/types';
 
 interface Task {
     id: string;

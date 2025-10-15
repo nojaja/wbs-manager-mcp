@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { Artifact } from '../mcp/types';
-import type { ArtifactClientLike } from '../services/clientContracts';
+import type { Artifact } from '../../repositories/mcp/types';
+import type { ArtifactClientLike } from '../../services/clientContracts';
 
 /**
  * プロジェクト成果物ツリープロバイダ

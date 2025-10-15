@@ -4,18 +4,18 @@ import * as vscode from 'vscode';
 // パス操作ユーティリティ
 import * as path from 'path';
 // WBSツリープロバイダ（ツリー表示用）
-import { WBSTreeDragAndDropController } from './views/wbsTree';
-import { ArtifactTreeItem } from './views/artifactTree';
+import { WBSTreeDragAndDropController } from './views/explorer/wbsTree';
+import { ArtifactTreeItem } from './views/explorer/artifactTree';
 // サービス層
 import { ServerService } from './server/ServerService';
 // タスク詳細パネル（WebView表示用）
-import { TaskDetailPanel } from './panels/taskDetailPanel';
+import { TaskDetailPanel } from './views/panels/taskDetailPanel';
 // 成果物詳細パネル（WebView表示用）
-import { ArtifactDetailPanel } from './panels/artifactDetailPanel';
+import { ArtifactDetailPanel } from './views/panels/artifactDetailPanel';
 // MCPクライアント（API通信・管理用）
-import { MCPInitializeClient } from './mcp/initializeClient';
-import { MCPTaskClient } from './mcp/taskClient';
-import { MCPArtifactClient } from './mcp/artifactClient';
+import { MCPInitializeClient } from './repositories/mcp/initializeClient';
+import { MCPTaskClient } from './repositories/mcp/taskClient';
+import { MCPArtifactClient } from './repositories/mcp/artifactClient';
 
 
 
@@ -45,8 +45,8 @@ export async function activate(context: vscode.ExtensionContext) {
     taskClient = new MCPTaskClient(outputChannel);
     artifactClient = new MCPArtifactClient(outputChannel);
     serverService = new ServerService(outputChannel);
-    const { WBSTreeProvider } = await import('./views/wbsTree');
-    const { ArtifactTreeProvider } = await import('./views/artifactTree');
+    const { WBSTreeProvider } = await import('./views/explorer/wbsTree');
+    const { ArtifactTreeProvider } = await import('./views/explorer/artifactTree');
     const wbsProvider = new WBSTreeProvider(taskClient);
     const artifactProvider = new ArtifactTreeProvider(artifactClient);
 
@@ -190,12 +190,3 @@ export function deactivate() {
         serverService.stopServerProcess();
     }
 }
-
-
-/**
- * ローカルサーバ起動処理
- * サーバ起動・クライアント接続・設定生成をServerService経由で行う
- * なぜ必要か: サーバ・クライアント・設定の一括起動/初期化を自動化し、ユーザー操作を簡略化するため
- * @param context VSCode拡張機能のコンテキスト
- */
-// startLocalServer の実装は ServerService に移管されました

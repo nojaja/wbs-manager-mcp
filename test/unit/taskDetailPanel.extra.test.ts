@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
 
 // We will mock task and artifact client methods to simulate saveTask flows
 

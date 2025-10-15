@@ -1,4 +1,4 @@
-import { WBSTreeProvider } from '../../src/extension/views/wbsTree';
+import { WBSTreeProvider } from '../../src/extension/views/explorer/wbsTree';
 import * as vscode from 'vscode';
 
 const fakeTaskClient: any = {

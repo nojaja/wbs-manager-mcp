@@ -1,5 +1,5 @@
-import { MCPTaskClient } from '../../src/extension/mcp/taskClient';
-import { MCPArtifactClient } from '../../src/extension/mcp/artifactClient';
+import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 const outputChannel = { appendLine: jest.fn() } as any;
 

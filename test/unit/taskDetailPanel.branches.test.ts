@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
 import * as vscode from 'vscode';
 
 const createDeps = (overrides: {

@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import * as vscode from 'vscode';
-import { ArtifactTreeItem, ArtifactTreeProvider } from '../../src/extension/views/artifactTree';
-import type { Artifact } from '../../src/extension/mcp/types';
+import { ArtifactTreeItem, ArtifactTreeProvider } from '../../src/extension/views/explorer/artifactTree';
+import type { Artifact } from '../../src/extension/repositories/mcp/types';
 import type { ArtifactClientLike } from '../../src/extension/services/clientContracts';
 
 jest.mock('vscode');
@@ -138,7 +138,7 @@ describe('ProjectArtifactTreeProvider', () => {
     showInputMock.mockResolvedValueOnce('Valid Title');
 
     await provider.createArtifact();
-    
+
     const validateInput = showInputMock.mock.calls[0][0]?.validateInput;
     expect(validateInput?.('')).toBe('名称は必須です。');
     expect(validateInput?.('  ')).toBe('名称は必須です。');
@@ -149,12 +149,12 @@ describe('ProjectArtifactTreeProvider', () => {
   test('createArtifact handles API error', async () => {
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
     const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
-    
+
     showInputMock
       .mockResolvedValueOnce('Test Title')
       .mockResolvedValueOnce('test.md')
       .mockResolvedValueOnce('Test description');
-    
+
     artifactClient.createArtifact.mockResolvedValueOnce({ success: false, error: 'Creation failed' });
 
     await provider.createArtifact();
@@ -167,12 +167,12 @@ describe('ProjectArtifactTreeProvider', () => {
   test('createArtifact handles API error without message', async () => {
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
     const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
-    
+
     showInputMock
       .mockResolvedValueOnce('Test Title')
       .mockResolvedValueOnce('test.md')
       .mockResolvedValueOnce('Test description');
-    
+
     artifactClient.createArtifact.mockResolvedValueOnce({ success: false });
 
     await provider.createArtifact();
@@ -186,7 +186,7 @@ describe('ProjectArtifactTreeProvider', () => {
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
     const refreshSpy = jest.spyOn(provider, 'refresh');
-    
+
     showInputMock
       .mockResolvedValueOnce('  Test Title  ')
       .mockResolvedValueOnce('  test.md  ')
@@ -203,7 +203,7 @@ describe('ProjectArtifactTreeProvider', () => {
     });
     expect(infoSpy).toHaveBeenCalledWith('成果物「Test Title」を作成しました。');
     expect(refreshSpy).toHaveBeenCalled();
-    
+
     showInputMock.mockRestore();
     infoSpy.mockRestore();
     refreshSpy.mockRestore();
@@ -211,7 +211,7 @@ describe('ProjectArtifactTreeProvider', () => {
 
   test('createArtifact handles null uri and description', async () => {
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
-    
+
     showInputMock
       .mockResolvedValueOnce('Test Title')
       .mockResolvedValueOnce('')
@@ -226,7 +226,7 @@ describe('ProjectArtifactTreeProvider', () => {
       uri: null,
       description: null
     });
-    
+
     showInputMock.mockRestore();
   });
 
@@ -244,7 +244,7 @@ describe('ProjectArtifactTreeProvider', () => {
     const artifact: Artifact = { id: 'a1', title: 'Test', version: 1 };
     const item = new ArtifactTreeItem(artifact);
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
-    
+
     showInputMock.mockResolvedValueOnce(undefined);
 
     await provider.editArtifact(item);
@@ -257,7 +257,7 @@ describe('ProjectArtifactTreeProvider', () => {
     const artifact: Artifact = { id: 'a1', title: 'Test', version: 1 };
     const item = new ArtifactTreeItem(artifact);
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
-    
+
     showInputMock.mockResolvedValueOnce('Valid Title');
 
     await provider.editArtifact(item);
@@ -275,21 +275,21 @@ describe('ProjectArtifactTreeProvider', () => {
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
     const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
     const refreshSpy = jest.spyOn(provider, 'refresh');
-    
+
     showInputMock
       .mockResolvedValueOnce('Updated Title')
       .mockResolvedValueOnce('updated.md')
       .mockResolvedValueOnce('Updated description');
-    
+
     artifactClient.updateArtifact.mockResolvedValueOnce({ success: false, error: 'Update failed' });
 
     await provider.editArtifact(item);
 
     expect(errorSpy).toHaveBeenCalledWith('Update failed');
     expect(refreshSpy).toHaveBeenCalled();
-    
+
     showInputMock.mockRestore();
-    errorSpy.mockRestore(); 
+    errorSpy.mockRestore();
     refreshSpy.mockRestore();
   });
 
@@ -299,12 +299,12 @@ describe('ProjectArtifactTreeProvider', () => {
     const showInputMock = jest.spyOn(vscode.window, 'showInputBox');
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
     const refreshSpy = jest.spyOn(provider, 'refresh');
-    
+
     showInputMock
       .mockResolvedValueOnce('  Updated Title  ')
       .mockResolvedValueOnce('  updated.md  ')
       .mockResolvedValueOnce('  Updated description  ');
-    
+
     artifactClient.updateArtifact.mockResolvedValueOnce({ success: true, artifact: { id: 'a1', title: 'Updated Title', version: 2 } });
 
     await provider.editArtifact(item);
@@ -318,7 +318,7 @@ describe('ProjectArtifactTreeProvider', () => {
     });
     expect(infoSpy).toHaveBeenCalledWith('成果物「Updated Title」を更新しました。');
     expect(refreshSpy).toHaveBeenCalled();
-    
+
     showInputMock.mockRestore();
     infoSpy.mockRestore();
     refreshSpy.mockRestore();
@@ -350,13 +350,13 @@ describe('ProjectArtifactTreeProvider', () => {
     const item = new ArtifactTreeItem(artifact);
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValueOnce('削除' as any);
     const errorSpy = jest.spyOn(vscode.window, 'showErrorMessage');
-    
+
     artifactClient.deleteArtifact.mockResolvedValueOnce({ success: false, error: 'Delete failed' });
 
     await provider.deleteArtifact(item);
 
     expect(errorSpy).toHaveBeenCalledWith('Delete failed');
-    
+
     warnSpy.mockRestore();
     errorSpy.mockRestore();
   });
@@ -367,14 +367,14 @@ describe('ProjectArtifactTreeProvider', () => {
     const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValueOnce('削除' as any);
     const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
     const refreshSpy = jest.spyOn(provider, 'refresh');
-    
+
     artifactClient.deleteArtifact.mockResolvedValueOnce({ success: true });
 
     await provider.deleteArtifact(item);
 
     expect(infoSpy).toHaveBeenCalledWith('成果物「Test」を削除しました。');
     expect(refreshSpy).toHaveBeenCalled();
-    
+
     warnSpy.mockRestore();
     infoSpy.mockRestore();
     refreshSpy.mockRestore();

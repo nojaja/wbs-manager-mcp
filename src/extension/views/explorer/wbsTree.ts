@@ -2,8 +2,8 @@
 // VSCode APIをインポート
 import * as vscode from 'vscode';
 // 型のみのインポート: 循環参照を避けるため型注釈はimport typeを使用
-import type { TaskClientLike } from '../services/clientContracts';
-import { buildCreateTaskPayload } from '../tasks/taskPayload';
+import type { TaskClientLike } from '../../services/clientContracts';
+import { buildCreateTaskPayload } from '../../tasks/taskPayload';
 
 
 /**

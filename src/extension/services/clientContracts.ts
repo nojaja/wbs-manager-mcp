@@ -1,4 +1,4 @@
-import type { Artifact } from '../mcp/types';
+import type { Artifact } from '../repositories/mcp/types';
 import type { ArtifactReferenceInput, CompletionConditionInput } from '../tasks/taskPayload';
 
 export interface TaskClientLike {

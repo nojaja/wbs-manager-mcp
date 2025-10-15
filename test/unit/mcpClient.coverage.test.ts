@@ -1,6 +1,6 @@
-import { MCPTaskClient } from '../../src/extension/mcp/taskClient';
-import { MCPArtifactClient } from '../../src/extension/mcp/artifactClient';
-import { MCPInitializeClient } from '../../src/extension/mcp/initializeClient';
+import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
+import { MCPInitializeClient } from '../../src/extension/repositories/mcp/initializeClient';
 
 describe('MCP client additional coverage tests', () => {
   const fakeOutput = { appendLine: jest.fn() } as any;

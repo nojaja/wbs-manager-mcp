@@ -12,19 +12,19 @@ jest.mock('../../src/extension/server/ServerService', () => ({
     }))
 }));
 
-jest.mock('../../src/extension/mcp/initializeClient', () => ({
+jest.mock('../../src/extension/repositories/mcp/initializeClient', () => ({
     MCPInitializeClient: jest.fn().mockImplementation(() => ({
         start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
         stop: jest.fn()
     }))
 }));
-jest.mock('../../src/extension/mcp/taskClient', () => ({
+jest.mock('../../src/extension/repositories/mcp/taskClient', () => ({
     MCPTaskClient: jest.fn().mockImplementation(() => ({
         start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
         stop: jest.fn()
     }))
 }));
-jest.mock('../../src/extension/mcp/artifactClient', () => ({
+jest.mock('../../src/extension/repositories/mcp/artifactClient', () => ({
     MCPArtifactClient: jest.fn().mockImplementation(() => ({
         start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
         stop: jest.fn()
@@ -33,9 +33,9 @@ jest.mock('../../src/extension/mcp/artifactClient', () => ({
 
 // Import the mocked constructors
 const { ServerService } = require('../../src/extension/server/ServerService');
-const { MCPInitializeClient } = require('../../src/extension/mcp/initializeClient');
-const { MCPTaskClient } = require('../../src/extension/mcp/taskClient');
-const { MCPArtifactClient } = require('../../src/extension/mcp/artifactClient');
+const { MCPInitializeClient } = require('../../src/extension/repositories/mcp/initializeClient');
+const { MCPTaskClient } = require('../../src/extension/repositories/mcp/taskClient');
+const { MCPArtifactClient } = require('../../src/extension/repositories/mcp/artifactClient');
 
 describe('startLocalServer integration', () => {
     let context: any;

@@ -1,4 +1,4 @@
-import { MCPArtifactClient } from '../../src/extension/mcp/artifactClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 describe('MCPClient extra tests', () => {
   let client: MCPArtifactClient;

@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
 
 // Minimal smoke test: call getHtmlForWebview via creating instance using mocked panel
 // We avoid complex VSCode APIs by directly testing the HTML generator method via a small wrapper class.

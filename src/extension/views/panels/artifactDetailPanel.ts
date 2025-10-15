@@ -1,8 +1,8 @@
 // VSCode API
 import * as vscode from 'vscode';
 // MCPクライアント（API通信・管理用）
-import type { ArtifactClientLike } from '../services/clientContracts';
-import type { Artifact } from '../mcp/types';
+import type { ArtifactClientLike } from '../../services/clientContracts';
+import type { Artifact } from '../../repositories/mcp/types';
 
 type ArtifactDetailDependencies = {
     artifactClient: Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact'>;

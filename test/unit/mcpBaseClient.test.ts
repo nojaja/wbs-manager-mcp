@@ -1,4 +1,4 @@
-import { MCPBaseClient } from '../../src/extension/mcp/baseClient';
+import { MCPBaseClient } from '../../src/extension/repositories/mcp/baseClient';
 
 const fakeOutput = { appendLine: jest.fn() } as any;
 
