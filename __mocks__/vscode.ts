@@ -10,7 +10,11 @@ export const window = {
 };
 
 export const commands = {
-  executeCommand: (_: string, ...__args: any[]) => Promise.resolve()
+  executeCommand: (_: string, ...__args: any[]) => Promise.resolve(),
+  registerCommand: (_: string, handler?: (...args: any[]) => any) => {
+    // return a disposable-like object
+    return { dispose: () => {} };
+  }
 };
 
 export const workspace = {
