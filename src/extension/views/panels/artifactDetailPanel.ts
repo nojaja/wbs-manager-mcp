@@ -1,17 +1,14 @@
 import * as vscode from 'vscode';
 import type { ArtifactClientLike } from '../../services/clientContracts';
 import { WebviewPanelBase } from './WebviewPanelBase';
+import type { Artifact as ArtifactType } from '../../types';
 
 type ArtifactDetailDependencies = {
   artifactClient: Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact' | 'listArtifacts'>;
 };
 
-interface Artifact {
-  id: string;
-  title: string;
-  description?: string;
-  version?: number;
-}
+// Removed local Artifact interface in favor of centralized import
+type Artifact = ArtifactType;
 
 /**
  * Artifact detail webview panel

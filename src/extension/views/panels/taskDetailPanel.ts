@@ -4,26 +4,13 @@ import * as vscode from 'vscode';
 import type { ArtifactClientLike, TaskClientLike } from '../../services/clientContracts';
 import { buildUpdateTaskPayload, type UpdateTaskParams } from '../../tasks/taskPayload';
 import { WebviewPanelBase } from './WebviewPanelBase';
-import type { TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../../repositories/mcp/types';
+import type { Task, TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../../types';
 
 type TaskDetailDependencies = {
     taskClient: Pick<TaskClientLike, 'getTask' | 'updateTask'>;
     artifactClient?: Pick<ArtifactClientLike, 'listArtifacts'>;
 };
 
-interface Task {
-    id: string;
-    parent_id?: string;
-    title: string;
-    description?: string;
-    assignee?: string;
-    status: string;
-    estimate?: string;
-    version: number;
-    deliverables?: TaskArtifactAssignment[];
-    prerequisites?: TaskArtifactAssignment[];
-    completionConditions?: TaskCompletionCondition[];
-}
 
 /**
  * Task detail webview panel

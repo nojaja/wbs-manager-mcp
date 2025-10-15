@@ -147,8 +147,8 @@
     "build:webview": "webpack --config webpack.webview.config.js --mode production",
     "watch:webview": "webpack --config webpack.webview.config.js --mode development --watch",
     "test": "npm run test:unit",
-    "test:unit": "npm run lint && jest --config=jest.config.js --coverage && npx depcruise src",
-    "lint": "eslint . --ext .ts",
+    "test:unit": "npm run lint && jest --config=jest.config.js --coverage",
+    "lint": "eslint . --ext .ts && npx depcruise src",
     "lint:fix": "eslint . --ext .ts --fix",
     "start-server-dev": "node ./out/mcpServer/index.js",
     "start-extension-dev": "code --extensionDevelopmentPath=."

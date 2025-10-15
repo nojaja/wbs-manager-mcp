@@ -1,9 +1,9 @@
-import type { Artifact } from '../repositories/mcp/types';
+import type { Artifact, Task, ArtifactReferenceInput as CommonArtifactReferenceInput, TaskCompletionCondition as TaskCompletionConditionType } from '../types';
 import type { ArtifactReferenceInput, CompletionConditionInput } from '../tasks/taskPayload';
 
 export interface TaskClientLike {
-    listTasks(parentId?: string | null): Promise<any[]>;
-    getTask(taskId: string): Promise<any | null>;
+    listTasks(parentId?: string | null): Promise<Task[]>;
+    getTask(taskId: string): Promise<Task | null>;
     createTask(params: {
         title?: string;
         description?: string;

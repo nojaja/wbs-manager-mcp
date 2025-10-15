@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 // 型のみのインポート: 循環参照を避けるため型注釈はimport typeを使用
 import type { TaskClientLike } from '../../services/clientContracts';
 import { TreeItem } from './TreeItem';
+import type { Task } from '../../types';
 import { buildCreateTaskPayload } from '../../tasks/taskPayload';
 
 
@@ -11,17 +12,7 @@ import { buildCreateTaskPayload } from '../../tasks/taskPayload';
  * タスク情報を表現するインターフェース
  * プロジェクト管理の各タスクの属性を定義
  */
-interface Task {
-    id: string; // タスクID
-    parent_id?: string; // 親タスクID（サブタスクの場合）
-    title: string; // タイトル
-    description?: string; // 詳細説明
-    assignee?: string; // 担当者
-    status: string; // 状態（例: in-progress, completed）
-    estimate?: string; // 見積もり
-    version: number; // バージョン
-    childCount?: number; // 子タスク数（wbs.listTasks返却用）
-}
+// Task type imported from centralized types
 
 type DropDecision =
     | { kind: 'parent'; parentId: string | null }
@@ -332,7 +323,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param taskId 取得するタスクのID
      * @returns 取得したタスク（存在しない場合はundefined）
      */
-    private async fetchTaskById(taskId: string): Promise<Task | undefined> {
+    private async fetchTaskById(taskId: string): Promise<Task | null> {
         return await this.taskClient.getTask(taskId);
     }
 

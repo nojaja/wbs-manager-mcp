@@ -1,35 +1,37 @@
-export type TaskArtifactRole = 'deliverable' | 'prerequisite';
+import type {
+    TaskArtifactRole as CommonTaskArtifactRole,
+    Artifact as CommonArtifact,
+    TaskArtifactAssignment as CommonTaskArtifactAssignment,
+    TaskCompletionCondition as CommonTaskCompletionCondition,
+    ArtifactReferenceInput as CommonArtifactReferenceInput,
+} from '../../types';
 
-export interface Artifact {
-    id: string;
-    title: string;
-    uri?: string;
-    description?: string;
+// Re-export common types (aliases) for compatibility
+export type TaskArtifactRole = CommonTaskArtifactRole;
+
+export interface Artifact extends CommonArtifact {
+    // Server-specific timestamps
     created_at?: string;
     updated_at?: string;
-    version: number;
+    // keep version as number
 }
 
-export interface TaskArtifactAssignment {
-    id: string;
-    artifact_id: string;
-    role: TaskArtifactRole;
-    crudOperations?: string;
-    order: number;
-    artifact: Artifact;
+export interface TaskArtifactAssignment extends CommonTaskArtifactAssignment {
+    // server representation may include DB ids and ordering
+    id?: string;
+    artifact_id?: string;
+    order?: number;
+    // keep nested artifact shape
+    artifact?: Artifact;
 }
 
-export interface TaskCompletionCondition {
-    id: string;
-    task_id: string;
-    description: string;
-    order: number;
+export interface TaskCompletionCondition extends CommonTaskCompletionCondition {
+    id?: string;
+    task_id?: string;
+    order?: number;
 }
 
-export interface ArtifactReferenceInput {
-    artifactId: string;
-    crudOperations?: string | null;
-}
+export type ArtifactReferenceInput = CommonArtifactReferenceInput;
 
 export interface CompletionConditionInput {
     description: string;

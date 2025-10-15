@@ -1,22 +1,19 @@
 import * as vscode from 'vscode';
 
-/* eslint-disable jsdoc/require-jsdoc */
-
-/**
- * タスク情報（ビュー内利用）
- */
-interface Task {
-    id: string;
-    parent_id?: string;
-    title?: string;
-    status?: string;
-}
-
 /**
  * ツリー表示用の TreeItem
  * View 表現の責務のみを持つ
  */
 export class TreeItem extends vscode.TreeItem {
+    /**
+     * Create a TreeItem for the explorer view
+     * @param label 表示ラベル
+     * @param itemId アイテムID
+     * @param contextValue コンテキスト値
+     * @param collapsibleState 折りたたみ状態
+     * @param description 表示のツールチップ
+     * @param task 任意のタスクオブジェクト（view責務のみ）
+     */
     constructor(
         public readonly label: string,
         public readonly itemId: string,
