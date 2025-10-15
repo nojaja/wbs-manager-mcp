@@ -18,6 +18,8 @@ export interface ToolDeps {
 export type ToolMeta = {
     name: string;
     description?: string;
+    // inputSchema may be a validation schema or a function that throws/returns errors.
+    // It is intentionally typed as any to allow multiple schema libs or a custom validator function.
     inputSchema?: any;
 };
 
@@ -75,5 +77,35 @@ export class Tool {
      */
     async run(args: any): Promise<any> {
         throw new Error('Tool.run must be implemented by subclass');
+    }
+}
+
+/**
+ * RpcError: standardized error used by tools/dispatcher to return structured errors
+ * code: numeric JSON-RPC error code (application specific codes should avoid the -32000..-32099 reserved range)
+ * message: short description
+ * data: optional additional payload (object)
+ */
+/**
+ * RpcError represents a structured error that can be thrown by tools to
+ * provide a JSON-RPC compatible error object back to the caller.
+ *
+ * Example: throw new RpcError(1001, 'Not found', { id: '123' })
+ */
+export class RpcError extends Error {
+    code: number;
+    data?: any;
+    /**
+     * Create a RpcError
+     * @param {number} code JSON-RPC error code
+     * @param {string} message error message
+     * @param {any} [data] optional additional data
+     */
+    constructor(code: number, message: string, data?: any) {
+        super(message);
+        this.code = code;
+        this.data = data;
+        // set the name for easier identification in logs
+        this.name = 'RpcError';
     }
 }
