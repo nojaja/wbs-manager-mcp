@@ -12,8 +12,20 @@ jest.mock('../../src/extension/server/ServerService', () => ({
     }))
 }));
 
-jest.mock('../../src/extension/mcpClient', () => ({
-    MCPClient: jest.fn().mockImplementation(() => ({
+jest.mock('../../src/extension/repositories/mcp/initializeClient', () => ({
+    MCPInitializeClient: jest.fn().mockImplementation(() => ({
+        start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+        stop: jest.fn()
+    }))
+}));
+jest.mock('../../src/extension/repositories/mcp/taskClient', () => ({
+    MCPTaskClient: jest.fn().mockImplementation(() => ({
+        start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
+        stop: jest.fn()
+    }))
+}));
+jest.mock('../../src/extension/repositories/mcp/artifactClient', () => ({
+    MCPArtifactClient: jest.fn().mockImplementation(() => ({
         start: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
         stop: jest.fn()
     }))
@@ -21,7 +33,9 @@ jest.mock('../../src/extension/mcpClient', () => ({
 
 // Import the mocked constructors
 const { ServerService } = require('../../src/extension/server/ServerService');
-const { MCPClient } = require('../../src/extension/mcpClient');
+const { MCPInitializeClient } = require('../../src/extension/repositories/mcp/initializeClient');
+const { MCPTaskClient } = require('../../src/extension/repositories/mcp/taskClient');
+const { MCPArtifactClient } = require('../../src/extension/repositories/mcp/artifactClient');
 
 describe('startLocalServer integration', () => {
     let context: any;
@@ -43,7 +57,7 @@ describe('startLocalServer integration', () => {
     it('should follow server start sequence when not running (simulated)', async () => {
     // Create instances using the mocked constructors (call instead of new to match jest.fn mockImplementation behavior)
     const svc = (ServerService as any)() as any;
-    const client = (MCPClient as any)() as any;
+    const client = (MCPInitializeClient as any)() as any;
 
         // Simulate startLocalServer logic manually
         // validateServerPath

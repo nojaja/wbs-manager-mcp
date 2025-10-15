@@ -5,31 +5,33 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 
-export type TaskArtifactRole = 'deliverable' | 'prerequisite';
+import type {
+    TaskArtifactRole as CommonTaskArtifactRole,
+    Artifact as CommonArtifact,
+    TaskArtifactAssignment as CommonTaskArtifactAssignment,
+    TaskCompletionCondition as CommonTaskCompletionCondition,
+    Task as CommonTask
+} from '../extension/types';
 
-export interface Artifact {
-    id: string;
-    title: string;
-    uri?: string;
-    description?: string;
+export type TaskArtifactRole = CommonTaskArtifactRole;
+
+export interface Artifact extends CommonArtifact {
     created_at: string;
     updated_at: string;
     version: number;
 }
 
-export interface TaskArtifactAssignment {
+export interface TaskArtifactAssignment extends CommonTaskArtifactAssignment {
     id: string;
     artifact_id: string;
-    role: TaskArtifactRole;
     crudOperations?: string | null;
     order: number;
     artifact: Artifact;
 }
 
-export interface TaskCompletionCondition {
+export interface TaskCompletionCondition extends CommonTaskCompletionCondition {
     id: string;
     task_id: string;
-    description: string;
     order: number;
 }
 
@@ -42,14 +44,7 @@ interface TaskCompletionConditionInput {
     description: string;
 }
 
-export interface Task {
-    id: string;
-    parent_id?: string;
-    title: string;
-    description?: string;
-    assignee?: string;
-    status: string;
-    estimate?: string;
+export interface Task extends CommonTask {
     created_at: string;
     updated_at: string;
     version: number;

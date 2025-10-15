@@ -1,4 +1,4 @@
-import { TaskDetailPanel } from '../../src/extension/panels/taskDetailPanel';
+import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
 
 describe('TaskDetailPanel HTML and escapeHtml', () => {
   const fakePanel: any = {
@@ -10,9 +10,18 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
     webviewOptions: {}
   };
 
+  const createDeps = () => ({
+    taskClient: {
+      getTask: jest.fn(),
+      updateTask: jest.fn()
+    },
+    artifactClient: {
+      listArtifacts: jest.fn().mockResolvedValue([])
+    }
+  });
+
   test('getHtmlForWebview embeds task payload and references bundle', () => {
-    const fakeMcp: any = { getTask: jest.fn() };
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', fakeMcp);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', createDeps());
 
     const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', assignee: 'A', estimate: '3d' };
     const html = (panel as any).getHtmlForWebview(task);
@@ -29,8 +38,7 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('getHtmlForWebview includes pending status in payload', () => {
-    const fakeMcp: any = { getTask: jest.fn() };
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', fakeMcp);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', createDeps());
     const task = { id: 't2', title: 'Y', status: 'pending', version: 1 };
     const html = (panel as any).getHtmlForWebview(task);
     const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
@@ -40,8 +48,7 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('escapeHtml escapes special characters', () => {
-    const fakeMcp: any = { getTask: jest.fn() };
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't3', fakeMcp);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't3', createDeps());
     const unsafe = '& < > " \'';
     const escaped = (panel as any).escapeHtml(unsafe);
     expect(escaped).toContain('&amp;');

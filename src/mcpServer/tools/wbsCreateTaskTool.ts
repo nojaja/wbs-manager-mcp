@@ -6,7 +6,7 @@ import { Tool } from './Tool';
 export default class WbsCreateTaskTool extends Tool {
     repo: any | null;
     /**
-     * @constructor
+     * コンストラクタ
      */
     constructor() {
         super({

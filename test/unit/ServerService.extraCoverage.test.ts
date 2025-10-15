@@ -30,7 +30,8 @@ describe('ServerService extra coverage', () => {
   it('forwards JSON stdout lines to registered client.handleResponse', () => {
     mockedChildProcess.spawn.mockReturnValue(mockChildProcess);
     // register client with handleResponse
-    const client = { handleResponse: jest.fn(), setWriter: jest.fn() } as any;
+    // ServerService no longer parses JSON; clients should parse raw lines themselves.
+    const client = { handleResponse: jest.fn(), setWriter: jest.fn(), handleResponseFromServer: jest.fn() } as any;
     serverService.registerClient(client);
 
     serverService.spawnServerProcess('/path/to/server.js', '/workspace');
@@ -39,11 +40,11 @@ describe('ServerService extra coverage', () => {
     // trigger stdout data callback with JSON line
     const stdoutCb = mockChildProcess.stdout.on.mock.calls.find((c: any[]) => c[0] === 'data')[1];
     const payload = { ping: 'pong' };
-    stdoutCb(Buffer.from(JSON.stringify(payload) + '\n'));
+    const raw = JSON.stringify(payload);
+    stdoutCb(Buffer.from(raw + '\n'));
 
-    expect(client.handleResponse).toHaveBeenCalledWith(payload);
-    // no plain append for JSON path
-    expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith(expect.stringContaining('Non-JSON'));
+    // ServerService should forward the raw JSON string to handleResponseFromServer
+    expect(client.handleResponseFromServer).toHaveBeenCalledWith(raw);
   });
 
   it('forwards raw stdout to handleResponseFromServer and does not append log', () => {

@@ -6,7 +6,7 @@ import { Tool } from './Tool';
 export default class WbsGetTaskTool extends Tool {
     repo: any | null;
     /**
-     * @constructor
+     * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.getTask', description: 'Get task details by ID (tool plugin)', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Task ID' } }, required: ['taskId'] } });

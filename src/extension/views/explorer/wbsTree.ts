@@ -2,27 +2,17 @@
 // VSCode APIをインポート
 import * as vscode from 'vscode';
 // 型のみのインポート: 循環参照を避けるため型注釈はimport typeを使用
-// Use the WBSServicePublic interface to avoid depending on service implementation
-// and keep a clear boundary between view and service.
-import type { WBSServicePublic } from '../services/wbsService.interface';
-import type { MCPClient } from '../mcpClient';
+import type { TaskClientLike } from '../../services/clientContracts';
+import { TreeItem } from './TreeItem';
+import type { Task } from '../../types';
+import { buildCreateTaskPayload } from '../../tasks/taskPayload';
 
 
 /**
  * タスク情報を表現するインターフェース
  * プロジェクト管理の各タスクの属性を定義
  */
-interface Task {
-    id: string; // タスクID
-    parent_id?: string; // 親タスクID（サブタスクの場合）
-    title: string; // タイトル
-    description?: string; // 詳細説明
-    assignee?: string; // 担当者
-    status: string; // 状態（例: in-progress, completed）
-    estimate?: string; // 見積もり
-    version: number; // バージョン
-    childCount?: number; // 子タスク数（wbs.listTasks返却用）
-}
+// Task type imported from centralized types
 
 type DropDecision =
     | { kind: 'parent'; parentId: string | null }
@@ -42,27 +32,16 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     // ビジネスロジックサービス（WBS の操作はこのサービス経由で行う）
-    private readonly wbsService?: WBSServicePublic;
-    // 従来互換: 直接 MCPClient を受け取る場合の参照
-    private readonly mcpClient?: MCPClient;
+    private readonly taskClient: TaskClientLike;
 
     /**
      * コンストラクタ
-     * MCPクライアントを受け取り初期化する
-     * @param mcpClient MCPクライアント
+    * MCPクライアントを受け取り初期化する
+    * @param taskClient タスク操作を提供するクライアント
      * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
-     */
-    /**
-     * コンストラクタ
-     * @param serviceOrClient WBSService か MCPClient のいずれか（互換性のため）
-     */
-    constructor(serviceOrClient: WBSServicePublic | MCPClient) {
-        // 互換性: serviceOrClient が listTasks を持つなら MCPClient と見なす
-        if ((serviceOrClient as any)?.listTasks) {
-            this.mcpClient = serviceOrClient as MCPClient;
-        } else {
-            this.wbsService = serviceOrClient as WBSServicePublic;
-        }
+    */
+    constructor(taskClient: TaskClientLike) {
+        this.taskClient = taskClient;
     }
 
     /**
@@ -104,9 +83,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         } else if (element.contextValue === 'task' && element.task) {
             // 処理概要: 指定タスクの子タスクをサービスから取得して TreeItem に変換する
             // 実装理由: 子タスクは必要に応じて遅延ロードすることで、初期描画コストを削減するため
-            const children = this.wbsService
-                ? await this.wbsService.listTasksApi(element.task.id)
-                : await (this.mcpClient as any).listTasks(element.task.id);
+            const children = await this.taskClient.listTasks(element.task.id);
             return children.map((child: Task) => new TreeItem(
                 this.getTaskLabel(child),
                 child.id,
@@ -131,9 +108,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: WBS サービスまたは MCP クライアントを使ってルートタスクを取得する
             // 実装理由: バックエンドから最新のタスク一覧を取得して UI に反映するため
-            const tasks = this.wbsService
-                ? await this.wbsService.listTasksApi(null)
-                : await (this.mcpClient as any).listTasks(null);
+            const tasks = await this.taskClient.listTasks(null);
             return tasks.map((task: Task) => new TreeItem(
                 this.getTaskLabel(task),
                 task.id,
@@ -173,9 +148,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: サービス経由でタスク作成 API を呼び出す
             // 実装理由: バックエンドにタスク情報を永続化するため
-            const response = this.wbsService
-                ? await this.wbsService.createTaskApi({ parentId: parentId ?? null, title: 'New Task' })
-                : await (this.mcpClient as any).createTask({ parentId: parentId ?? null, title: 'New Task' });
+            const payload = buildCreateTaskPayload({ parentId: parentId ?? null, title: 'New Task' });
+            const response = await this.taskClient.createTask(payload);
             if (!response.success) {
                 // 処理概要: API が失敗を返した場合はエラーメッセージを表示して失敗を返す
                 // 実装理由: ユーザに失敗理由を伝え、UI を一貫した状態に保つため
@@ -231,9 +205,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         try {
             // 処理概要: サービス経由で削除 API を呼び出す
             // 実装理由: サーバに永続データの変更を反映させるため
-            const response = this.wbsService
-                ? await this.wbsService.deleteTaskApi(target.task.id)
-                : await (this.mcpClient as any).deleteTask(target.task.id);
+            const response = await this.taskClient.deleteTask(target.task.id);
             if (!response.success) {
                 // 処理概要: API が失敗を返した場合はエラーメッセージを表示
                 // 実装理由: ユーザに失敗理由を通知し UI の整合性を保つため
@@ -321,7 +293,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 
             // 処理概要: ドロップ先の妥当性を判定する
             // 実装理由: 循環構造や無意味な移動を防止するため
-            const decision = this.evaluateDropTarget(draggedTask, target);
+            const decision = await this.evaluateDropTarget(draggedTask, target);
 
             if (decision.kind === 'warning') {
                 // 処理概要: 判定で警告が返された場合はユーザに通知
@@ -351,10 +323,8 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param taskId 取得するタスクのID
      * @returns 取得したタスク（存在しない場合はundefined）
      */
-    private async fetchTaskById(taskId: string): Promise<Task | undefined> {
-        return this.wbsService
-            ? await this.wbsService.getTaskApi(taskId)
-            : await (this.mcpClient as any).getTask(taskId);
+    private async fetchTaskById(taskId: string): Promise<Task | null> {
+        return await this.taskClient.getTask(taskId);
     }
 
     /**
@@ -364,9 +334,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @returns 実行結果を示すPromise（完了時にresolve）
      */
     private async performMove(taskId: string, parentId: string | null): Promise<void> {
-        const result = this.wbsService
-            ? await this.wbsService.moveTaskApi(taskId, parentId)
-            : await (this.mcpClient as any).moveTask(taskId, parentId);
+        const result = await this.taskClient.moveTask(taskId, parentId);
 
         if (result.success) {
             this.refresh();
@@ -387,12 +355,41 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param searchId 探索対象ID
      * @returns 子孫に含まれていればtrue
      */
-    private containsTask(task: Task, searchId: string): boolean {
-        // 処理名: タスク木探索（簡易）
-        // 処理概要: 指定タスク配下に searchId が含まれているかを判定する
-        // 実装理由: 本来は循環チェックに使用するが、現在 UI 側では children を保持しないため無効化している
-        // 将来的に子情報を保持する場合は再帰実装に差し替える
-        return false;
+    /**
+     * 指定タスク配下に searchId が含まれているかを判定する（非同期）
+     * サーバの getTask を辿って親チェーンを確認する実装（クライアント主導）
+     * 深さ上限を設けて無限ループを防止する
+     * @param task 検査対象のタスク（移動元）
+     * @param searchId 探索対象ID（移動先）
+     * @returns true なら searchId は task の子孫にあたる
+     */
+    private async containsTask(task: Task, searchId: string): Promise<boolean> {
+        const MAX_DEPTH = 50;
+
+        // start from the potential parent (searchId) and walk up parents, checking if we reach the dragged task id
+        try {
+            let currentId: string | null = searchId;
+            let depth = 0;
+            while (currentId && depth < MAX_DEPTH) {
+                // fetch the task for currentId
+                const current = await this.taskClient.getTask(currentId);
+                if (!current) {
+                    return false;
+                }
+                if (current.id === task.id) {
+                    // found the dragged task in the ancestor chain -> searchId is descendant of task
+                    return true;
+                }
+                // move up
+                currentId = current.parent_id ?? null;
+                depth++;
+            }
+            return false;
+        } catch (error) {
+            // エラー時は安全側で false を返す（循環チェックができなかった場合は移動を許可しないように呼び出し側で警告する）
+            console.error('[WBS Tree] containsTask failed', error);
+            return false;
+        }
     }
 
     /**
@@ -402,7 +399,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param target ドロップ先ツリーアイテム
      * @returns 判定結果
      */
-    private evaluateDropTarget(draggedTask: Task, target: TreeItem): DropDecision {
+    private async evaluateDropTarget(draggedTask: Task, target: TreeItem): Promise<DropDecision> {
         // 処理概要: ドロップ先の種別に応じて評価処理を振り分ける
         // 実装理由: プロジェクト／タスクごとに判定ロジックが異なるため
         if (target.contextValue === 'project') {
@@ -410,7 +407,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         }
 
         if (target.contextValue === 'task' && target.task) {
-            return this.evaluateTaskDrop(draggedTask, target.task);
+            return await this.evaluateTaskDrop(draggedTask, target.task);
         }
 
         return { kind: 'noop' };
@@ -445,7 +442,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
      * @param targetTask ドロップ先タスク
      * @returns 判定結果
      */
-    private evaluateTaskDrop(draggedTask: Task, targetTask: Task): DropDecision {
+    private async evaluateTaskDrop(draggedTask: Task, targetTask: Task): Promise<DropDecision> {
         // 処理概要: タスク同士のドロップ判定（循環や無意味な移動を排除）
         // 実装理由: タスク階層の整合性を守り、不正な親子関係を作らないため
         const currentParentId = draggedTask.parent_id ?? null;
@@ -457,7 +454,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         }
 
         // 自分の子孫を新しい親にしようとしていないかをチェック
-        if (this.containsTask(draggedTask, targetTask.id)) {
+        if (await this.containsTask(draggedTask, targetTask.id)) {
             // 処理概要: 子孫への移動は循環構造を作るため警告を返す
             // 実装理由: データ整合性を保つため
             return { kind: 'warning', message: '子孫タスクの下への移動はできません。' };
@@ -505,59 +502,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
 }
 
 
-/**
- * ツリーアイテムクラス
- * プロジェクト・タスクのツリー表示用アイテムを表現する
- * なぜ必要か: VSCodeのTreeViewに表示する各ノードの情報・見た目を制御するため
- */
-class TreeItem extends vscode.TreeItem {
-    /**
-     * コンストラクタ
-     * ラベル・ID・種別・状態・説明・タスク情報を受け取り初期化する
-     * なぜ必要か: ツリー上の各ノードの表示内容・アイコン・ツールチップ等を柔軟に制御するため
-     * @param label ラベル
-     * @param itemId アイテムID
-     * @param contextValue コンテキスト種別
-     * @param collapsibleState ツリー折りたたみ状態
-     * @param description 説明
-     * @param task タスク情報
-     */
-    constructor(
-        public readonly label: string,
-        public readonly itemId: string,
-        public readonly contextValue: string,
-        public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly description?: string,
-        public readonly task?: Task
-    ) {
-        super(label, collapsibleState);
-        // ツールチップに説明を設定
-        this.tooltip = description;
-        // ノードIDを設定
-        this.id = itemId;
 
-        // ノード種別・状態に応じてアイコンを設定
-        if (contextValue === 'project') {
-            // プロジェクト用アイコン
-            this.iconPath = new vscode.ThemeIcon('project');
-        } else if (contextValue === 'task') {
-            // タスク状態ごとにアイコン切替
-            if (task?.status === 'completed') {
-                this.iconPath = new vscode.ThemeIcon('check');
-            } else if (task?.status === 'in-progress') {
-                this.iconPath = new vscode.ThemeIcon('play');
-            } else {
-                this.iconPath = new vscode.ThemeIcon('circle-outline');
-            }
-            // タスクノードクリック時に詳細パネルを開くコマンドを設定
-            this.command = {
-                title: 'Open Task Details',
-                command: 'wbsTree.openTask',
-                arguments: [this]
-            };
-        }
-    }
-}
 
 /**
  * WBSツリードラッグ&ドロップコントローラ

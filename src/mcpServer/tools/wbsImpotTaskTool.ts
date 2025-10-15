@@ -9,7 +9,6 @@ export default class WbsImpotTaskTool extends Tool {
 
     /**
      * コンストラクタ
-     * @constructor
      */
     constructor() {
         super({ name: 'wbs.planMode.impotTask', description: 'Import multiple tasks', inputSchema: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, parentId: { type: 'string' }, assignee: { type: 'string' }, estimate: { type: 'string' }, deliverables: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, prerequisites: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, completionConditions: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' } }, required: ['description'] } } }, required: ['title'] } } }, required: ['tasks'] } });

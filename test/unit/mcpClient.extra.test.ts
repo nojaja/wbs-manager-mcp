@@ -1,12 +1,12 @@
-import { MCPClient } from '../../src/extension/mcpClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 describe('MCPClient extra tests', () => {
-  let client: MCPClient;
+  let client: MCPArtifactClient;
   const fakeOutput = { appendLine: jest.fn() } as any;
 
   beforeEach(() => {
     jest.useFakeTimers();
-    client = new MCPClient(fakeOutput);
+  client = new MCPArtifactClient(fakeOutput);
   });
 
   afterEach(() => {

@@ -11,7 +11,6 @@ export default class ArtifactsListArtifactsTool extends Tool {
 
     /**
      * コンストラクタ
-     * @constructor
      */
     constructor() {
         super({ name: 'wbs.planMode.listArtifacts', description: 'List artifacts', inputSchema: { type: 'object', properties: {} } });
