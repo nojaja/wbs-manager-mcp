@@ -1,6 +1,10 @@
-//console.errorでPIDを返す
+// console.errorでPIDを返す
+/**
+ * MCP server entrypoint (stdio transport)
+ * Logs startup information and initializes tools and transport.
+ */
 console.error('[MCP Server] Starting stdio MCP server... PID:', process.pid);
-import { initializeDatabase, WBSRepository } from './db-simple';
+import { initializeDatabase, createTask, importTasks, listArtifacts, getArtifact, createArtifact, updateArtifact, deleteArtifact, listTasks, getTask, updateTask, moveTask, deleteTask } from './db-simple';
 import { ToolRegistry } from './tools/ToolRegistry';
 import { StdioTransport } from './transport/StdioTransport';
 import { parseJsonRpc, JsonRpcRequest, JsonRpcNotification, JsonRpcResponse } from './parser/Parser';
@@ -8,8 +12,94 @@ import { Dispatcher } from './dispatcher/Dispatcher';
 
 // Create a global registry instance for tools
 const toolRegistry = new ToolRegistry();
-// Create shared repository instance to inject into tools
-const sharedRepo = new WBSRepository();
+/**
+ * Create shared repository-like object to inject into tools.
+ * This object exposes the minimal API expected by tools and forwards to the exported functions.
+ * It intentionally mirrors the previous WBSRepository surface to avoid changes in tool implementations.
+ */
+const sharedRepo = {
+    /**
+     * Create a task (for tools compatibility)
+     * @param {string} title
+     * @param {string} [description]
+     * @param {string|null} [parentId]
+     * @param {string|null} [assignee]
+     * @param {string|null} [estimate]
+     * @param {Object} [options]
+     * @returns {Promise<Object>} created task
+     */
+    createTask: async (title: string, description?: string, parentId?: string | null, assignee?: string | null, estimate?: string | null, options?: any) => createTask(title, description ?? '', parentId ?? null, assignee ?? null, estimate ?? null, options),
+    /**
+     * Import multiple tasks
+     * @param {Array<any>} tasks
+     * @returns {Promise<Array<Object>>}
+     */
+    importTasks: async (tasks: any[]) => importTasks(tasks),
+    /**
+     * List artifacts
+     * @returns {Promise<Array<Object>>}
+     */
+    listArtifacts: async () => listArtifacts(),
+    /**
+     * Get artifact by id
+     * @param {string} artifactId
+     * @returns {Promise<Object|null>}
+     */
+    getArtifact: async (artifactId: string) => getArtifact(artifactId),
+    /**
+     * Create artifact
+     * @param {string} title
+     * @param {string} [uri]
+     * @param {string} [description]
+     * @returns {Promise<Object>}
+     */
+    createArtifact: async (title: string, uri?: string, description?: string) => createArtifact(title, uri, description),
+    /**
+     * Update artifact
+     * @param {string} artifactId
+     * @param {Object} updates
+     * @returns {Promise<Object>}
+     */
+    updateArtifact: async (artifactId: string, updates: any) => updateArtifact(artifactId, updates),
+    /**
+     * Delete artifact
+     * @param {string} artifactId
+     * @returns {Promise<boolean>}
+     */
+    deleteArtifact: async (artifactId: string) => deleteArtifact(artifactId),
+    /**
+     * List tasks
+     * @param {string|null} [parentId]
+     * @returns {Promise<Array<Object>>}
+     */
+    listTasks: async (parentId?: string | null) => listTasks(parentId),
+    /**
+     * Get task
+     * @param {string} taskId
+     * @returns {Promise<Object|null>}
+     */
+    getTask: async (taskId: string) => getTask(taskId),
+    /**
+     * Update task
+     * @param {string} taskId
+     * @param {Object} updates
+     * @returns {Promise<Object>}
+     */
+    updateTask: async (taskId: string, updates: any) => updateTask(taskId, updates),
+    /**
+     * Move task
+     * @param {string} taskId
+     * @param {string|null} newParentId
+     * @returns {Promise<Object>}
+     */
+    moveTask: async (taskId: string, newParentId: string | null) => moveTask(taskId, newParentId),
+    /**
+     * Delete task
+     * @param {string} taskId
+     * @returns {Promise<boolean>}
+     */
+    deleteTask: async (taskId: string) => deleteTask(taskId),
+};
 // setDeps is now async and may initialize tools, so ensure we await it during startup
 (async () => {
     try {

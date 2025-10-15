@@ -1,4 +1,3 @@
-/* eslint-disable sonarjs/cognitive-complexity */
 import { Database } from 'sqlite';
 import * as TaskRepo from '../repositories/TaskRepository';
 import * as ArtifactRepo from '../repositories/ArtifactRepository';
@@ -62,37 +61,72 @@ export class TaskService {
         try {
             const id = await TaskRepo.insertTask(this.db, { title, description: description ?? null, parent_id: parentId ?? null, assignee: assignee ?? null, status, estimate: estimate ?? null });
             const now = new Date().toISOString();
-            // sync artifacts
-            await TARepo.deleteTaskArtifactsByTaskAndRole(this.db, id, 'deliverable');
-            let idx = 0;
-            for (const d of options?.deliverables ?? []) {
-                if (!d?.artifactId) continue;
-                const art = await ArtifactRepo.getArtifact(this.db, d.artifactId);
-                if (!art) throw new Error(`Artifact not found: ${d.artifactId}`);
-                await TARepo.insertTaskArtifact(this.db, id, d.artifactId, 'deliverable', d.crudOperations ?? null, idx++, now);
-            }
-            await TARepo.deleteTaskArtifactsByTaskAndRole(this.db, id, 'prerequisite');
-            idx = 0;
-            for (const p of options?.prerequisites ?? []) {
-                if (!p?.artifactId) continue;
-                const art = await ArtifactRepo.getArtifact(this.db, p.artifactId);
-                if (!art) throw new Error(`Artifact not found: ${p.artifactId}`);
-                await TARepo.insertTaskArtifact(this.db, id, p.artifactId, 'prerequisite', p.crudOperations ?? null, idx++, now);
-            }
-
-            await CCRepo.deleteCompletionConditionsByTask(this.db, id);
-            idx = 0;
-            for (const c of options?.completionConditions ?? []) {
-                const desc = (c?.description ?? '').trim();
-                if (desc.length === 0) continue;
-                await CCRepo.insertCompletionCondition(this.db, id, desc, idx++, now);
-            }
+            // sync artifacts and conditions using helpers
+            await this.syncDeliverables(id, options?.deliverables ?? [], now);
+            await this.syncPrerequisites(id, options?.prerequisites ?? [], now);
+            await this.syncCompletionConditions(id, options?.completionConditions ?? [], now);
 
             await this.db.run('COMMIT');
             return id;
         } catch (e) {
             await this.db.run('ROLLBACK');
             throw e;
+        }
+    }
+
+    /**
+     * Helper: sync deliverables for a task
+     * @private
+     * @param {string} taskId タスクID
+     * @param {Array<any>} deliverables deliverables 配列
+     * @param {string} now ISO 時刻文字列
+     * @returns {Promise<void>}
+     */
+    private async syncDeliverables(taskId: string, deliverables: Array<any>, now: string) {
+        await TARepo.deleteTaskArtifactsByTaskAndRole(this.db, taskId, 'deliverable');
+        let idx = 0;
+        for (const d of deliverables ?? []) {
+            if (!d?.artifactId) continue;
+            const art = await ArtifactRepo.getArtifact(this.db, d.artifactId);
+            if (!art) throw new Error(`Artifact not found: ${d.artifactId}`);
+            await TARepo.insertTaskArtifact(this.db, taskId, d.artifactId, 'deliverable', d.crudOperations ?? null, idx++, now);
+        }
+    }
+
+    /**
+     * Helper: sync prerequisites for a task
+     * @private
+     * @param {string} taskId タスクID
+     * @param {Array<any>} prerequisites prerequisites 配列
+     * @param {string} now ISO 時刻文字列
+     * @returns {Promise<void>}
+     */
+    private async syncPrerequisites(taskId: string, prerequisites: Array<any>, now: string) {
+        await TARepo.deleteTaskArtifactsByTaskAndRole(this.db, taskId, 'prerequisite');
+        let idx = 0;
+        for (const p of prerequisites ?? []) {
+            if (!p?.artifactId) continue;
+            const art = await ArtifactRepo.getArtifact(this.db, p.artifactId);
+            if (!art) throw new Error(`Artifact not found: ${p.artifactId}`);
+            await TARepo.insertTaskArtifact(this.db, taskId, p.artifactId, 'prerequisite', p.crudOperations ?? null, idx++, now);
+        }
+    }
+
+    /**
+     * Helper: sync completion conditions for a task
+     * @private
+     * @param {string} taskId タスクID
+     * @param {Array<any>} conditions completion conditions 配列
+     * @param {string} now ISO 時刻文字列
+     * @returns {Promise<void>}
+     */
+    private async syncCompletionConditions(taskId: string, conditions: Array<any>, now: string) {
+        await CCRepo.deleteCompletionConditionsByTask(this.db, taskId);
+        let idx = 0;
+        for (const c of conditions ?? []) {
+            const desc = (c?.description ?? '').trim();
+            if (desc.length === 0) continue;
+            await CCRepo.insertCompletionCondition(this.db, taskId, desc, idx++, now);
         }
     }
 
@@ -152,36 +186,10 @@ export class TaskService {
                 taskId
             );
 
-            // apply syncs for artifacts and conditions
-            if (updates.deliverables !== undefined) {
-                await TARepo.deleteTaskArtifactsByTaskAndRole(this.db, taskId, 'deliverable');
-                let idx = 0;
-                for (const d of updates.deliverables ?? []) {
-                    if (!d?.artifactId) continue;
-                    const art = await ArtifactRepo.getArtifact(this.db, d.artifactId);
-                    if (!art) throw new Error(`Artifact not found: ${d.artifactId}`);
-                    await TARepo.insertTaskArtifact(this.db, taskId, d.artifactId, 'deliverable', d.crudOperations ?? null, idx++, now);
-                }
-            }
-            if (updates.prerequisites !== undefined) {
-                await TARepo.deleteTaskArtifactsByTaskAndRole(this.db, taskId, 'prerequisite');
-                let idx = 0;
-                for (const p of updates.prerequisites ?? []) {
-                    if (!p?.artifactId) continue;
-                    const art = await ArtifactRepo.getArtifact(this.db, p.artifactId);
-                    if (!art) throw new Error(`Artifact not found: ${p.artifactId}`);
-                    await TARepo.insertTaskArtifact(this.db, taskId, p.artifactId, 'prerequisite', p.crudOperations ?? null, idx++, now);
-                }
-            }
-            if (updates.completionConditions !== undefined) {
-                await CCRepo.deleteCompletionConditionsByTask(this.db, taskId);
-                let idx = 0;
-                for (const c of updates.completionConditions ?? []) {
-                    const desc = (c?.description ?? '').trim();
-                    if (desc.length === 0) continue;
-                    await CCRepo.insertCompletionCondition(this.db, taskId, desc, idx++, now);
-                }
-            }
+            // apply syncs for artifacts and conditions using helpers
+            if (updates.deliverables !== undefined) await this.syncDeliverables(taskId, updates.deliverables ?? [], now);
+            if (updates.prerequisites !== undefined) await this.syncPrerequisites(taskId, updates.prerequisites ?? [], now);
+            if (updates.completionConditions !== undefined) await this.syncCompletionConditions(taskId, updates.completionConditions ?? [], now);
 
             await this.db.run('COMMIT');
             return await this.getTask(taskId);
