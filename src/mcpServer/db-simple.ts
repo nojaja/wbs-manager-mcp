@@ -1,9 +1,9 @@
 // Temporary in-memory database for MCP server testing
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
 import { v4 as uuidv4 } from 'uuid';
-import path from 'path';
-import fs from 'fs';
+import { Database } from 'sqlite';
+import { TaskService } from './services/TaskService';
+import * as ArtifactRepo from './repositories/ArtifactRepository';
+import { resolveDatabasePath as defaultResolveDatabasePath, getDatabase as defaultGetDatabase, initializeDatabase as defaultInitializeDatabase, closeAndClearDatabase as defaultCloseAndClearDatabase } from './db/DatabaseManager';
 
 import type {
     TaskArtifactRole as CommonTaskArtifactRole,
@@ -54,7 +54,7 @@ export interface Task extends CommonTask {
     completionConditions?: TaskCompletionCondition[];
 }
 
-const dbPromiseMap: Map<string, Promise<Database>> = new Map();
+// DB 管理は src/mcpServer/db/DatabaseManager に移譲しています
 
 /**
  * データベースパス解決処理
@@ -68,15 +68,11 @@ const dbPromiseMap: Map<string, Promise<Database>> = new Map();
  * 
  * @returns データベースファイルパス
  */
-function resolveDatabasePath(): string {
-    const baseDir = process.env.WBS_MCP_DATA_DIR && process.env.WBS_MCP_DATA_DIR.trim().length > 0
-        ? process.env.WBS_MCP_DATA_DIR
-        : process.cwd();
-
-    // path.resolve()により、相対パスの場合は現在の作業ディレクトリからの相対パスとして解釈される
-    const resolvedBase = path.resolve(baseDir);
-    return path.join(resolvedBase, 'data', 'wbs.db');
-}
+/**
+ * Resolve database path (delegated to DatabaseManager)
+ * @returns {string} path to DB file
+ */
+export const resolveDatabasePath = defaultResolveDatabasePath;
 
 // Note: DB path is resolved dynamically inside getDatabase to support per-test overrides of WBS_MCP_DATA_DIR
 
@@ -86,25 +82,12 @@ function resolveDatabasePath(): string {
  * なぜ必要か: DB初期化・多重生成防止・全DB操作の共通入口とするため
  * @returns Promise<Database>
  */
+/**
+ * Get Database instance (delegated to DatabaseManager)
+ * @returns {Promise<Database>}
+ */
 async function getDatabase(): Promise<Database> {
-    const DB_PATH = resolveDatabasePath();
-    const DB_DIR = path.dirname(DB_PATH);
-    if (!dbPromiseMap.has(DB_PATH)) {
-        // DBディレクトリがなければ作成
-        if (!fs.existsSync(DB_DIR)) {
-            fs.mkdirSync(DB_DIR, { recursive: true });
-        }
-
-        const p = open({ filename: DB_PATH, driver: sqlite3.Database }).then(async (db) => {
-
-            // 処理概要: 外部キー制約を有効化
-            // 実装理由: 親子削除等の整合性をDBレイヤで担保するため
-            await db.exec('PRAGMA foreign_keys = ON');
-            return db;
-        });
-        dbPromiseMap.set(DB_PATH, p);
-    }
-    return dbPromiseMap.get(DB_PATH)!;
+    return defaultGetDatabase();
 }
 
 /**
@@ -112,110 +95,20 @@ async function getDatabase(): Promise<Database> {
  * 必要なテーブルを作成し、初期データを投入する
  * なぜ必要か: サーバ起動時にDBスキーマ・サンプルデータを自動生成するため
  */
+/**
+ * Initialize the database schema (delegated to DatabaseManager)
+ * @returns {Promise<void>}
+ */
 export async function initializeDatabase(): Promise<void> {
-    const DB_PATH = resolveDatabasePath();
-    const db = await getDatabase();
-    // To avoid issues when migrating away from a projects table (old schema),
-    // drop related tables first so we can recreate them with the new schema.
-    // This is safe for test environments where DB is ephemeral.
-    await db.exec('PRAGMA foreign_keys = OFF');
-    // 処理概要: スキーマ作成前は外部キー制約を一時的に無効化
-    // 実装理由: 作成順による依存関係の問題を回避するため（作成後にON）
+    return defaultInitializeDatabase();
+}
 
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS tasks (
-            id TEXT PRIMARY KEY,
-            parent_id TEXT,
-            title TEXT NOT NULL,
-            description TEXT,
-            assignee TEXT,
-            status TEXT DEFAULT 'draft',
-            estimate TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            version INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE CASCADE
-        )
-    `);
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS artifacts (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            uri TEXT,
-            description TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            version INTEGER NOT NULL DEFAULT 1,
-            UNIQUE(title)
-        )
-    `);
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS task_artifacts (
-            id TEXT PRIMARY KEY,
-            task_id TEXT NOT NULL,
-            artifact_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            crud_operations TEXT,
-            order_index INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
-        )
-    `);
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS task_completion_conditions (
-            id TEXT PRIMARY KEY,
-            task_id TEXT NOT NULL,
-            description TEXT NOT NULL,
-            order_index INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-        )
-    `);
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS dependencies (
-            id TEXT PRIMARY KEY,
-            from_task_id TEXT NOT NULL,
-            to_task_id TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (from_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            FOREIGN KEY (to_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            UNIQUE(from_task_id, to_task_id)
-        )
-    `);
-
-    await db.exec(`
-        CREATE TABLE IF NOT EXISTS task_history (
-            id TEXT PRIMARY KEY,
-            task_id TEXT NOT NULL,
-            version INTEGER NOT NULL,
-            title TEXT,
-            description TEXT,
-            status TEXT,
-            assignee TEXT,
-            changed_by TEXT,
-            changed_at TEXT NOT NULL,
-            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-        )
-    `);
-
-    await db.exec('PRAGMA foreign_keys = ON');
-
-    // close DB and remove from cache so test harness can delete files without locking issues
-    try {
-        await db.close();
-    } finally {
-        if (dbPromiseMap.has(DB_PATH)) {
-            dbPromiseMap.delete(DB_PATH);
-        }
-    }
+/**
+ * Close and clear DB cache (delegated to DatabaseManager)
+ * @returns {Promise<void>}
+ */
+export async function closeAndClearDatabase(): Promise<void> {
+    return defaultCloseAndClearDatabase();
 }
 
 
@@ -263,47 +156,8 @@ export class WBSRepository {
         }
     ): Promise<Task> {
         const db = await this.db();
-        const id = uuidv4();
-        const now = new Date().toISOString();
-        // status はテスト期待値に合わせ、title/description/estimate のみを必須として判定する
-        const hasTitle = !!(title && title.toString().trim().length > 0);
-        const hasDescription = !!(description && description.toString().trim().length > 0);
-        const hasEstimate = !!(estimate && estimate.toString().trim().length > 0);
-        const allPresent = hasTitle && hasDescription && hasEstimate;
-        const status = allPresent ? 'pending' : 'draft';
-
-        await db.run('BEGIN');
-        try {
-            // projects テーブルを廃止したため、tasks テーブルの project_id カラムは存在しない
-            // INSERT 文から project_id を削除して登録する
-            await db.run(
-                `INSERT INTO tasks (
-                    id, parent_id, title, description, assignee,
-                    status, estimate, created_at, updated_at, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-                id,
-                parentId || null,
-                title,
-                description || null,
-                assignee || null,
-                status,
-                estimate || null,
-                now,
-                now
-            );
-
-            await this.syncTaskArtifacts(db, id, 'deliverable', options?.deliverables ?? [], now);
-            await this.syncTaskArtifacts(db, id, 'prerequisite', options?.prerequisites ?? [], now);
-            await this.syncTaskCompletionConditions(db, id, options?.completionConditions ?? [], now);
-
-            await db.run('COMMIT');
-        } catch (error) {
-            // 処理概要: 途中エラー時はロールバックして一貫性を維持
-            // 実装理由: 子テーブルが部分的に更新される不整合を避ける
-            await db.run('ROLLBACK');
-            throw error;
-        }
-
+    const svc = new TaskService(db);
+        const id = await svc.createTask(title, description, parentId, assignee, estimate, options);
         return (await this.getTask(id))!;
     }
 
@@ -317,8 +171,7 @@ export class WBSRepository {
     async importTasks(tasksTasks: Array<any>): Promise<Task[]> {
         const created: Task[] = [];
         for (const t of tasksTasks || []) {
-            // 最小限のバリデーション
-            if (!t || !t.title) continue; // 理由: 必須項目（title）が無い行はスキップするのみ
+            if (!t || !t.title) continue;
             const task = await this.createTask(
                 t.title,
                 t.description ?? '',
@@ -326,17 +179,9 @@ export class WBSRepository {
                 t.assignee ?? null,
                 t.estimate ?? null,
                 {
-                    deliverables: Array.isArray(t.deliverables) ? t.deliverables.map((d: any) => ({
-                        artifactId: d.artifactId,
-                        crudOperations: d.crudOperations ?? d.crud ?? null
-                    })) : [],
-                    prerequisites: Array.isArray(t.prerequisites) ? t.prerequisites.map((p: any) => ({
-                        artifactId: p.artifactId,
-                        crudOperations: p.crudOperations ?? null
-                    })) : [],
-                    completionConditions: Array.isArray(t.completionConditions) ? t.completionConditions
-                        .filter((c: any) => typeof c?.description === 'string' && c.description.trim().length > 0)
-                        .map((c: any) => ({ description: c.description.trim() })) : []
+                    deliverables: Array.isArray(t.deliverables) ? t.deliverables.map((d: any) => ({ artifactId: d.artifactId, crudOperations: d.crudOperations ?? d.crud ?? null })) : [],
+                    prerequisites: Array.isArray(t.prerequisites) ? t.prerequisites.map((p: any) => ({ artifactId: p.artifactId, crudOperations: p.crudOperations ?? null })) : [],
+                    completionConditions: Array.isArray(t.completionConditions) ? t.completionConditions.filter((c: any) => typeof c?.description === 'string' && c.description.trim().length > 0).map((c: any) => ({ description: c.description.trim() })) : []
                 }
             );
             created.push(task);
@@ -353,12 +198,7 @@ export class WBSRepository {
      */
     async listArtifacts(): Promise<Artifact[]> {
         const db = await this.db();
-        const rows = await db.all<Artifact[]>(
-            `SELECT id, title, uri, description, created_at, updated_at, version
-             FROM artifacts
-             ORDER BY title ASC`
-        );
-        return rows;
+    return ArtifactRepo.listArtifacts(db) as Promise<Artifact[]>;
     }
 
     /**
@@ -370,13 +210,7 @@ export class WBSRepository {
      */
     async getArtifact(artifactId: string): Promise<Artifact | null> {
         const db = await this.db();
-        const artifact = await db.get<Artifact>(
-            `SELECT id, title, uri, description, created_at, updated_at, version
-             FROM artifacts
-             WHERE id = ?`,
-            artifactId
-        );
-        return artifact ?? null;
+    return ArtifactRepo.getArtifact(db, artifactId) as Promise<Artifact | null>;
     }
 
     /**
@@ -394,21 +228,7 @@ export class WBSRepository {
         description?: string
     ): Promise<Artifact> {
         const db = await this.db();
-        const id = uuidv4();
-        const now = new Date().toISOString();
-        await db.run(
-            `INSERT INTO artifacts (
-                id, title, uri, description, created_at, updated_at, version
-            ) VALUES (?, ?, ?, ?, ?, ?, 1)`,
-            id,
-            title,
-            uri ?? null,
-            description ?? null,
-            now,
-            now
-        );
-
-        return (await this.getArtifact(id))!;
+    return ArtifactRepo.createArtifact(db, title, uri, description) as Promise<Artifact>;
     }
 
     /**
@@ -433,40 +253,7 @@ export class WBSRepository {
         }
     ): Promise<Artifact> {
         const db = await this.db();
-        const current = await this.getArtifact(artifactId);
-
-        if (!current) {
-            // 処理概要: 対象が存在しない場合はエラー
-            // 実装理由: 更新対象の特定に失敗しているため
-            throw new Error(`Artifact not found: ${artifactId}`);
-        }
-
-        if (updates.ifVersion !== undefined && updates.ifVersion !== current.version) {
-            // 処理概要: 楽観ロックのバージョン不一致
-            // 実装理由: 競合検出し、上書き更新を防止
-            throw new Error('Artifact has been modified by another user');
-        }
-
-        const now = new Date().toISOString();
-        const newVersion = current.version + 1;
-
-        await db.run(
-            `UPDATE artifacts
-             SET title = ?,
-                 uri = ?,
-                 description = ?,
-                 updated_at = ?,
-                 version = ?
-             WHERE id = ?`,
-            updates.title ?? current.title,
-            updates.uri !== undefined ? updates.uri : current.uri ?? null,
-            updates.description !== undefined ? updates.description : current.description ?? null,
-            now,
-            newVersion,
-            artifactId
-        );
-
-        return (await this.getArtifact(artifactId))!;
+    return ArtifactRepo.updateArtifact(db, artifactId, updates) as Promise<Artifact>;
     }
 
     /**
@@ -478,11 +265,7 @@ export class WBSRepository {
      */
     async deleteArtifact(artifactId: string): Promise<boolean> {
         const db = await this.db();
-        const result = await db.run(
-            `DELETE FROM artifacts WHERE id = ?`,
-            artifactId
-        );
-        return (result.changes ?? 0) > 0;
+    return ArtifactRepo.deleteArtifact(db, artifactId);
     }
 
     /**
@@ -494,42 +277,8 @@ export class WBSRepository {
      */
     async listTasks(parentId?: string | null): Promise<Task[]> {
         const db = await this.db();
-
-        // parentIdがundefinedまたはnullの場合はトップレベルタスク
-        const isTopLevel = parentId === undefined || parentId === null;
-        const whereClause = isTopLevel
-            ? 'WHERE parent_id IS NULL'
-            : 'WHERE parent_id = ?';
-        const params = isTopLevel ? [] : [parentId];
-
-        // 各タスクの子要素数も取得
-        const rows = await db.all<any[]>(
-            `SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status,
-                t.estimate, t.created_at, t.updated_at, t.version,
-                (
-                    SELECT COUNT(1) FROM tasks c WHERE c.parent_id = t.id
-                ) AS childCount
-             FROM tasks t
-             ${whereClause}
-             ORDER BY t.created_at ASC`,
-            ...params
-        );
-
-        const taskIds = rows.map((row) => row.id);
-        const artifacts = await this.collectTaskArtifacts(db, taskIds);
-        const completionConditions = await this.collectCompletionConditions(db, taskIds);
-
-        return rows.map((row) => {
-            const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
-            return {
-                ...row,
-                childCount: typeof row.childCount === 'number' ? row.childCount : Number(row.childCount ?? 0),
-                children: [],
-                deliverables: artifactInfo.deliverables,
-                prerequisites: artifactInfo.prerequisites,
-                completionConditions: completionConditions.get(row.id) ?? []
-            };
-        });
+    const svc = new TaskService(db);
+    return svc.listTasks(parentId) as Promise<Task[]>;
     }
 
     /**
@@ -541,56 +290,8 @@ export class WBSRepository {
      */
     async getTask(taskId: string): Promise<Task | null> {
         const db = await this.db();
-        const task = await db.get<Task>(
-            `SELECT id, parent_id, title, description, assignee, status,
-                    estimate, created_at, updated_at, version
-             FROM tasks
-             WHERE id = ?`,
-            taskId
-        );
-        if (!task) {
-            return null;
-        }
-
-        const rows = await db.all<Task[]>(
-            `SELECT id, parent_id, title, description, assignee, status,
-            estimate, created_at, updated_at, version
-         FROM tasks
-         ORDER BY created_at ASC`
-        );
-
-        const taskMap = new Map<string, Task>();
-
-        const taskIds = rows.map((row) => row.id);
-        const artifacts = await this.collectTaskArtifacts(db, taskIds);
-        const completionConditions = await this.collectCompletionConditions(db, taskIds);
-
-        rows.forEach((row) => {
-            const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
-            taskMap.set(row.id, {
-                ...row,
-                children: [],
-                deliverables: artifactInfo.deliverables,
-                prerequisites: artifactInfo.prerequisites,
-                completionConditions: completionConditions.get(row.id) ?? []
-            });
-        });
-
-        rows.forEach((row) => {
-            if (row.parent_id && taskMap.has(row.parent_id)) {
-                const parent = taskMap.get(row.parent_id)!;
-                parent.children!.push(taskMap.get(row.id)!);
-            }
-        });
-
-        const target = taskMap.get(taskId);
-        if (!target) {
-            // 処理概要: 子配列が構築できていない場合のフォールバック
-            // 実装理由: 取得できた単体行を最低限返す
-            return { ...task, children: [] };
-        }
-
-        return target;
+    const svc = new TaskService(db);
+    return svc.getTask(taskId) as Promise<Task | null>;
     }
 
     /**
@@ -608,61 +309,8 @@ export class WBSRepository {
         completionConditions?: TaskCompletionConditionInput[];
     }): Promise<Task> {
         const db = await this.db();
-        const current = await this.getTask(taskId);
-        // タスクが存在しなければエラー
-        // 理由: 存在しないタスクの更新を防ぐ
-        if (!current) {
-            // 処理概要: タスクが存在しない
-            // 実装理由: 更新できないため明示エラー
-            throw new Error(`Task not found: ${taskId}`);
-        }
-
-        // 楽観ロック: バージョン不一致ならエラー
-        // 理由: 複数ユーザー編集時の競合検出・整合性維持のため
-        if (updates.ifVersion !== undefined && current.version !== updates.ifVersion) {
-            // 処理概要: 楽観ロックにより競合検出
-            // 実装理由: 他の更新によりバージョンが進んでいる
-            throw new Error('Task has been modified by another user');
-        }
-
-        const now = new Date().toISOString();
-        const newVersion = current.version + 1;
-
-        await db.run('BEGIN');
-        try {
-            await db.run(
-                `UPDATE tasks
-                 SET title = ?,
-                     description = ?,
-                     assignee = ?,
-                     status = ?,
-                     estimate = ?,
-                     updated_at = ?,
-                     version = ?
-                 WHERE id = ?`,
-                updates.title ?? current.title,
-                updates.description ?? current.description ?? null,
-                updates.assignee ?? current.assignee ?? null,
-                // status は、title/description/estimate/deliverables/prerequisites/completionConditions の
-                // 全てに値が設定されている場合に 'pending'、いずれか欠けていれば 'draft' とする
-                this.computeStatusFromFields(updates, current),
-                updates.estimate ?? current.estimate ?? null,
-                now,
-                newVersion,
-                taskId
-            );
-
-            await this.applySyncs(db, taskId, updates, now);
-
-            await db.run('COMMIT');
-        } catch (error) {
-            // 処理概要: 失敗時はロールバック
-            // 実装理由: 一部だけ更新される中途半端な状態を避ける
-            await db.run('ROLLBACK');
-            throw error;
-        }
-
-        return (await this.getTask(taskId))!;
+    const svc = new TaskService(db);
+    return svc.updateTask(taskId, updates) as Promise<Task>;
     }
 
     /**
@@ -748,36 +396,8 @@ export class WBSRepository {
      */
     async moveTask(taskId: string, newParentId: string | null): Promise<Task> {
         const db = await this.db();
-        const task = await this.fetchTaskRow(db, taskId);
-
-        if (!task) {
-            throw new Error(`Task not found: ${taskId}`);
-        }
-
-        const normalizedParentId = newParentId ?? null;
-
-        await this.validateMoveTarget(db, task, normalizedParentId);
-
-        if ((task.parent_id ?? null) === normalizedParentId) {
-            return (await this.getTask(taskId))!;
-        }
-
-        const now = new Date().toISOString();
-        const newVersion = task.version + 1;
-
-        await db.run(
-            `UPDATE tasks
-             SET parent_id = ?,
-                 updated_at = ?,
-                 version = ?
-             WHERE id = ?`,
-            normalizedParentId,
-            now,
-            newVersion,
-            taskId
-        );
-
-        return (await this.getTask(taskId))!;
+    const svc = new TaskService(db);
+    return svc.moveTask(taskId, newParentId) as Promise<Task>;
     }
 
     /**
@@ -1122,22 +742,7 @@ export class WBSRepository {
      */
     async deleteTask(taskId: string): Promise<boolean> {
         const db = await this.db();
-        const existing = await db.get<{ id: string }>(
-            `SELECT id FROM tasks WHERE id = ?`,
-            taskId
-        );
-
-        if (!existing) {
-            // 処理概要: 既に無い場合は削除不要
-            // 実装理由: idempotent な削除APIにする
-            return false;
-        }
-
-        const result = await db.run(
-            `DELETE FROM tasks WHERE id = ?`,
-            taskId
-        );
-
-        return (result.changes ?? 0) > 0;
+    const svc = new TaskService(db);
+    return svc.deleteTask(taskId);
     }
 }
