@@ -1,4 +1,4 @@
-import { WBSRepository, initializeDatabase } from '../../src/mcpServer/db-simple';
+import { importTasks, listTasks, initializeDatabase } from '../../src/mcpServer/db-simple';
 import fs from 'fs';
 import path from 'path';
 
@@ -25,7 +25,7 @@ describe('wbs.planMode.impotTask tool (repository.importTasks)', () => {
     });
 
     it('imports multiple tasks into a project', async () => {
-        const repo = new WBSRepository();
+        // use functional API directly
 
         const tasksToImport = [
             { title: 'Task A', description: 'First' },
@@ -33,11 +33,11 @@ describe('wbs.planMode.impotTask tool (repository.importTasks)', () => {
             { title: 'Task C', description: 'Third' }
         ];
 
-    const created = await repo.importTasks(tasksToImport as any);
+        const created = await importTasks(tasksToImport as any);
         expect(Array.isArray(created)).toBe(true);
         expect(created.length).toBe(3);
 
-    const listed = await repo.listTasks();
+        const listed = await listTasks();
         // listTasks returns roots; imported tasks have no parent so should be present
         expect(listed.length).toBeGreaterThanOrEqual(3);
         const titles = listed.map(t => t.title);
