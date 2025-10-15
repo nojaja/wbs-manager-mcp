@@ -7,7 +7,14 @@ import { ToolRegistry } from './tools/ToolRegistry';
 const toolRegistry = new ToolRegistry();
 // Create shared repository instance to inject into tools
 const sharedRepo = new WBSRepository();
-toolRegistry.setDeps({ repo: sharedRepo });
+// setDeps is now async and may initialize tools, so ensure we await it during startup
+(async () => {
+    try {
+        await toolRegistry.setDeps({ repo: sharedRepo });
+    } catch (err) {
+        console.error('[MCP Server] toolRegistry.setDeps failed during module init', err);
+    }
+})();
 // Note: we'll load tools dynamically from ./tools in a later step
 
 interface JsonRpcRequest {
@@ -295,12 +302,35 @@ if (!process.env.JEST_WORKER_ID) {
                     artList, artGet, artCreate, artUpdate, artDelete
                 ];
                 for (const mod of candidates) {
-                    if (mod && mod.instance) toolRegistry.register(mod.instance);
+                    if (mod && mod.instance) {
+                        try {
+                            await toolRegistry.register(mod.instance);
+                        } catch (err) {
+                            console.error('[MCP Server] failed to register tool', mod.instance?.meta?.name, err);
+                        }
+                    }
                 }
                 console.error('[MCP Server] Built-in tools registered:', toolRegistry.list().map(t => t.name));
             } catch (err) {
                 console.error('[MCP Server] Failed to register built-in tools:', err);
             }
+            // Install graceful shutdown handlers that dispose tools before exit
+            /**
+             * Graceful shutdown helper.
+             * @param {string} [signal] Optional signal name for logging
+             */
+            const shutdown = async (signal?: string) => {
+                console.error('[MCP Server] Shutting down server', signal || '');
+                try {
+                    await toolRegistry.disposeAll();
+                } catch (err) {
+                    console.error('[MCP Server] Error during disposeAll', err);
+                }
+                process.exit(0);
+            };
+            process.on('SIGINT', () => shutdown('SIGINT'));
+            process.on('SIGTERM', () => shutdown('SIGTERM'));
+
             new StdioMCPServer();
         } catch (error) {
             console.error('[MCP Server] Failed to start server:', error);

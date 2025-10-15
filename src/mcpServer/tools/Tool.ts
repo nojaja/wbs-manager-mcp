@@ -29,6 +29,8 @@ export type ToolMeta = {
 export class Tool {
     meta: ToolMeta;
     deps: ToolDeps;
+    // 初期化済みフラグ — register/execute 側で初期化状態を検査するために利用します
+    initialized: boolean = false;
 
     /**
      * 処理名: コンストラクタ
@@ -49,6 +51,9 @@ export class Tool {
      */
     async init(deps?: ToolDeps) {
         this.deps = deps || {};
+        // サブクラスの init 実装が非同期処理を含むことを想定しているため
+        // このメソッドは Promise を返す必要があり、初期化完了後にフラグを立てます。
+        this.initialized = true;
     }
 
     /**
@@ -58,6 +63,8 @@ export class Tool {
      */
     async dispose() {
         // override if needed
+        // デフォルト実装では特に何もしないが、dispose が呼ばれたら初期化フラグをクリアする
+        this.initialized = false;
     }
 
     /**
