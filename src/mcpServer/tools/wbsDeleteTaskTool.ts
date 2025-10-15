@@ -9,7 +9,6 @@ export default class WbsDeleteTaskTool extends Tool {
 
     /**
      * コンストラクタ
-     * @constructor
      */
     constructor() {
         super({ name: 'wbs.planMode.deleteTask', description: 'Delete a task and its descendants', inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'] } });

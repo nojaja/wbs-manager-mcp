@@ -11,7 +11,6 @@ export default class ArtifactsGetArtifactTool extends Tool {
 
     /**
      * コンストラクタ
-     * @constructor
      */
     constructor() {
         super({ name: 'wbs.planMode.getArtifact', description: 'Get artifact by ID', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' } }, required: ['artifactId'] } });

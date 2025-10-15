@@ -9,7 +9,6 @@ export default class WbsMoveTaskTool extends Tool {
 
     /**
      * コンストラクタ
-     * @constructor
      */
     constructor() {
         super({ name: 'wbs.planMode.moveTask', description: 'Move a task under a different parent', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, newParentId: { type: 'string' } }, required: ['taskId'] } });

@@ -10,7 +10,6 @@ export default class ArtifactsUpdateArtifactTool extends Tool {
     repo: any | null;
     /**
      * コンストラクタ
-     * @constructor
      */
     constructor() {
         super({ name: 'wbs.planMode.updateArtifact', description: 'Update an existing artifact', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' }, title: { type: 'string' }, uri: { type: 'string' }, description: { type: 'string' }, ifVersion: { type: 'number' } }, required: ['artifactId'] } });
