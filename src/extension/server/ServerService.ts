@@ -122,8 +122,9 @@ export class ServerService {
       return;
     }
 
+    // only notify clients with the raw trimmed line. JSON parsing is
+    // the responsibility of the client (or an external dispatcher).
     this.notifyClientsOfRawLine(clients, trimmed);
-    this.notifyClientsWithParsedPayload(clients, trimmed);
   }
 
   /**
@@ -202,31 +203,6 @@ export class ServerService {
       } catch (error) {
         this.logClientError('Client raw handler error', error);
       }
-    }
-  }
-
-  /**
-   * パース済み JSON を必要とするクライアントへ通知する。
-   * @param clients 登録クライアント一覧
-   * @param payload 行データ
-   */
-  private notifyClientsWithParsedPayload(clients: ClientRegistration[], payload: string): void {
-    const handlers = clients.filter((client) => typeof client.handleResponse === 'function');
-    if (handlers.length === 0) {
-      return;
-    }
-    try {
-      const parsed = JSON.parse(payload);
-      for (const client of handlers) {
-        try {
-          client.handleResponse?.(parsed);
-        } catch (error) {
-          this.logClientError('Client handler error', error);
-        }
-      }
-    } catch (error) {
-      this.outputChannel.appendLine(payload);
-      this.outputChannel.show?.();
     }
   }
 

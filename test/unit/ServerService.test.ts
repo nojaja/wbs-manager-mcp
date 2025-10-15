@@ -127,11 +127,10 @@ describe('ServerService', () => {
   const stdoutCallback = mockChildProcess.stdout.on.mock.calls.find(call => call[0] === 'data')[1];
   // simulate Buffer input
   stdoutCallback(Buffer.from('test output\n'));
-
-  expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('test output');
-      expect(mockClient.handleResponseFromServer).toHaveBeenCalledWith('test output');
-      expect(mockClient.handleResponse).not.toHaveBeenCalled();
-      expect(mockOutputChannel.show).toHaveBeenCalled();
+  // ServerService now only forwards raw trimmed lines to handleResponseFromServer
+  expect(mockClient.handleResponseFromServer).toHaveBeenCalledWith('test output');
+  expect(mockClient.handleResponse).not.toHaveBeenCalled();
+  // previously ServerService would append non-JSON payloads; now clients decide how to log
     });
 
     it('should setup stderr handler', () => {
