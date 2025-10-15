@@ -10,14 +10,11 @@ export class MCPInitializeClient extends MCPBaseClient {
      * writerのセットを待機した上で初期化を実行する。
      */
     public async start(): Promise<void> {
-        const startAt = Date.now();
-        const timeout = 5000;
-        while (!this.writer && Date.now() - startAt < timeout) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-
-        if (!this.writer) {
-            throw new Error('MCPClient.start: writer not set by ServerService');
+        // wait for writer to be set by ServerService. タイムアウトは baseClient の requestTimeoutMs をデフォルトとする
+        try {
+            await this.waitForWriter();
+        } catch (err) {
+            throw new Error('MCPClient.start: writer not set by ServerService (timeout)');
         }
 
         await this.initialize();

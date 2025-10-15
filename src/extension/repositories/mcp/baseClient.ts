@@ -30,11 +30,31 @@ export class MCPBaseClient {
     private static globalRequestId = 0;
     protected readonly pendingRequests = new Map<number, PendingRequest>();
     protected writer: ((payload: string) => void) | null = null;
+    // track timeouts per pending request so they can be cleared when responses arrive or client stops
+    protected readonly pendingTimeouts = new Map<number, NodeJS.Timeout>();
+
+    // Deferred for writer readiness
+    private writerReady?: { promise: Promise<void>; resolve: () => void; reject: (err: Error) => void };
+
+    // configuration
+    protected readonly requestTimeoutMs: number;
 
     /**
      * @param outputChannel ログ出力先となるVSCodeのOutputChannel
+    * @param opts オプション: requestTimeoutMs (ms)
+    * @param opts.requestTimeoutMs リクエストタイムアウト（ミリ秒）。未指定時は10000
      */
-    constructor(protected readonly outputChannel: vscode.OutputChannel) { }
+    constructor(protected readonly outputChannel: vscode.OutputChannel, opts?: { requestTimeoutMs?: number }) {
+        this.requestTimeoutMs = opts?.requestTimeoutMs ?? 10000;
+        // create deferred
+        let resolveFn!: () => void;
+        let rejectFn!: (err: Error) => void;
+        const p = new Promise<void>((resolve, reject) => {
+            resolveFn = resolve;
+            rejectFn = reject;
+        });
+        this.writerReady = { promise: p, resolve: resolveFn, reject: rejectFn };
+    }
 
     /**
      * ServerService から受け取った書き込み関数を登録する。
@@ -43,6 +63,48 @@ export class MCPBaseClient {
      */
     public setWriter(writer: (payload: string) => void): void {
         this.writer = writer;
+        this.outputChannel.appendLine(`[MCP Client] writer set`);
+        // resolve writerReady if exists
+        try {
+            this.writerReady?.resolve();
+        } catch (err) {
+            // ignore
+        }
+    }
+
+    /**
+     * writer がセットされるのを Promise で待つ
+     * @param timeoutMs タイムアウト（ms）。未指定時はコンストラクタでのデフォルト
+     */
+    public async waitForWriter(timeoutMs?: number): Promise<void> {
+        if (this.writer) {
+            return;
+        }
+        const t = timeoutMs ?? this.requestTimeoutMs;
+        if (!this.writerReady) {
+            // create deferred
+            let resolveFn!: () => void;
+            let rejectFn!: (err: Error) => void;
+            const p = new Promise<void>((resolve, reject) => {
+                resolveFn = resolve;
+                rejectFn = reject;
+            });
+            this.writerReady = { promise: p, resolve: resolveFn, reject: rejectFn };
+        }
+
+        return new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error('waitForWriter: timeout'));
+            }, t);
+
+            this.writerReady!.promise.then(() => {
+                clearTimeout(timer);
+                resolve();
+            }).catch((err) => {
+                clearTimeout(timer);
+                reject(err);
+            });
+        });
     }
 
     /**
@@ -84,6 +146,11 @@ export class MCPBaseClient {
             pending.reject(new Error('Server process exited'));
         }
         this.pendingRequests.clear();
+        // clear any pending timeouts
+        for (const [, t] of this.pendingTimeouts.entries()) {
+            clearTimeout(t);
+        }
+        this.pendingTimeouts.clear();
     }
 
     /**
@@ -96,6 +163,10 @@ export class MCPBaseClient {
             pending.reject(new Error('MCP client stopped'));
         }
         this.pendingRequests.clear();
+        for (const [, t] of this.pendingTimeouts.entries()) {
+            clearTimeout(t);
+        }
+        this.pendingTimeouts.clear();
     }
 
     /**
@@ -220,7 +291,7 @@ export class MCPBaseClient {
         return new Promise((resolve, reject) => {
             this.pendingRequests.set(id, { resolve, reject });
             const payload = `${JSON.stringify(request)}\n`;
-            this.outputChannel.appendLine(`[MCP Client] Sending: ${method}`);
+            this.log(`[MCP Client] Sending: ${method}`, { id, method });
             try {
                 this.writer?.(payload);
             } catch (error) {
@@ -229,12 +300,18 @@ export class MCPBaseClient {
                 return;
             }
 
-            setTimeout(() => {
+            const to = setTimeout(() => {
                 if (this.pendingRequests.has(id)) {
                     this.pendingRequests.delete(id);
-                    reject(new Error(`Request timeout: ${method}`));
+                    this.pendingTimeouts.delete(id);
+                    const err = new Error(`Request timeout: ${method}`);
+                    this.log(`Request timeout: ${method}`, { id, method, error: err.message });
+                    reject(err);
                 }
-            }, 10000);
+            }, this.requestTimeoutMs);
+
+            // store timeout so it can be cleared when a response arrives
+            this.pendingTimeouts.set(id, to);
         });
     }
 
@@ -260,6 +337,16 @@ export class MCPBaseClient {
     }
 
     /**
+     * 統一ログ関数
+     * @param message ログメッセージ
+     * @param meta 任意のメタ情報（オブジェクト）
+     */
+    protected log(message: string, meta?: Record<string, unknown>): void {
+        const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
+        this.outputChannel.appendLine(`${message}${metaStr}`);
+    }
+
+    /**
      * JSON-RPCレスポンスを解決/拒否する内部処理。
      *
      * @param response 受信したJSON-RPCレスポンス
@@ -275,6 +362,11 @@ export class MCPBaseClient {
         }
 
         this.pendingRequests.delete(response.id);
+        const to = this.pendingTimeouts.get(response.id);
+        if (to) {
+            clearTimeout(to);
+            this.pendingTimeouts.delete(response.id);
+        }
         if (response.error) {
             pending.reject(new Error(response.error.message));
         } else {
