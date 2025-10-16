@@ -1,5 +1,8 @@
 /**
- * JSON-RPC request shape
+ * 処理名: JSON-RPC リクエスト型定義
+ * 処理概要: JSON-RPC 2.0 に準拠したリクエスト（要求）メッセージの型定義。
+ * 実装理由: 受信したメッセージを型として明確に扱うことで、メソッド名や id の有無による
+ *           リクエスト/通知の振り分けを安全に行うために必要。
  */
 export interface JsonRpcRequest {
   jsonrpc: string;
@@ -9,7 +12,10 @@ export interface JsonRpcRequest {
 }
 
 /**
- * JSON-RPC response shape
+ * 処理名: JSON-RPC レスポンス型定義
+ * 処理概要: JSON-RPC 2.0 に準拠したレスポンス（応答）メッセージの型定義。
+ * 実装理由: サーバー/クライアント間で送受信される結果やエラーを一貫して扱い、
+ *           応答処理やエラー表示に利用するために必要。
  */
 export interface JsonRpcResponse {
   jsonrpc: string;
@@ -19,7 +25,9 @@ export interface JsonRpcResponse {
 }
 
 /**
- * JSON-RPC notification shape
+ * 処理名: JSON-RPC 通知型定義
+ * 処理概要: JSON-RPC 2.0 に準拠した通知（notification）メッセージの型定義。通知は応答を期待しない。
+ * 実装理由: 応答を返さない一方向メッセージを区別して処理するために必要。通知はサーバー状態の更新などに使われる。
  */
 export interface JsonRpcNotification {
   jsonrpc: string;
@@ -28,9 +36,13 @@ export interface JsonRpcNotification {
 }
 
 /**
- * Parse a single-line JSON-RPC payload and perform basic validation.
- * @param {string} line
- * @returns {JsonRpcRequest | JsonRpcNotification} parsed message
+ * 処理名: JSON-RPC メッセージ解析
+ * 処理概要: 単一行の文字列として渡された JSON-RPC ペイロードをパースし、基本的な検証を行う。
+ *           成功時は `JsonRpcRequest`（id を含む）か `JsonRpcNotification`（id を含まない）のいずれかを返す。
+ * 実装理由: 標準化された JSON-RPC メッセージとして正しい形式かを早期に検証してから
+ *           上位ロジックに渡すことで、安全なメッセージ処理とエラーの早期検出を実現するために必要。
+ * @param {string} line パース対象の1行 JSON 文字列
+ * @returns {JsonRpcRequest | JsonRpcNotification} 解析されたメッセージオブジェクト
  */
 export function parseJsonRpc(line: string): JsonRpcRequest | JsonRpcNotification {
   const trimmed = line.trim();

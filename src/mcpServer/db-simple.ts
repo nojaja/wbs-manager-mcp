@@ -57,46 +57,39 @@ export interface Task extends CommonTask {
 // DB 管理は src/mcpServer/db/DatabaseManager に移譲しています
 
 /**
- * データベースパス解決処理
- * データディレクトリの絶対パスを生成し返す
- * なぜ必要か: ワークスペースごとに独立したDBファイルを安全に配置するため
- * 
- * WBS_MCP_DATA_DIRが設定されていれば、それを基準ディレクトリとして使用
- * - 絶対パスの場合：そのまま使用
- * - 相対パスの場合：プロセスの作業ディレクトリ（通常はワークスペースルート）からの相対パスとして解釈
- * - 未設定の場合：プロセスの作業ディレクトリを使用
- * 
- * @returns データベースファイルパス
- */
-/**
- * Resolve database path (delegated to DatabaseManager)
- * @returns {string} path to DB file
+ * 処理名: データベースパス解決 (resolveDatabasePath)
+ * 概要: データディレクトリおよびDBファイルの絶対パスを決定して返します。
+ * 実装理由: ワークスペースやテストごとに独立したDBファイル配置を安全に行うために、
+ *           ベースディレクトリの解決ロジックを一元化する必要があるため。
+ *
+ * 挙動の詳細:
+ * - 環境変数 `WBS_MCP_DATA_DIR` が設定されていればそれを基準とする
+ * - 絶対パスはそのまま利用し、相対パスはプロセス作業ディレクトリを基準に解釈する
+ *
+ * @returns {string} データベースファイルのパス
  */
 export const resolveDatabasePath = defaultResolveDatabasePath;
 
 // Note: DB path is resolved dynamically inside getDatabase to support per-test overrides of WBS_MCP_DATA_DIR
 
 /**
- * データベース取得処理
- * DBファイルがなければ作成し、Databaseインスタンスを返す
- * なぜ必要か: DB初期化・多重生成防止・全DB操作の共通入口とするため
- * @returns Promise<Database>
- */
-/**
- * Get Database instance (delegated to DatabaseManager)
- * @returns {Promise<Database>}
+ * 処理名: データベース取得 (getDatabase)
+ * 概要: SQLite の Database インスタンスを返します。存在しない場合は初期化処理を呼び出して作成します。
+ * 実装理由: DB の生成・初期化・キャッシュを一箇所で管理することで、多重生成や初期化漏れを防ぎ、
+ *           呼び出し側をシンプルに保つため。
+ *
+ * @returns {Promise<Database>} 初期化済みの Database インスタンス
  */
 async function getDatabase(): Promise<Database> {
     return defaultGetDatabase();
 }
 
 /**
- * データベース初期化処理
- * 必要なテーブルを作成し、初期データを投入する
- * なぜ必要か: サーバ起動時にDBスキーマ・サンプルデータを自動生成するため
- */
-/**
- * Initialize the database schema (delegated to DatabaseManager)
+ * 処理名: データベース初期化 (initializeDatabase)
+ * 概要: 必要なテーブルや初期データを作成し、DB を使用可能な状態にします。
+ * 実装理由: テストやローカル実行で期待されるスキーマが存在することを保証し、
+ *           手動でスキーマを用意する手間を省くため。
+ *
  * @returns {Promise<void>}
  */
 export async function initializeDatabase(): Promise<void> {
@@ -104,7 +97,10 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 /**
- * Close and clear DB cache (delegated to DatabaseManager)
+ * 処理名: データベース終了・キャッシュクリア (closeAndClearDatabase)
+ * 概要: オープンしている DB 接続を閉じ、キャッシュや一時ファイルをクリアします。
+ * 実装理由: テストやサーバ停止時に接続リークや状態の残存を防ぎ、次回起動時にクリーンな状態を保証するため。
+ *
  * @returns {Promise<void>}
  */
 export async function closeAndClearDatabase(): Promise<void> {
@@ -120,10 +116,11 @@ export async function closeAndClearDatabase(): Promise<void> {
 // Exported functional API (no wrapper): callers should use these top-level functions
 
 /**
- * Create a task and return the created Task object
- */
-/**
- * タスクを作成して作成後の Task オブジェクトを返します。
+ * 処理名: タスク作成 (createTask)
+ * 概要: タイトルや説明、親情報・担当者などのメタ情報を受け取り、新しいタスクをデータベースに作成して作成済みの Task オブジェクトを返します。
+ * 実装理由: タスク作成のビジネスロジック（ID 生成、関連成果物割当、バージョン管理など）をサーバ側で一元化し、
+ *           クライアント・テストから簡潔にタスク作成を行えるようにするため。
+ *
  * @param {string} title タスク名
  * @param {string} [description] タスク説明
  * @param {string|null} [parentId] 親タスクID（null = ルート）
@@ -154,9 +151,11 @@ export async function createTask(
 }
 
 /**
- * 複数タスクを一括作成します。
+ * 処理名: タスク一括インポート (importTasks)
+ * 概要: 複数のタスク定義オブジェクトの配列を受け取り、順に createTask を呼び出してタスクを作成します。戻り値として作成済みタスクの配列を返します。
+ * 実装理由: 外部からのタスクバルク登録（JSON インポートやテストデータ準備）を簡単に行えるようにするため。個別作成ロジックを再利用します。
+ *
  * @param {Array<any>} tasksTasks タスク定義の配列（各要素は少なくとも title を持つオブジェクト）
- * @param {Object} [options]
  * @returns {Promise<Task[]>} 作成されたタスク配列
  */
 export async function importTasks(tasksTasks: Array<any>): Promise<Task[]> {
@@ -181,7 +180,10 @@ export async function importTasks(tasksTasks: Array<any>): Promise<Task[]> {
 }
 
 /**
- * 成果物一覧を返します。
+ * 処理名: 成果物一覧取得 (listArtifacts)
+ * 概要: データベースに登録された全成果物の配列を返します。
+ * 実装理由: クライアント表示や他処理から利用するために、成果物一覧を取得する共通 API を提供するため。
+ *
  * @returns {Promise<Artifact[]>} 成果物配列
  */
 export async function listArtifacts(): Promise<Artifact[]> {
@@ -190,7 +192,10 @@ export async function listArtifacts(): Promise<Artifact[]> {
 }
 
 /**
- * 指定IDの成果物を取得します。
+ * 処理名: 成果物取得 (getArtifact)
+ * 概要: 指定した成果物ID に紐づく成果物を返します。存在しない場合は null を返します。
+ * 実装理由: 単一成果物の表示・編集・参照処理で一貫した取得方法を提供するため。
+ *
  * @param {string} artifactId 成果物ID
  * @returns {Promise<Artifact|null>} 成果物（存在しない場合は null）
  */
@@ -200,7 +205,10 @@ export async function getArtifact(artifactId: string): Promise<Artifact | null> 
 }
 
 /**
- * 新しい成果物を作成します。
+ * 処理名: 成果物作成 (createArtifact)
+ * 概要: タイトル・URI・説明を受け取り、新規成果物を DB に作成して返します。
+ * 実装理由: 成果物管理の基本 CRUD の Create 処理を提供し、他機能が統一的に成果物を生成できるようにするため。
+ *
  * @param {string} title 成果物名
  * @param {string} [uri] 関連 URI
  * @param {string} [description] 説明
@@ -212,7 +220,10 @@ export async function createArtifact(title: string, uri?: string, description?: 
 }
 
 /**
- * 成果物を更新します（楽観ロック対応）。
+ * 処理名: 成果物更新 (updateArtifact)
+ * 概要: 指定した成果物のフィールドを更新します。`ifVersion` による楽観ロックに対応しています。
+ * 実装理由: 競合更新を防ぎつつ成果物情報を更新するために、バージョンチェックを含む更新ロジックを提供する必要があるため。
+ *
  * @param {string} artifactId 成果物ID
  * @param {{title?: string, uri?: string|null, description?: string|null, ifVersion?: number}} updates 更新内容
  * @param {string} [updates.title] 更新後タイトル
@@ -227,7 +238,10 @@ export async function updateArtifact(artifactId: string, updates: { title?: stri
 }
 
 /**
- * 成果物を削除します。
+ * 処理名: 成果物削除 (deleteArtifact)
+ * 概要: 指定した成果物をデータベースから削除します。削除に成功すれば true を返します。
+ * 実装理由: 成果物のライフサイクル管理の一環として、利用されなくなった成果物を安全に削除する必要があるため。
+ *
  * @param {string} artifactId 成果物ID
  * @returns {Promise<boolean>} 削除された場合は true
  */
@@ -237,7 +251,10 @@ export async function deleteArtifact(artifactId: string): Promise<boolean> {
 }
 
 /**
- * 指定親の直下タスクを一覧で返します（parentId が未指定または null の場合はトップレベル）
+ * 処理名: タスク一覧取得 (listTasks)
+ * 概要: 指定した親タスク直下の子タスク一覧を返します。parentId が未指定または null の場合はトップレベルタスクを返します。
+ * 実装理由: ツリー表示や子タスク列挙の共通呼び出し口が必要であり、クライアントや他サービスから簡単に参照できるようにするため。
+ *
  * @param {string|null} [parentId] 親タスクID
  * @returns {Promise<Task[]>} タスク配列
  */
@@ -248,7 +265,10 @@ export async function listTasks(parentId?: string | null): Promise<Task[]> {
 }
 
 /**
- * 指定タスク（子孫を含むツリー構造）を取得します。
+ * 処理名: タスク取得 (getTask)
+ * 概要: 指定したタスクID のタスクを、子孫を含むツリー構造で返します。存在しない場合は null を返します。
+ * 実装理由: タスク詳細表示やサブタスクを含む編集処理で一貫したデータ構造を取得するため。
+ *
  * @param {string} taskId タスクID
  * @returns {Promise<Task|null>} タスク（存在しない場合は null）
  */
@@ -259,7 +279,10 @@ export async function getTask(taskId: string): Promise<Task | null> {
 }
 
 /**
- * タスクを更新します。
+ * 処理名: タスク更新 (updateTask)
+ * 概要: 指定したタスクの属性や関連情報（成果物割当や完了条件など）を更新し、更新後の Task を返します。ifVersion による楽観ロックをサポートします。
+ * 実装理由: 競合を抑えつつタスク情報を変更できる統一 API を提供し、関連エンティティとの整合性を維持するため。
+ *
  * @param {string} taskId タスクID
  * @param {Partial<Task> & {ifVersion?:number, deliverables?:TaskArtifactInput[], prerequisites?:TaskArtifactInput[], completionConditions?:TaskCompletionConditionInput[]}} updates 更新内容
  * @returns {Promise<Task>} 更新後のタスク
@@ -272,7 +295,10 @@ export async function updateTask(taskId: string, updates: Partial<Task> & { ifVe
 
 
 /**
- * タスクの親を変更します。
+ * 処理名: タスク移動 (moveTask)
+ * 概要: 指定タスクの親を変更し、移動後のタスク情報を返します。
+ * 実装理由: タスクの階層構造を編集（ドラッグ＆ドロップ等）する際に、親子関係の更新を安全に行うため。
+ *
  * @param {string} taskId タスクID
  * @param {string|null} newParentId 新しい親タスクID（null = ルート）
  * @returns {Promise<Task>} 更新後のタスク
@@ -284,7 +310,10 @@ export async function moveTask(taskId: string, newParentId: string | null): Prom
 }
 
 /**
- * タスクを削除します。
+ * 処理名: タスク削除 (deleteTask)
+ * 概要: 指定したタスクをデータベースから削除します。削除に成功すれば true を返します。
+ * 実装理由: 不要になったタスクのライフサイクル管理のため、削除処理を提供する必要があるため。
+ *
  * @param {string} taskId タスクID
  * @returns {Promise<boolean>} 削除された場合は true
  */

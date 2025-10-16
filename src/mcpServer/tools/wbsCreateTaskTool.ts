@@ -1,12 +1,19 @@
 import { Tool } from './Tool';
 
 /**
- * wbs.createTask ツール
+ * 処理名: WBS タスク作成ツール (wbs.planMode.createTask)
+ * 概要: 引数を受け取り、WBS のタスクを作成するためのラッパーツールです。
+ *       リポジトリ層へ createTask を委譲し、作成結果から LLM に渡す補助ヒントを生成して返却します。
+ * 実装理由: 外部呼び出し（ツールプラグイン経由）からタスク作成の共通処理を一元化し、
+ *       引数の正規化・検証、エラーハンドリング、LLM 向けヒント生成を集中管理するために必要です。
  */
 export default class WbsCreateTaskTool extends Tool {
     repo: any | null;
     /**
-     * コンストラクタ
+     * 処理名: コンストラクタ
+     * 概要: ツール定義（名前・説明・入力スキーマ）を初期化し、リポジトリ参照を初期化します。
+     * 実装理由: ツールとして登録されるためのメタ情報（inputSchema 等）をセットアップし、
+     *       後続の init() で DI による依存注入を受けられる状態にする必要があるためです。
      */
     constructor() {
         super({
@@ -52,7 +59,11 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * @param deps DIで注入される依存
+     * 処理名: 初期化 (init)
+     * 概要: 依存注入されたオブジェクトを受け取り、ローカルで使用するリポジトリ参照を設定します。
+     * 実装理由: テストや実行環境に応じてリポジトリ実装を差し替え可能にし、createTask 等の呼び出しで
+     *       実際の永続化層へアクセスできるようにするためです。
+     * @param deps DIで注入される依存オブジェクト（例: { repo })
      */
     async init(deps?: any) {
         await super.init(deps);
@@ -60,9 +71,13 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * タスク作成処理 (ツール呼び出しから)
-     * @param args ツール引数 (title, description, parentId, assignee, estimate)
-    * @returns {Promise<any>} ツールレスポンス
+     * 処理名: タスク作成実行 (run)
+     * 概要: ツール呼び出しから渡された引数を検証・正規化し、リポジトリの createTask を呼んで
+     *       タスクを作成します。作成結果を整形して content と LLM 用のヒントを返却します。
+     * 実装理由: UI や外部システムからの要求を受けてタスクを永続化するためのエントリポイントであり、
+     *       引数のバリデーション、エラー整形、LLM ヒント生成などの横断的関心事を処理するために必要です。
+     * @param args ツール引数 (title, description, parentId, assignee, estimate, deliverables, prerequisites, completionConditions)
+     * @returns {Promise<any>} ツールの実行結果（content と llmHints を含む）
      */
     async run(args: any) {
         try {
@@ -119,8 +134,12 @@ export default class WbsCreateTaskTool extends Tool {
 
     // task に基づく LLM 向けヒントを生成する
     /**
-     * task オブジェクトから LLM に渡すヒントを生成する
-     * - draft の場合は未設定フィールドを検出し、`wbs.planMode.updateTask` を使う指示を追加する
+     * 処理名: LLM ヒント生成 (buildLlmHintsForTask)
+     * 概要: 作成された task オブジェクトを解析して、LLM（例: 補助 AI）に渡すための
+     *       nextActions と notes を生成します。draft ステータスの場合は未設定フィールドに基づく
+     *       updateTask の提案を含めます。
+     * 実装理由: フロントや LLM に対して次の操作候補を示すことで、ユーザー支援や自動化ワークフローの
+     *       補助を行うために必要です。タスク作成後のフォローアップ操作を分かりやすく提示します。
      * @param {any} task タスクオブジェクト
      * @returns {{nextActions: any[], notes: string[]}} llmHints オブジェクト
      */
@@ -149,7 +168,12 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * draft タスクに対して未設定のフィールド一覧を返す
+     * 処理名: draft 未設定フィールド検出 (getMissingDraftFields)
+     * 概要: draft 状態の task を検査して、title/description/estimate や
+     *       options 配下の deliverables/prerequisites/completionConditions が未設定かどうかを判定し、
+     *       未設定フィールドの配列を返します。
+     * 実装理由: draft タスクは不完全な状態であることが多く、どのフィールドが欠落しているかを特定して
+     *       追加の updateTask 提案を生成するために必要です。
      * @param {any} task タスクオブジェクト
      * @returns {string[]} 未設定フィールドの配列
      */
@@ -168,10 +192,11 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * 指定フィールドに対する updateTask 用の nextAction オブジェクトを生成する
-     */
-    /**
-     * 指定フィールドに対する updateTask 用の nextAction オブジェクトを生成する
+     * 処理名: updateTask アクション生成 (buildUpdateActionForField)
+     * 概要: 指定された未設定フィールドに対して、LLM/フロントが呼び出すべき
+     *       'wbs.planMode.updateTask' の利用方法を含む nextAction オブジェクトを生成します。
+     * 実装理由: ユーザーや自動化エージェントが不足しているフィールドを埋めるために
+     *       どのツールをどのように使えばよいかを明確に伝える必要があるためです。
      * @param {string} field フィールド名
      * @param {string} taskId タスクID
      * @returns {object} nextAction オブジェクト
@@ -185,7 +210,11 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * 未設定フィールドの一覧から nextActions に updateTask アクションを追加する
+     * 処理名: 未設定フィールドアクション追加 (appendMissingFieldActions)
+     * 概要: 未設定フィールドの配列を受け取り、それぞれに対して updateTask を呼ぶための
+     *       nextAction を生成して nextActions 配列へ追加します。
+     * 実装理由: getMissingDraftFields の結果を利用して LLM/フロントが実行すべき具体的な
+     *       アクションのリストを作成するために必要です。
      * @param {string[]} missingFields 未設定フィールド名の配列
      * @param {any[]} nextActions 追加先の nextActions 配列
      * @param {string} taskId タスクID
