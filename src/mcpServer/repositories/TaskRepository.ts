@@ -7,6 +7,7 @@ import type {
 } from '../db/types';
 import { TaskArtifactRepository } from './TaskArtifactRepository';
 import { CompletionConditionRepository } from './CompletionConditionRepository';
+import { DependenciesRepository } from './DependenciesRepository';
 import { getDatabase } from '../db/connection';
 
 /**
@@ -18,6 +19,7 @@ import { getDatabase } from '../db/connection';
 export class TaskRepository {
   private readonly taskArtifactRepo = new TaskArtifactRepository();
   private readonly completionConditionRepo = new CompletionConditionRepository();
+  private readonly dependenciesRepo = new DependenciesRepository();
 
   /**
    * 処理名: コンストラクタ
@@ -159,17 +161,22 @@ export class TaskRepository {
     );
 
     const taskIds = rows.map((row: any) => row.id);
-    const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
-    const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
+  const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
+  const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
+  // 依存関係情報を収集して、deliverables/prerequisites を依存関係ベースで組み立てる
+  const dependencyMap = await this.dependenciesRepo.collectDependenciesForTasks(taskIds);
 
     return rows.map((row: any) => {
       const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
+      const depBucket = dependencyMap.get(row.id) ?? { dependents: [], dependees: [] };
+      // deliverables は依存関係の to_task_id に紐づくエントリ（dependees）、prerequisites は from_task_id に紐づくエントリ（dependents）
       return {
         ...row,
         childCount: typeof row.childCount === 'number' ? row.childCount : Number(row.childCount ?? 0),
         children: [],
-        deliverables: artifactInfo.deliverables,
-        prerequisites: artifactInfo.prerequisites,
+        // 既存の task_artifacts ベースの deliverables/prerequisites は残すが、破壊的変更により依存関係ベースで上書きする
+        deliverables: depBucket.dependees,
+        prerequisites: depBucket.dependents,
         completionConditions: completionConditions.get(row.id) ?? []
       };
     });
@@ -197,16 +204,18 @@ export class TaskRepository {
 
     const taskMap = new Map<string, Task>();
     const taskIds = rows.map((row: any) => row.id);
-    const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
-    const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
+  const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
+  const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
+  const dependencyMap = await this.dependenciesRepo.collectDependenciesForTasks(taskIds);
 
     rows.forEach((row: any) => {
       const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
+      const depBucket = dependencyMap.get(row.id) ?? { dependents: [], dependees: [] };
       taskMap.set(row.id, {
         ...row,
         children: [],
-        deliverables: artifactInfo.deliverables,
-        prerequisites: artifactInfo.prerequisites,
+        deliverables: depBucket.dependees,
+        prerequisites: depBucket.dependents,
         completionConditions: completionConditions.get(row.id) ?? []
       });
     });

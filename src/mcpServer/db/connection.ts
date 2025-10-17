@@ -159,6 +159,18 @@ async function runInitialize(db: Database): Promise<void> {
     `);
 
   await db.exec(`
+    CREATE TABLE IF NOT EXISTS dependency_artifacts (
+      id TEXT PRIMARY KEY,
+      dependency_id TEXT NOT NULL,
+      artifact_id TEXT NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (dependency_id) REFERENCES dependencies(id) ON DELETE CASCADE,
+      FOREIGN KEY (artifact_id) REFERENCES artifacts(id) ON DELETE CASCADE
+    )
+  `);
+
+  await db.exec(`
         CREATE TABLE IF NOT EXISTS task_history (
             id TEXT PRIMARY KEY,
             task_id TEXT NOT NULL,
