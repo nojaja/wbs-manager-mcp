@@ -185,7 +185,11 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * 未設定フィールドの一覧から nextActions に updateTask アクションを追加する
+     * 処理名: 未設定フィールドアクション追加 (appendMissingFieldActions)
+     * 概要: 未設定フィールドの配列を受け取り、それぞれに対して updateTask を呼ぶための
+     *       nextAction を生成して nextActions 配列へ追加します。
+     * 実装理由: getMissingDraftFields の結果を利用して LLM/フロントが実行すべき具体的な
+     *       アクションのリストを作成するために必要です。
      * @param {string[]} missingFields 未設定フィールド名の配列
      * @param {any[]} nextActions 追加先の nextActions 配列
      * @param {string} taskId タスクID

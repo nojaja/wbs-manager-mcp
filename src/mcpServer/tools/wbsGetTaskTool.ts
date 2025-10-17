@@ -8,7 +8,15 @@ import { TaskRepository } from '../repositories/TaskRepository';
 export default class WbsGetTaskTool extends Tool {
     private readonly repo: TaskRepository;
     /**
-     * コンストラクタ
+     * 処理名: コンストラクタ
+     *
+     * 概要:
+     * ツールの基本設定（name, description, inputSchema）を親クラスに渡して初期化します。
+     * repo フィールドは後で DI によって注入されるため null で初期化します。
+     *
+     * 実装理由:
+     * ツールのメタ情報と入力スキーマを明確に定義することで外部からの呼び出し時に検証を行い、
+     * 想定外の引数による実行を防止します。
      */
     constructor() {
         super({ name: 'wbs.planMode.getTask', description: 'Get task details by ID (tool plugin)', inputSchema: { type: 'object', properties: { taskId: { type: 'string', description: 'Task ID' } }, required: ['taskId'] } });

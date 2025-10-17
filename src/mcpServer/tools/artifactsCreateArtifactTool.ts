@@ -67,4 +67,11 @@ export default class ArtifactsCreateArtifactTool extends Tool {
     }
 }
 
+/**
+ * シングルトンインスタンス
+ *
+ * なぜ提供するか:
+ *  ツールは状態を持たないか、共有状態をDIで注入して利用する設計になっているため、
+ *  単一のインスタンスをエクスポートして使い回すのが簡潔で扱いやすいです。
+ */
 export const instance = new ArtifactsCreateArtifactTool();

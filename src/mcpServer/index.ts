@@ -1,32 +1,30 @@
 //console.errorでPIDを返す
 console.error('[MCP Server] Starting stdio MCP server... PID:', process.pid);
 import { ToolRegistry } from './tools/ToolRegistry';
+import { StdioTransport } from './transport/StdioTransport';
+import { parseJsonRpc, JsonRpcRequest, JsonRpcNotification, JsonRpcResponse } from './parser/Parser';
+import { Dispatcher } from './dispatcher/Dispatcher';
+
+Logger.info('[MCP Server] Starting stdio MCP server... PID: ' + process.pid);
 
 // Create a global registry instance for tools
 const toolRegistry = new ToolRegistry();
 // Note: we'll load tools dynamically from ./tools in a later step
 
-interface JsonRpcRequest {
-    jsonrpc: string;
-    id?: number | string;
-    method: string;
-    params?: any;
-}
-
-interface JsonRpcResponse {
-    jsonrpc: string;
-    id?: number | string;
-    result?: any;
-    error?: {
-        code: number;
-        message: string;
-    };
-}
-
-interface JsonRpcNotification {
-    jsonrpc: string;
-    method: string;
-    params?: any;
+/**
+ * 処理名: タスク作成ラッパー (sharedCreateTask)
+ * 処理概要: DB 層の `createTask` を呼び出して新しいタスクを作成するラッパー関数です。
+ * 実装理由: サーバ内の他コンポーネントから呼び出す際に引数のデフォルト処理や型整形を集約し、直接 DB モジュールに渡す前の一貫したインターフェースを提供するため。
+ * @param {string} title
+ * @param {string} [description]
+ * @param {string|null} [parentId]
+ * @param {string|null} [assignee]
+ * @param {string|null} [estimate]
+ * @param {any} [options]
+ * @returns {Promise<any>}
+ */
+async function sharedCreateTask(title: string, description?: string, parentId?: string | null, assignee?: string | null, estimate?: string | null, options?: any) {
+    return createTask(title, description ?? '', parentId ?? null, assignee ?? null, estimate ?? null, options);
 }
 
 /**
@@ -38,9 +36,11 @@ interface JsonRpcNotification {
 class StdioMCPServer {
 
     /**
-     * 処理名: コンストラクタ
-     * 処理概要: WBSRepository のインスタンスを作成し、標準入出力の受信ハンドラを設定する
-     * 実装理由: サーバが扱うデータ層（リポジトリ）と通信ハンドラを初期化して、以降のメッセージ処理を一元的に行うため
+     * 処理名: モジュール読み込みと登録 (importAndRegister)
+     * 処理概要: 指定されたモジュールパスを動的 import し、モジュールが提供するツールインスタンスを抽出して `toolRegistry.register` を呼び出します。
+     * 実装理由: 各ツールモジュールのエクスポート形式（instance/default/tool）に柔軟に対応し、個別のロード失敗をログ出力してサーバ全体の起動失敗を防ぐため。
+     * @param {string} p Module path to import
+     * @returns {Promise<void>}
      */
     constructor() {
         this.setupStdioHandlers();
@@ -105,160 +105,120 @@ class StdioMCPServer {
      */
     private async handleMessage(message: JsonRpcRequest | JsonRpcNotification) {
         try {
-            console.error(`[MCP Server] Received: ${message.method}`, message.params);
-
-            // id プロパティの有無でリクエスト/通知を判定
-            // 処理概要: リクエストはレスポンスを返す必要があるため handleRequest を呼び、通知は handleNotification に委譲する
-            // 実装理由: クライアントとサーバ間での同期的な呼び出し/非同期通知を正しく扱うため
-            if ('id' in message) {
-                // Request - needs response
-                const response = await this.handleRequest(message as JsonRpcRequest);
-                this.sendResponse(message.method, response);
-            } else {
-                // Notification - no response needed
-                await this.handleNotification(message as JsonRpcNotification);
+            const mod = await import(p);
+            const instance = mod.instance || mod.default || mod.tool;
+            // 処理概要: エクスポートからインスタンスを判定し、存在しなければ登録をスキップ
+            // 実装理由: モジュールによってエクスポート形式が異なるため柔軟に対応するため
+            if (!instance) return;
+            try {
+                // 処理概要: インスタンスをレジストリに登録
+                // 実装理由: レジストリはツール実行の中心であり、登録時に名前やメタ情報を検査するため
+                await toolRegistry.register(instance);
+            } catch (err) {
+                // 処理概要: 登録失敗時はエラーログを出力して処理を継続
+                // 実装理由: 一つのツール登録失敗で全体が止まらないようにするため
+                Logger.error('[MCP Server] failed to register tool', null, { tool: instance?.meta?.name, err: err instanceof Error ? err.message : String(err) });
             }
-        } catch (error) {
-            // 処理概要: message 処理中の例外はログに出力し、リクエストの場合はエラー応答を返す
-            // 実装理由: 通知は一方向通信なので応答しないが、リクエストは呼び出し元が結果を待っているためエラーを返却する必要がある
-            console.error('[MCP Server] Error handling message:', error);
-            if ('id' in message) {
-                this.sendResponse(message.method, {
-                    jsonrpc: '2.0',
-                    id: message.id,
-                    error: {
-                        code: -32603,
-                        message: error instanceof Error ? error.message : String(error)
-                    }
-                });
-            }
+        } catch (err) {
+            // 処理概要: import が失敗した場合はエラーログを出力
+            // 実装理由: モジュールロードエラーの原因追跡と、起動継続のために詳細をログに残す必要があるため
+            Logger.error('[MCP Server] Failed to load tool:', null, { path: p, err: err instanceof Error ? err.message : String(err) });
         }
     }
 
+    // 処理概要: 定義済みのツールパスを逐次取り出して importAndRegister を呼び出す
+    // 実装理由: 各ツールを順に読み込み登録することで起動時の初期化を行うため
+    for (const p of paths) {
+        await importAndRegister(p);
+    }
+    Logger.info('[MCP Server] Built-in tools registered: ' + JSON.stringify(toolRegistry.list().map(t => t.name)));
+}
+
+/**
+ * Start the MCP server: initialize DB, set deps, register tools and start transport/dispatcher.
+ * @returns {Promise<void>}
+ */
+async function startServer() {
+    try {
+    // 処理概要: DB 初期化、依存注入、及び組み込みツールの登録を順に実行
+    // 実装理由: サーバ起動前に必須の基盤（DB とツールレジストリ）を確実に準備するため
+    await initializeDatabase();
+    await toolRegistry.setDeps({ repo: sharedRepo });
+    await registerBuiltInTools();
+
+    // Install graceful shutdown handlers that dispose tools before exit
     /**
-     * 処理名: リクエストハンドラ
-     * 処理概要: JSON-RPC リクエストのメソッド名に応じて適切なレスポンスを返す。内部的にはツール呼び出しやリソース情報の返却を行う
-     * 実装理由: クライアント API をサーバの機能（ツール実行やリソース提供）にマッピングするため
-     * @param request リクエストオブジェクト
-     * @returns レスポンスオブジェクト
+     * 処理名: 優雅なシャットダウン (shutdown)
+     * 処理概要: 登録されたツールをすべて破棄（dispose）してからプロセスを終了します。オプションでシグナル名をログに出力します。
+     * 実装理由: プロセス終了時にツールのリソース（タイマー、ファイルハンドラ等）を確実に解放し、整合性を保つために必要です。
+     * @param {string|undefined} signal Optional signal name for logging
+     * @returns {Promise<void>}
      */
-    private async handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
-        const { method, params, id } = request;
+    const shutdown = async (signal?: string) => {
+            Logger.info('[MCP Server] Shutting down server ' + (signal || ''));
+            // 処理概要: 登録済みツールの dispose を呼び出してリソース解放を行う
+            // 実装理由: ツールが保持するリソース（タイマーやハンドル）を明示的に解放し、
+            //           プロセス終了時の副作用やデータ不整合を防ぐため
+            try {
+                await toolRegistry.disposeAll();
+            } catch (err) {
+                // 処理概要: dispose 中にエラーが起きた場合はログを残し終了処理を続行
+                // 実装理由: dispose の失敗でシャットダウンが阻害されないようにするため
+                Logger.error('[MCP Server] Error during disposeAll', null, { err: err instanceof Error ? err.message : String(err) });
+            }
+            process.exit(0);
+        };
+        process.on('SIGINT', () => shutdown('SIGINT'));
+        process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-        // メソッド名ごとに処理を分岐する switch ブロック
-        // 処理概要: 各 API 名に対応したレスポンス/副作用を実行する
-        // 実装理由: 単一エンドポイント（JSON-RPC）で複数機能を提供するため、明示的に分岐して処理を管理する
-        switch (method) {
-            case 'initialize':
-                // 処理概要: サーバの基本情報・機能一覧を返す
-                // 実装理由: クライアントがサーバの能力やバージョンを把握するため必要
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                        protocolVersion: '2024-11-05',
-                        capabilities: {
-                            tools: {}
-                        },
-                        serverInfo: {
-                            name: 'wbs-mcp-server',
-                            version: '0.1.0'
-                        }
-                    }
-                };
+        // create transport + dispatcher
+        const transport = new StdioTransport();
+        const dispatcher = new Dispatcher(toolRegistry);
 
-            case 'tools/list':
-                // 処理概要: 登録済みツール一覧を返す
-                // 実装理由: クライアントが利用可能なツールを列挙して UI 等で表示するため
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                        tools: toolRegistry.list()
-                    }
-                };
-
-            case 'tools/call':
-                {
-                    // 処理概要: 指定されたツール名でツールを実行し結果を返す
-                    // 実装理由: 拡張から具体的な処理（タスク作成/取得等）をリクエストできるようにするため
-                    const toolResult = await toolRegistry.execute(params?.name, params?.arguments ?? {});
-                    return { jsonrpc: '2.0', id, result: toolResult };
+    /**
+     * 処理名: 受信メッセージ処理 (handleLine)
+     * 処理概要: トランスポートから受け取った1行分の JSON-RPC メッセージを解析し、Dispatcher に処理を委譲、必要に応じて応答を送信します。解析エラー時はエラーレスポンスを返す試みを行います。
+     * 実装理由: JSON-RPC の受信→解析→ディスパッチ→応答というメッセージ処理の中心的な役割を担い、単一責任でエラーハンドリングを一元化するため。
+     * @param {string} line Raw JSON-RPC request/notification line
+     * @returns {Promise<void>}
+     */
+    async function handleLine(line: string) {
+            // 処理概要: 受信文字列を JSON-RPC として解析し、Dispatcher に処理を委譲
+            // 実装理由: メッセージ単位の解析と処理を一箇所に集約してエラーハンドリングを統一するため
+            try {
+                const msg = parseJsonRpc(line);
+                Logger.debug('[MCP Server] Received: ' + String((msg as any).method), null, { params: (msg as any).params });
+                const response = await dispatcher.handle(msg as JsonRpcRequest | JsonRpcNotification);
+                // 処理概要: Dispatcher の返すレスポンスがあればトランスポート経由で返信
+                // 実装理由: JSON-RPC のリクエスト/レスポンスモデルに従い適切に応答を返すため
+                if (response) {
+                    transport.send(response as JsonRpcResponse);
                 }
-
-            case 'ping':
-                // 処理概要: 単純な疎通確認（空の結果を返す）
-                // 実装理由: クライアントがサーバとの接続状態を確認するため
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: {}
-                };
-
-            case 'resources/list':
-                // 処理概要: リソース一覧を返す（現状未実装で空配列）
-                // 実装理由: 将来的に外部リソースを列挙する API のプレースホルダ
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                        resources: []
+            } catch (err) {
+                // 処理概要: メッセージ処理で例外が発生した場合はエラーログを出力
+                // 実装理由: 不正なメッセージや内部エラーの原因追跡のために情報を残す必要があるため
+                Logger.error('[MCP Server] Failed to handle message:', null, { err: err instanceof Error ? err.message : String(err) });
+                try {
+                    // 処理概要: 受信文字列が JSON で特定の id を含む場合はエラーレスポンスを返す試み
+                    // 実装理由: JSON-RPC 規約に従い、リクエストに対しては適切なエラー応答を返してクライアントに通知するため
+                    const maybe = JSON.parse(line);
+                    if (maybe && 'id' in maybe) {
+                        transport.send({ jsonrpc: '2.0', id: maybe.id, error: { code: -32600, message: 'Invalid Request' } });
                     }
-                };
-
-            case 'prompts/list':
-                // 処理概要: プロンプト一覧を返す（現状未実装で空配列）
-                // 実装理由: 将来の拡張でプロンプトを提供するためのプレースホルダ
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    result: {
-                        prompts: []
-                    }
-                };
-
-            default:
-                // 未知のメソッドは明示的にエラー応答を返す
-                // 処理概要: サポート外のメソッド呼び出しに対して Method not found エラーを返す
-                // 実装理由: クライアント側の誤実装やタイプミスを早期に検出できるようにするため
-                return {
-                    jsonrpc: '2.0',
-                    id,
-                    error: {
-                        code: -32601,
-                        message: `Method not found: ${method}`
-                    }
-                };
+                } catch (_) {
+                    // 処理概要: JSON パースも失敗した場合は何もしない（受信フォーマットが完全に不正）
+                    // 実装理由: パース不能なメッセージに対しては返信できないため静かに無視する
+                    // ignore
+                }
+            }
         }
-    }
 
-    /**
-     * 処理名: 通知ハンドラ
-     * 処理概要: JSON-RPC の通知メッセージを受け取り、現状はログ出力のみを行う
-     * 実装理由: 通知は応答不要の一方向メッセージであり、将来的にイベント処理を追加するための受け口を確保する
-     * @param notification 通知オブジェクト
-     */
-    private async handleNotification(notification: JsonRpcNotification) {
-        const { method } = notification;
-        // 処理概要: 通知を受けてログに記録する（軽量な受け流し実装）
-        // 実装理由: 通知の多数到着や非同期イベントを簡潔に扱うため、現状はログに残すだけにする
-        console.error(`[MCP Server] Notification received: ${method}`);
-        return;
-    }
+        transport.onMessage(handleLine);
 
-
-    /**
-     * 処理名: レスポンス送信
-     * 処理概要: JSON-RPC レスポンスオブジェクトを文字列化して標準出力に書き出す
-     * 実装理由: 拡張クライアントは標準出力の各行を JSON-RPC レスポンスとして読み取るため、正確に一行ずつ出力する必要がある
-     * @param method メソッド名
-     * @param response レスポンスオブジェクト
-     */
-    private sendResponse(method: string, response: JsonRpcResponse) {
-        const responseStr = JSON.stringify(response);
-        const debuggingStr = JSON.stringify(response, null, 2); // for easier debugging
-        console.error(`[MCP Server] Sending: ${debuggingStr}`);
-        process.stdout.write(responseStr + '\n');
+        transport.start();
+    } catch (error) {
+        Logger.error('[MCP Server] Failed to start server:', null, { err: error instanceof Error ? error.message : String(error) });
+        process.exit(1);
     }
 }
 
