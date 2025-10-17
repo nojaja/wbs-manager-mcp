@@ -1,20 +1,21 @@
 import { Tool } from './Tool';
+import { TaskRepository } from '../repositories/TaskRepository';
 
-/** wbs.updateTask ツール */
 /**
  * wbs.planMode.updateTask ツール実装
  * - 既存タスクの更新を行う
+ * @class
  */
 export default class WbsUpdateTaskTool extends Tool {
     /** リポジトリ（DI注入） */
-    repo: any | null;
+    private readonly repo: TaskRepository;
 
     /**
      * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.updateTask', description: 'Update an existing task', inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, assignee: { type: 'string' }, status: { type: 'string' }, estimate: { type: 'string' }, completionConditions: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' } }, required: ['description'] } }, deliverables: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, prerequisites: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, ifVersion: { type: 'number' } }, required: ['taskId'] } });
-        this.repo = null;
+        this.repo = new TaskRepository();
     }
 
 
@@ -24,8 +25,8 @@ export default class WbsUpdateTaskTool extends Tool {
      * @returns Promise<void>
      */
     async init(deps?: any) {
+        // no-op: repository created directly
         await super.init(deps);
-        this.repo = this.deps.repo || null;
     }
 
 

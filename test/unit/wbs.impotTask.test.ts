@@ -1,4 +1,5 @@
-import { WBSRepository, initializeDatabase } from '../../src/mcpServer/db-simple';
+import { initializeDatabase } from '../../src/mcpServer/db/connection';
+import { TaskRepository } from '../../src/mcpServer/repositories/TaskRepository';
 import fs from 'fs';
 import path from 'path';
 
@@ -25,7 +26,7 @@ describe('wbs.planMode.impotTask tool (repository.importTasks)', () => {
     });
 
     it('imports multiple tasks into a project', async () => {
-        const repo = new WBSRepository();
+    const repo = new TaskRepository();
 
         const tasksToImport = [
             { title: 'Task A', description: 'First' },

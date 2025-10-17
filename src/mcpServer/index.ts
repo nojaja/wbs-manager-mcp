@@ -1,13 +1,9 @@
 //console.errorでPIDを返す
 console.error('[MCP Server] Starting stdio MCP server... PID:', process.pid);
-import { initializeDatabase, WBSRepository } from './db-simple';
 import { ToolRegistry } from './tools/ToolRegistry';
 
 // Create a global registry instance for tools
 const toolRegistry = new ToolRegistry();
-// Create shared repository instance to inject into tools
-const sharedRepo = new WBSRepository();
-toolRegistry.setDeps({ repo: sharedRepo });
 // Note: we'll load tools dynamically from ./tools in a later step
 
 interface JsonRpcRequest {
@@ -37,9 +33,9 @@ interface JsonRpcNotification {
  * 処理名: Stdio MCP サーバ（クラス）
  * 処理概要: 標準入出力を使って JSON-RPC 形式のメッセージを受信し、DB 操作／ツール呼び出しを仲介して応答を返すサーバ実装。
  * 実装理由: VSCode 拡張側と分離してサーバ側の DB やツールを独立して扱うため。標準入出力でのやり取りにより拡張とプロセス間通信を簡潔に保つ。
+ * @class
  */
 class StdioMCPServer {
-    private repo: WBSRepository;
 
     /**
      * 処理名: コンストラクタ
@@ -47,7 +43,6 @@ class StdioMCPServer {
      * 実装理由: サーバが扱うデータ層（リポジトリ）と通信ハンドラを初期化して、以降のメッセージ処理を一元的に行うため
      */
     constructor() {
-        this.repo = new WBSRepository();
         this.setupStdioHandlers();
     }
 
@@ -273,7 +268,6 @@ if (!process.env.JEST_WORKER_ID) {
     (async () => {
         // 理由: DB初期化・サーバ起動失敗時もエラー通知し、異常終了させる
         try {
-            await initializeDatabase();
             // register built-in tools explicitly (dynamic loading disabled)
             try {
                 // 明示的に組み込みツールを登録します。動的ロードは不要のため使用しません。

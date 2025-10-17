@@ -5,6 +5,7 @@
  * 処理名: ToolDeps インターフェース
  * 処理概要: Tool に注入される可能性のある依存オブジェクトを表現する汎用インターフェース
  * 実装理由: 各種サービスや DB、ロガーなどを柔軟に注入できるようにするため。
+ * @class
  */
 export interface ToolDeps {
     [key: string]: any;
