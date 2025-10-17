@@ -2,32 +2,14 @@ import { Tool } from './Tool';
 import { TaskRepository } from '../repositories/TaskRepository';
 
 /**
- * 処理名: WBS タスク削除ツール (wbs.planMode.deleteTask)
- *
- * 処理概要:
- * 指定されたタスクIDに対応するタスクと、その子孫タスクを永続層から削除するツールです。
- * クライアントから受け取った削除要求をリポジトリに伝播し、結果メッセージを返却します。
- *
- * 実装理由 (なぜ必要か):
- * ユーザーがWBS上のタスクを削除する操作を行った際に、サーバー側で安全かつ一貫性を保ちながら
- * タスクとその子孫の削除を行うために存在します。リポジトリ層へ委譲することで責務を分離し、テスト
- * とモックがしやすい構造にしています。
- *
+ * wbs.deleteTask ツール
  * @class
- * @extends Tool
  */
 export default class WbsDeleteTaskTool extends Tool {
     private readonly repo: TaskRepository;
 
     /**
-     * 処理名: コンストラクタ
-     *
-     * 処理概要:
-     * ツールのインスタンスを生成し、親クラス(Tool)へツール名・説明・入力スキーマを渡して初期化します。
-     *
-     * 実装理由 (なぜ必要か):
-     * ツールのメタ情報（名前・説明・入力バリデーション）を明示的に定義することで、実行時の検証や
-     * 管理コンソールへの表示、呼び出し側での誤用防止に寄与します。
+     * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.deleteTask', description: 'Delete a task and its descendants', inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'] } });

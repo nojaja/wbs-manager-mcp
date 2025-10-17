@@ -53,14 +53,4 @@ export default class WbsMoveTaskTool extends Tool {
     }
 }
 
-/**
- * 処理名: 単一インスタンスのエクスポート (instance)
- *
- * 概要:
- * このモジュールで使用するためのデフォルトインスタンスを生成してエクスポートします。
- *
- * 実装理由（なぜ必要か）:
- * 他のモジュールが簡単にこのツールを利用できるように単一インスタンスを提供しておくため。DIやテスト時に
- * インスタンスを差し替えることも可能です。
- */
 export const instance = new WbsMoveTaskTool();

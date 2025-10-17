@@ -34,11 +34,11 @@ describe('wbs.planMode.impotTask tool (repository.importTasks)', () => {
             { title: 'Task C', description: 'Third' }
         ];
 
-        const created = await importTasks(tasksToImport as any);
+    const created = await repo.importTasks(tasksToImport as any);
         expect(Array.isArray(created)).toBe(true);
         expect(created.length).toBe(3);
 
-        const listed = await listTasks();
+    const listed = await repo.listTasks();
         // listTasks returns roots; imported tasks have no parent so should be present
         expect(listed.length).toBeGreaterThanOrEqual(3);
         const titles = listed.map(t => t.title);

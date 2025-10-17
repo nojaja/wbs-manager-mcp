@@ -11,9 +11,7 @@ export default class WbsImpotTaskTool extends Tool {
     private readonly repo: TaskRepository;
 
     /**
-     * 処理名: コンストラクタ
-     * 概要: ツール名・説明・入力スキーマを親クラス Tool に渡して初期化します。
-     * 実装理由: ツールとしてのメタ情報（name, description, inputSchema）を定義するため。これにより外部から呼び出す際の入力検証や説明表示が可能になります。
+     * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.impotTask', description: 'Import multiple tasks', inputSchema: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, parentId: { type: 'string' }, assignee: { type: 'string' }, estimate: { type: 'string' }, deliverables: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, prerequisites: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, completionConditions: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' } }, required: ['description'] } } }, required: ['title'] } } }, required: ['tasks'] } });
@@ -21,9 +19,7 @@ export default class WbsImpotTaskTool extends Tool {
     }
 
     /**
-     * 処理名: 初期化
-     * 概要: DIで注入された依存関係（特にリポジトリ）を受け取り、内部フィールドに設定します。
-     * 実装理由: テスト時にモックリポジトリを注入したり、実行時に環境に応じた実装を差し替え可能にするため。副作用は最小化し、依存注入による疎結合を実現します。
+     * 初期化
      * @param {any} deps DIで注入される依存
      * @returns {Promise<void>}
      */
@@ -33,10 +29,7 @@ export default class WbsImpotTaskTool extends Tool {
     }
 
     /**
-     * 処理名: 複数タスクの一括登録実行
-     * 概要: 引数で受け取った tasks 配列を正規化し、リポジトリの importTasks を呼び出してタスクを一括登録します。
-     * 実装理由: 一括登録処理をツール側で完結させることで、呼び出し元は単にタスクデータを渡すだけで済み、エラーハンドリングやレスポンス生成を統一できます。
-     *           また、リポジトリが注入されていない場合は明示的にエラーを返し、安全性を確保します。
+     * 複数タスク一括登録
      * @param {any} args 実行引数 (tasks)
      * @returns {Promise<any>} ツールレスポンス
      */
