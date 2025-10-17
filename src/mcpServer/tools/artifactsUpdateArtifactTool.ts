@@ -1,4 +1,5 @@
 import { Tool } from './Tool';
+import { ArtifactRepository } from '../repositories/ArtifactRepository';
 
 /**
  * artifacts.updateArtifact ツール
@@ -7,13 +8,13 @@ import { Tool } from './Tool';
  * @class
  */
 export default class ArtifactsUpdateArtifactTool extends Tool {
-    repo: any | null;
+    private readonly repo: ArtifactRepository;
     /**
      * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.updateArtifact', description: 'Update an existing artifact', inputSchema: { type: 'object', properties: { artifactId: { type: 'string' }, title: { type: 'string' }, uri: { type: 'string' }, description: { type: 'string' }, ifVersion: { type: 'number' } }, required: ['artifactId'] } });
-        this.repo = null;
+        this.repo = new ArtifactRepository();
     }
 
     /**
@@ -22,8 +23,8 @@ export default class ArtifactsUpdateArtifactTool extends Tool {
      * @returns {Promise<void>}
      */
     async init(deps?: any) {
+        // no-op
         await super.init(deps);
-        this.repo = this.deps.repo || null;
     }
 
     /**

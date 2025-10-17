@@ -1,11 +1,7 @@
-import { 
-  WBSRepository,
-  initializeDatabase, 
-  Task,
-  Artifact,
-  TaskArtifactAssignment,
-  TaskCompletionCondition
-} from '../../src/mcpServer/db-simple';
+import { initializeDatabase, resolveDatabasePath } from '../../src/mcpServer/db/connection';
+import type { Task, Artifact, TaskArtifactAssignment, TaskCompletionCondition } from '../../src/mcpServer/db/types';
+import { TaskRepository } from '../../src/mcpServer/repositories/TaskRepository';
+import { ArtifactRepository } from '../../src/mcpServer/repositories/ArtifactRepository';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,7 +10,9 @@ const testDbPath = path.join(process.cwd(), 'test-data', 'test-wbs.db');
 const testDbDir = path.dirname(testDbPath);
 
 describe('db-simple', () => {
-  let repository: WBSRepository;
+  let repository: any;
+  let taskRepo: TaskRepository;
+  let artifactRepo: ArtifactRepository;
 
   beforeAll(async () => {
     // テスト用環境変数を設定
@@ -29,7 +27,22 @@ describe('db-simple', () => {
   beforeEach(async () => {
     // 各テスト前にDBを初期化
     await initializeDatabase();
-    repository = new WBSRepository();
+    taskRepo = new TaskRepository();
+    artifactRepo = new ArtifactRepository();
+    repository = {
+      createTask: (...args: any[]) => (taskRepo.createTask as any).apply(taskRepo, args),
+      importTasks: (...args: any[]) => (taskRepo.importTasks as any).apply(taskRepo, args),
+      listTasks: (...args: any[]) => (taskRepo.listTasks as any).apply(taskRepo, args),
+      getTask: (...args: any[]) => (taskRepo.getTask as any).apply(taskRepo, args),
+      updateTask: (...args: any[]) => (taskRepo.updateTask as any).apply(taskRepo, args),
+      moveTask: (...args: any[]) => (taskRepo.moveTask as any).apply(taskRepo, args),
+      deleteTask: (...args: any[]) => (taskRepo.deleteTask as any).apply(taskRepo, args),
+      listArtifacts: (...args: any[]) => (artifactRepo.listArtifacts as any).apply(artifactRepo, args),
+      getArtifact: (...args: any[]) => (artifactRepo.getArtifact as any).apply(artifactRepo, args),
+      deleteArtifact: (...args: any[]) => (artifactRepo.deleteArtifact as any).apply(artifactRepo, args),
+      createArtifact: (...args: any[]) => (artifactRepo.createArtifact as any).apply(artifactRepo, args),
+      updateArtifact: (...args: any[]) => (artifactRepo.updateArtifact as any).apply(artifactRepo, args),
+    };
   });
 
   afterEach(() => {
@@ -165,7 +178,7 @@ describe('db-simple', () => {
 
       const listed = await repository.listTasks();
       expect(listed.length).toBeGreaterThanOrEqual(3);
-      const titles = listed.map(t => t.title);
+  const titles = listed.map((t: any) => t.title);
       expect(titles).toEqual(expect.arrayContaining(['Task A', 'Task B', 'Task C']));
     });
 
@@ -263,8 +276,8 @@ describe('db-simple', () => {
       const topLevelTasks = await repository.listTasks(null);
       
       expect(Array.isArray(topLevelTasks)).toBe(true);
-      expect(topLevelTasks.some(task => task.id === parentTask.id)).toBe(true);
-      expect(topLevelTasks.some(task => task.id === childTask.id)).toBe(false);
+  expect(topLevelTasks.some((task: any) => task.id === parentTask.id)).toBe(true);
+  expect(topLevelTasks.some((task: any) => task.id === childTask.id)).toBe(false);
     });
 
     test('should return child tasks when parentId is specified', async () => {
@@ -275,9 +288,9 @@ describe('db-simple', () => {
       const childTasks = await repository.listTasks(parentTask.id);
       
       expect(Array.isArray(childTasks)).toBe(true);
-      expect(childTasks.length).toBe(2);
-      expect(childTasks.some(task => task.id === childTask1.id)).toBe(true);
-      expect(childTasks.some(task => task.id === childTask2.id)).toBe(true);
+  expect(childTasks.length).toBe(2);
+  expect(childTasks.some((task: any) => task.id === childTask1.id)).toBe(true);
+  expect(childTasks.some((task: any) => task.id === childTask2.id)).toBe(true);
     });
 
     test('should return empty array when no child tasks exist', async () => {
@@ -298,9 +311,9 @@ describe('db-simple', () => {
 
   expect(Array.isArray(topLevelTasks)).toBe(true);
   // トップレベルに親タスクのみが含まれる
-  expect(topLevelTasks.some(task => task.id === parentTask.id)).toBe(true);
+  expect(topLevelTasks.some((task: any) => task.id === parentTask.id)).toBe(true);
   // 子タスクはトップレベルには含まれない
-  expect(topLevelTasks.some(task => task.id === childTask.id)).toBe(false);
+  expect(topLevelTasks.some((task: any) => task.id === childTask.id)).toBe(false);
     });
   });
 
@@ -313,14 +326,13 @@ describe('db-simple', () => {
         // 相対パス "." を設定
         process.env.WBS_MCP_DATA_DIR = '.';
         
-        // db-simpleモジュールを再ロードして新しい環境変数を反映
-        delete require.cache[require.resolve('../../src/mcpServer/db-simple')];
-        const { WBSRepository: TestRepository } = require('../../src/mcpServer/db-simple');
-        
         // 相対パスが正しく現在の作業ディレクトリを基準に解決されることを確認
-        // 実際のパス解決はresolveDatabasePath内で行われるため、
-        // ここではエラーなくRepositoryが作成できることを確認
-        expect(() => new TestRepository()).not.toThrow();
+        process.env.WBS_MCP_DATA_DIR = '.';
+        expect(() => {
+          // resolveDatabasePath と Repository の生成が例外を投げないことを確認
+          resolveDatabasePath();
+          new TaskRepository();
+        }).not.toThrow();
         
       } finally {
         // 環境変数を元に戻す

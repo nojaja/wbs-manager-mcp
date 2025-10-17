@@ -1,18 +1,21 @@
 import { Tool } from './Tool';
+import { TaskRepository } from '../repositories/TaskRepository';
 
 /**
- * wbs.impotTask ツール
+ * 処理名: wbs.planMode.impotTask
+ * 処理概要: 複数タスクの一括インポートを行うツール
+ * 実装理由: 外部データやテンプレートから複数タスクをまとめて登録する要件に対応するため、一括処理を提供します。
  * @class
  */
 export default class WbsImpotTaskTool extends Tool {
-    repo: any | null;
+    private readonly repo: TaskRepository;
 
     /**
      * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.impotTask', description: 'Import multiple tasks', inputSchema: { type: 'object', properties: { tasks: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' }, parentId: { type: 'string' }, assignee: { type: 'string' }, estimate: { type: 'string' }, deliverables: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, prerequisites: { type: 'array', items: { type: 'object', properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } }, required: ['artifactId'] } }, completionConditions: { type: 'array', items: { type: 'object', properties: { description: { type: 'string' } }, required: ['description'] } } }, required: ['title'] } } }, required: ['tasks'] } });
-        this.repo = null;
+        this.repo = new TaskRepository();
     }
 
     /**
@@ -21,8 +24,8 @@ export default class WbsImpotTaskTool extends Tool {
      * @returns {Promise<void>}
      */
     async init(deps?: any) {
+        // no-op (repo created directly)
         await super.init(deps);
-        this.repo = this.deps.repo || null;
     }
 
     /**

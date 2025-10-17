@@ -1,12 +1,18 @@
 import { Tool } from './Tool';
+import { TaskRepository } from '../repositories/TaskRepository';
 
 /**
- * wbs.createTask ツール
+ * 処理名: wbs.planMode.createTask ツール実装
+ * 処理概要: クライアント（MCP）からのタスク作成要求を受け取り、TaskRepository を介してタスクおよび関連データ（deliverables/prerequisites/completionConditions）を作成するツールプラグイン。
+ * 実装理由: MCP プロトコル経由でタスク作成機能をプラグイン化し、サーバ側で一貫したバリデーションと関連データの同期を行うため。
+ * @class
  */
 export default class WbsCreateTaskTool extends Tool {
-    repo: any | null;
+    private readonly repo: TaskRepository;
     /**
-     * コンストラクタ
+     * 処理名: コンストラクタ
+     * 処理概要: ツールのメタ情報を設定し、内部で使用する TaskRepository を生成する
+     * 実装理由: ToolRegistry に登録される際のメタ情報を定義し、リポジトリを直接利用できるように初期化するため
      */
     constructor() {
         super({
@@ -48,21 +54,15 @@ export default class WbsCreateTaskTool extends Tool {
                 required: ['title']
             }
         });
-        this.repo = null;
+        this.repo = new TaskRepository();
     }
 
     /**
-     * @param deps DIで注入される依存
-     */
-    async init(deps?: any) {
-        await super.init(deps);
-        this.repo = this.deps.repo || null;
-    }
-
-    /**
-     * タスク作成処理 (ツール呼び出しから)
-     * @param args ツール引数 (title, description, parentId, assignee, estimate)
-    * @returns {Promise<any>} ツールレスポンス
+     * 処理名: run (タスク作成)
+     * 処理概要: 入力引数を正規化して TaskRepository.createTask を呼び出し、作成されたタスクおよび LLM 向けヒントを返す
+     * 実装理由: MCP のツール呼び出しインターフェースに準拠してタスク作成を行い、クライアント側が次のアクションを決定できる補助情報を提供するため
+     * @param args ツール引数 (title, description, parentId, assignee, estimate, deliverables 等)
+     * @returns {Promise<any>} ツールレスポンス
      */
     async run(args: any) {
         try {
@@ -117,10 +117,10 @@ export default class WbsCreateTaskTool extends Tool {
         }
     }
 
-    // task に基づく LLM 向けヒントを生成する
     /**
-     * task オブジェクトから LLM に渡すヒントを生成する
-     * - draft の場合は未設定フィールドを検出し、`wbs.planMode.updateTask` を使う指示を追加する
+     * 処理名: LLM ヒント生成
+     * 処理概要: 作成されたタスクから、追加で必要な操作（例: 成果物の紐付けや未設定フィールドの更新）を表す nextActions とメモを生成する
+     * 実装理由: クライアント側の LLM や UI が次の推奨アクションを提示できるように、構造化されたガイダンスを提供するため
      * @param {any} task タスクオブジェクト
      * @returns {{nextActions: any[], notes: string[]}} llmHints オブジェクト
      */
@@ -149,7 +149,9 @@ export default class WbsCreateTaskTool extends Tool {
     }
 
     /**
-     * draft タスクに対して未設定のフィールド一覧を返す
+     * 処理名: draft 欠損フィールド検出
+     * 処理概要: draft 状態のタスクに対して、title/description/estimate や関連配列が未設定かを判定して未設定フィールド一覧を返す
+     * 実装理由: 作成直後の draft タスクに欠けている情報を特定し、ユーザーへの補完提案や自動化フローの判断材料とするため
      * @param {any} task タスクオブジェクト
      * @returns {string[]} 未設定フィールドの配列
      */
@@ -167,9 +169,7 @@ export default class WbsCreateTaskTool extends Tool {
         return missing;
     }
 
-    /**
-     * 指定フィールドに対する updateTask 用の nextAction オブジェクトを生成する
-     */
+
     /**
      * 指定フィールドに対する updateTask 用の nextAction オブジェクトを生成する
      * @param {string} field フィールド名

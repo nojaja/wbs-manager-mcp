@@ -1,25 +1,23 @@
 import { Tool } from './Tool';
+import { TaskRepository } from '../repositories/TaskRepository';
 
-/** wbs.listTasks ツール */
+/**
+ * 処理名: wbs.planMode.listTasks
+ * 処理概要: 指定 parentId のタスク一覧を取得するツール
+ * 実装理由: クライアントの一覧表示要求に応じて DB から必要なタスクデータを提供するため
+ * @class
+ */
 export default class WbsListTasksTool extends Tool {
-    repo: any | null;
+    private readonly repo: TaskRepository;
 
     /**
-     * コンストラクタ
+     * 処理名: コンストラクタ
+     * 処理概要: ツールのメタ情報とリポジトリを初期化する
+     * 実装理由: ツール登録時のメタ設定および DB 操作用リポジトリを準備するため
      */
     constructor() {
         super({ name: 'wbs.planMode.listTasks', description: 'List tasks optionally by parentId', inputSchema: { type: 'object', properties: { parentId: { type: 'string' } } } });
-        this.repo = null;
-    }
-
-    /**
-     * 初期化
-     * @param {any} deps DIで注入される依存
-     * @returns {Promise<void>}
-     */
-    async init(deps?: any) {
-        await super.init(deps);
-        this.repo = this.deps.repo || null;
+        this.repo = new TaskRepository();
     }
 
     /**

@@ -6,6 +6,7 @@ import type { Tool, ToolDeps } from './Tool';
  * 処理名: ToolRegistry クラス
  * 処理概要: ツール（Tool）インスタンスの登録・解除・取得・実行、および動的ロードと依存注入を管理するレジストリ機能を提供します。
  * 実装理由: アプリケーション側で個別のツール実装を意識せずに一元的に操作できるようにするため。ツールの管理と初期化、依存注入の適用を集中させ保守性を高めます。
+ * @class
  */
 export class ToolRegistry {
     tools: Map<string, Tool>;

@@ -1,4 +1,5 @@
 import { Tool } from './Tool';
+import { ArtifactRepository } from '../repositories/ArtifactRepository';
 
 /**
  * artifacts.listArtifacts ツール
@@ -7,14 +8,14 @@ import { Tool } from './Tool';
  * @class
  */
 export default class ArtifactsListArtifactsTool extends Tool {
-    repo: any | null;
+    private readonly repo: ArtifactRepository;
 
     /**
      * コンストラクタ
      */
     constructor() {
         super({ name: 'wbs.planMode.listArtifacts', description: 'List artifacts', inputSchema: { type: 'object', properties: {} } });
-        this.repo = null;
+        this.repo = new ArtifactRepository();
     }
     /**
      * 初期化
@@ -22,8 +23,8 @@ export default class ArtifactsListArtifactsTool extends Tool {
      * @returns {Promise<void>}
      */
     async init(deps?: any) {
+        // no-op
         await super.init(deps);
-        this.repo = this.deps.repo || null;
     }
 
     /**
