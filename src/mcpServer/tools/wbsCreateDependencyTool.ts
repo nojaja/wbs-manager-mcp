@@ -1,14 +1,21 @@
+/**
+ * Tool: wbs.planmode.createDependency
+ * @module wbsCreateDependencyTool
+ */
 import { Tool } from './Tool';
 import { DependenciesRepository } from '../repositories/DependenciesRepository';
 
 /**
- * 処理名: wbs.planmode.createDependency
- * 処理概要: タスク間の依存関係を作成し、関連する成果物マッピングを保存するツール
- * 実装理由: MCP クライアントからの依存関係作成要求を受け取り、サーバ側で整合性のある保存を行うため
+ * wbs.planmode.createDependency ツール
+ * タスク間の依存関係を作成し、関連する成果物マッピングを保存します
+ * @class WbsCreateDependencyTool
+ * @export
  */
 export default class WbsCreateDependencyTool extends Tool {
   private readonly repo = new DependenciesRepository();
-
+  /**
+   * コンストラクタ
+   */
   constructor() {
     super({
       name: 'wbs.planmode.createDependency',
@@ -25,6 +32,19 @@ export default class WbsCreateDependencyTool extends Tool {
     });
   }
 
+  /**
+   * コンストラクタ
+   */
+  // constructor() {} // constructor is defined above by class body
+
+  /**
+   * 指定された引数で依存関係を作成する
+   * @param args 実行引数オブジェクト
+   * @param args.dependee 依存先タスクID
+   * @param args.dependency 依存元タスクID
+   * @param args.artifacts 成果物ID配列
+   * @returns JSON-RPC用のコンテンツオブジェクト
+   */
   async run(args: any) {
     try {
       const dependee = args.dependee;

@@ -36,7 +36,7 @@ export class ArtifactRepository {
    * 処理概要: 指定 ID の artifacts テーブル行を取得して返す
    * 実装理由: 詳細表示や参照チェックのために単一レコードを取得できる必要があるため
    * @param {string} artifactId
-  * @returns {Promise<Artifact|null>}
+   * @returns {Promise<Artifact|null>}
    */
   async getArtifact(artifactId: string): Promise<Artifact | null> {
     const db = await getDatabase();
@@ -81,11 +81,11 @@ export class ArtifactRepository {
    * 処理概要: 指定された更新内容を反映し、楽観的ロック（ifVersion）をサポートして更新済みレコードを返す
    * 実装理由: 同時更新の衝突を検出し、整合性のある更新を行うため
    * @param {string} artifactId
-  * @param {{ title?: string; uri?: string | null; description?: string | null; ifVersion?: number }} updates
-  * @param {string} [updates.title] 更新後のタイトル
-  * @param {string|null} [updates.uri] 更新後のURI
-  * @param {string|null} [updates.description] 更新後の説明
-  * @param {number} [updates.ifVersion] 楽観ロック用のバージョン
+   * @param {{ title?: string; uri?: string | null; description?: string | null; ifVersion?: number }} updates
+   * @param {string} [updates.title] 更新後のタイトル
+   * @param {string|null} [updates.uri] 更新後のURI
+   * @param {string|null} [updates.description] 更新後の説明
+   * @param {number} [updates.ifVersion] 楽観ロック用のバージョン
    * @returns {Promise<Artifact>}
    */
   async updateArtifact(

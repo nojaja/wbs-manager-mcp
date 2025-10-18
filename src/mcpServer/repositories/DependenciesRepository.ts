@@ -2,20 +2,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDatabase } from '../db/connection';
 
 /**
- * 処理名: DependenciesRepository
- * 処理概要: タスク間の依存関係（dependencies）とそれに紐づく成果物マッピング（dependency_artifacts）を操作するリポジトリ。
- * 実装理由: 依存関係を独立したテーブルとして管理し、作成・更新・削除や関連アーティファクトの同期を一元化するため。
+ * DependenciesRepository は依存関係と関連アーティファクトを操作するリポジトリです。
+ * @class
  */
 export class DependenciesRepository {
-  constructor() {}
+  /**
+   * コンストラクタ
+   */
+  constructor() { }
 
   /**
    * 処理名: 依存関係作成
    * 処理概要: dependencies レコードを作成し、関連する dependency_artifacts を同期する
    * 実装理由: 依存関係作成時にアーティファクトの紐付けも同時に行うことで整合性を保つため
-   * @param fromTaskId 依存元タスクID (to_task_id)
-   * @param toTaskId 依存先タスクID (from_task_id)
-   * @param artifacts artifact id の配列
+   * @param fromTaskId 依存元タスクID
+   * @param toTaskId 依存先タスクID
+   * @param artifacts 成果物ID配列（省略可）
+   * @returns 作成された依存関係オブジェクト（getDependencyById の形式）
    */
   async createDependency(fromTaskId: string, toTaskId: string, artifacts: string[] | undefined) {
     const db = await getDatabase();
@@ -23,20 +26,13 @@ export class DependenciesRepository {
     const now = new Date().toISOString();
 
     // Validate tasks exist to avoid foreign key constraint failures
-    const fromTask = await db.get<{ id: string }>(`SELECT id FROM tasks WHERE id = ?`, fromTaskId);
+    const fromTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, fromTaskId);
     if (!fromTask) throw new Error(`Task not found (fromTaskId): ${fromTaskId}`);
-    const toTask = await db.get<{ id: string }>(`SELECT id FROM tasks WHERE id = ?`, toTaskId);
+    const toTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, toTaskId);
     if (!toTask) throw new Error(`Task not found (toTaskId): ${toTaskId}`);
 
     // Validate artifacts exist before inserting dependency_artifacts
-    if (Array.isArray(artifacts) && artifacts.length > 0) {
-      const missing: string[] = [];
-      for (const aId of artifacts) {
-        const art = await db.get<{ id: string }>(`SELECT id FROM artifacts WHERE id = ?`, aId);
-        if (!art) missing.push(aId);
-      }
-      if (missing.length > 0) throw new Error(`Artifact(s) not found: ${missing.join(', ')}`);
-    }
+    await this.validateArtifactsExist(db, artifacts);
 
     await db.run('BEGIN');
     try {
@@ -76,30 +72,28 @@ export class DependenciesRepository {
    * 処理名: 依存関係更新
    * 処理概要: 既存の dependencies レコードを更新し、依存に紐づく dependency_artifacts を置換する
    * 実装理由: 依存関係の変更が発生した際にアーティファクトの差し替えを原子的に行うため
+   * @param dependencyId 更新対象の依存関係ID
+   * @param fromTaskId 依存元タスクID
+   * @param toTaskId 依存先タスクID
+   * @param artifacts 成果物ID配列（省略可）
+   * @returns 更新後の依存関係オブジェクト
    */
   async updateDependency(dependencyId: string, fromTaskId: string, toTaskId: string, artifacts: string[] | undefined) {
     const db = await getDatabase();
     const now = new Date().toISOString();
 
     // Ensure dependency exists
-    const existing = await db.get<{ id: string }>(`SELECT id FROM dependencies WHERE id = ?`, dependencyId);
+    const existing = await db.get(`SELECT id FROM dependencies WHERE id = ?`, dependencyId);
     if (!existing) throw new Error(`Dependency not found: ${dependencyId}`);
 
     // Validate tasks exist
-    const fromTask = await db.get<{ id: string }>(`SELECT id FROM tasks WHERE id = ?`, fromTaskId);
+    const fromTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, fromTaskId);
     if (!fromTask) throw new Error(`Task not found (fromTaskId): ${fromTaskId}`);
-    const toTask = await db.get<{ id: string }>(`SELECT id FROM tasks WHERE id = ?`, toTaskId);
+    const toTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, toTaskId);
     if (!toTask) throw new Error(`Task not found (toTaskId): ${toTaskId}`);
 
     // Validate artifacts exist
-    if (Array.isArray(artifacts) && artifacts.length > 0) {
-      const missing: string[] = [];
-      for (const aId of artifacts) {
-        const art = await db.get<{ id: string }>(`SELECT id FROM artifacts WHERE id = ?`, aId);
-        if (!art) missing.push(aId);
-      }
-      if (missing.length > 0) throw new Error(`Artifact(s) not found: ${missing.join(', ')}`);
-    }
+    await this.validateArtifactsExist(db, artifacts);
 
     await db.run('BEGIN');
     try {
@@ -140,10 +134,12 @@ export class DependenciesRepository {
    * 処理名: 依存関係削除
    * 処理概要: dependencies レコードを削除し、関連する dependency_artifacts は外部キーで CASCADE される
    * 実装理由: 依存を削除する際に関連する紐付けも一括で削除されることを期待するため
+   * @param dependencyId 削除対象の依存関係ID
+   * @returns 削除に成功したら true を返す
    */
   async deleteDependency(dependencyId: string) {
     const db = await getDatabase();
-    const existing = await db.get<{ id: string }>(`SELECT id FROM dependencies WHERE id = ?`, dependencyId);
+    const existing = await db.get(`SELECT id FROM dependencies WHERE id = ?`, dependencyId);
     if (!existing) return false;
     const res = await db.run(`DELETE FROM dependencies WHERE id = ?`, dependencyId);
     return (res.changes ?? 0) > 0;
@@ -153,6 +149,8 @@ export class DependenciesRepository {
    * 処理名: 依存関係取得（ID）
    * 処理概要: 指定IDの dependencies レコードと、それに紐づく dependency_artifacts を取得して返す
    * 実装理由: ツールや API が依存関係と紐づく成果物一覧を一度に取得できるようにするため
+   * @param dependencyId 取得対象の依存関係ID
+   * @returns 依存関係オブジェクトまたは null
    */
   async getDependencyById(dependencyId: string) {
     const db = await getDatabase();
@@ -166,6 +164,8 @@ export class DependenciesRepository {
    * 処理名: タスクに関連する依存関係収集
    * 処理概要: 複数のタスクIDに対して、それぞれが持つ依存の from/to および関連アーティファクト一覧を取得して Map に変換する
    * 実装理由: TaskRepository がタスク一覧/ツリーを返す際に dependencies 情報を付与するための補助メソッド
+   * @param taskIds タスクIDの配列
+   * @returns Map<string, { dependents: any[]; dependees: any[] }>
    */
   async collectDependenciesForTasks(taskIds: string[]) {
     const result = new Map<string, { dependents: any[]; dependees: any[] }>();
@@ -185,35 +185,7 @@ export class DependenciesRepository {
     );
 
     for (const row of rows) {
-      const depId = row.dependency_id;
-      const fromId = row.from_task_id;
-      const toId = row.to_task_id;
-      const artifact = row.da_id ? { id: row.da_id, artifactId: row.artifact_id, order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0) } : null;
-
-      // dependents: tasks that have this task as a dependee? We will fill both sides per task
-      // for fromTaskId (依存元) attach as 'dependents' on fromId
-      if (taskIds.includes(fromId)) {
-        if (!result.has(fromId)) result.set(fromId, { dependents: [], dependees: [] });
-        const bucket = result.get(fromId)!;
-        let dep = bucket.dependents.find((d: any) => d.dependencyId === depId);
-        if (!dep) {
-          dep = { dependencyId: depId, fromTaskId: fromId, toTaskId: toId, artifacts: [] };
-          bucket.dependents.push(dep);
-        }
-        if (artifact) dep.artifacts.push(artifact);
-      }
-
-      // for toTaskId (依存先) attach as 'dependees' on toId
-      if (taskIds.includes(toId)) {
-        if (!result.has(toId)) result.set(toId, { dependents: [], dependees: [] });
-        const bucket = result.get(toId)!;
-        let dep = bucket.dependees.find((d: any) => d.dependencyId === depId);
-        if (!dep) {
-          dep = { dependencyId: depId, fromTaskId: fromId, toTaskId: toId, artifacts: [] };
-          bucket.dependees.push(dep);
-        }
-        if (artifact) dep.artifacts.push(artifact);
-      }
+      this.processDependencyRow(row, taskIds, result);
     }
 
     // ensure all taskIds present
@@ -222,6 +194,84 @@ export class DependenciesRepository {
     }
 
     return result;
+  }
+
+  /**
+   * 単一のDB行を解析して結果Mapに反映するヘルパ
+   * @param row DBの行オブジェクト
+   * @param taskIds 対象のタスクID配列
+   * @param result 結果を格納するMap
+   * @private
+   */
+  private processDependencyRow(row: any, taskIds: string[], result: Map<string, { dependents: any[]; dependees: any[] }>) {
+    const depId = row.dependency_id;
+    const fromId = row.from_task_id;
+    const toId = row.to_task_id;
+    const artifact = row.da_id ? { id: row.da_id, artifactId: row.artifact_id, order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0) } : null;
+
+    this.handleFromRow(depId, fromId, toId, artifact, taskIds, result);
+    this.handleToRow(depId, fromId, toId, artifact, taskIds, result);
+  }
+
+  /**
+   * fromId 側の行を処理して dependents を追加する
+   * @private
+   * @param depId 依存関係ID
+   * @param fromId 依存元タスクID
+   * @param toId 依存先タスクID
+   * @param artifact 依存に紐づくアーティファクト（または null）
+   * @param taskIds 対象タスクID配列
+   * @param result 結果Map
+   */
+  private handleFromRow(depId: string, fromId: string, toId: string, artifact: any, taskIds: string[], result: Map<string, { dependents: any[]; dependees: any[] }>) {
+    if (!taskIds.includes(fromId)) return;
+    if (!result.has(fromId)) result.set(fromId, { dependents: [], dependees: [] });
+    const bucket = result.get(fromId)!;
+    let dep = bucket.dependents.find((d: any) => d.dependencyId === depId);
+    if (!dep) {
+      dep = { dependencyId: depId, fromTaskId: fromId, toTaskId: toId, artifacts: [] };
+      bucket.dependents.push(dep);
+    }
+    if (artifact) dep.artifacts.push(artifact);
+  }
+
+  /**
+   * toId 側の行を処理して dependees を追加する
+   * @private
+   * @param depId 依存関係ID
+   * @param fromId 依存元タスクID
+   * @param toId 依存先タスクID
+   * @param artifact 依存に紐づくアーティファクト（または null）
+   * @param taskIds 対象タスクID配列
+   * @param result 結果Map
+   */
+  private handleToRow(depId: string, fromId: string, toId: string, artifact: any, taskIds: string[], result: Map<string, { dependents: any[]; dependees: any[] }>) {
+    if (!taskIds.includes(toId)) return;
+    if (!result.has(toId)) result.set(toId, { dependents: [], dependees: [] });
+    const bucket = result.get(toId)!;
+    let dep = bucket.dependees.find((d: any) => d.dependencyId === depId);
+    if (!dep) {
+      dep = { dependencyId: depId, fromTaskId: fromId, toTaskId: toId, artifacts: [] };
+      bucket.dependees.push(dep);
+    }
+    if (artifact) dep.artifacts.push(artifact);
+  }
+
+  /**
+   * artifacts 配列の存在を検証するヘルパ
+   * @param db DB 接続オブジェクト
+   * @param artifacts チェックするアーティファクトID配列
+   * @returns Promise<void>
+   * @private
+   */
+  private async validateArtifactsExist(db: any, artifacts: string[] | undefined) {
+    if (!Array.isArray(artifacts) || artifacts.length === 0) return;
+    const missing: string[] = [];
+    for (const aId of artifacts) {
+      const art = await db.get(`SELECT id FROM artifacts WHERE id = ?`, aId);
+      if (!art) missing.push(aId);
+    }
+    if (missing.length > 0) throw new Error(`Artifact(s) not found: ${missing.join(', ')}`);
   }
 }
 

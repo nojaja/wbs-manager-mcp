@@ -7,8 +7,12 @@ import { MCPBaseClient } from './baseClient';
  */
 export class MCPDependenciesClient extends MCPBaseClient {
   /**
-   * 依存関係を作成する
-   * @param params { dependee, dependency, artifacts }
+  * 依存関係を作成する
+  * @param params 依存関係作成パラメータ
+  * @param params.dependee 依存先タスクID
+  * @param params.dependency 依存元タスクID
+  * @param params.artifacts 成果物ID配列（省略可）
+  * @returns 作成された依存関係のオブジェクトを含む結果オブジェクト
    */
   public async createDependency(params: { dependee: string; dependency: string; artifacts?: string[] }) {
     try {
@@ -23,6 +27,12 @@ export class MCPDependenciesClient extends MCPBaseClient {
 
   /**
    * 依存関係を更新する
+   * @param params 更新パラメータ
+   * @param params.dependencyId 更新対象の依存関係ID
+   * @param params.dependee 依存先タスクID
+   * @param params.dependency 依存元タスクID
+   * @param params.artifacts 成果物ID配列（省略可）
+   * @returns 更新された依存関係オブジェクトを含む結果オブジェクト
    */
   public async updateDependency(params: { dependencyId: string; dependee: string; dependency: string; artifacts?: string[] }) {
     try {
@@ -37,6 +47,9 @@ export class MCPDependenciesClient extends MCPBaseClient {
 
   /**
    * 依存関係を削除する
+   * @param params 削除パラメータ
+   * @param params.dependencyId 削除対象の依存関係ID
+   * @returns 削除の成否を示す結果オブジェクト
    */
   public async deleteDependency(params: { dependencyId: string }) {
     try {

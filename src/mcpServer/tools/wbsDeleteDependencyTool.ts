@@ -1,14 +1,21 @@
+/**
+ * Tool: wbs.planmode.deleteDependency
+ * @module wbsDeleteDependencyTool
+ */
 import { Tool } from './Tool';
 import { DependenciesRepository } from '../repositories/DependenciesRepository';
 
 /**
- * 処理名: wbs.planmode.deleteDependency
- * 処理概要: 指定の依存関係を削除するツール
- * 実装理由: クライアント要求で依存関係を削除し、関連するマッピングも DB の外部キーで整合的に削除されるようにするため
+ * wbs.planmode.deleteDependency ツール
+ * 指定の依存関係を削除します
+ * @class WbsDeleteDependencyTool
+ * @export
  */
 export default class WbsDeleteDependencyTool extends Tool {
   private readonly repo = new DependenciesRepository();
-
+  /**
+   * コンストラクタ
+   */
   constructor() {
     super({
       name: 'wbs.planmode.deleteDependency',
@@ -23,6 +30,17 @@ export default class WbsDeleteDependencyTool extends Tool {
     });
   }
 
+  /**
+   * コンストラクタ
+   */
+  // constructor() {} // defined above
+
+  /**
+   * 指定された dependencyId を削除する
+   * @param args 実行引数オブジェクト
+   * @param args.dependencyId 削除対象の依存関係ID
+   * @returns JSON-RPC用のコンテンツオブジェクト
+   */
   async run(args: any) {
     try {
       const dependencyId = args.dependencyId;
