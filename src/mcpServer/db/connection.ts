@@ -17,7 +17,11 @@ export function resolveDatabasePath(): string {
     : process.cwd();
 
   const resolvedBase = path.resolve(baseDir);
-  return path.join(resolvedBase, 'data', 'wbs.db');
+  // If running under Jest, use the worker id to create per-worker DB files to avoid
+  // concurrent access/unique-constraint issues when tests run in parallel.
+  const jestWorker = process.env.JEST_WORKER_ID;
+  const dbFileName = jestWorker ? `wbs.${jestWorker}.db` : 'wbs.db';
+  return path.join(resolvedBase, 'data', dbFileName);
 }
 
 /**
@@ -147,16 +151,16 @@ async function runInitialize(db: Database): Promise<void> {
     `);
 
   await db.exec(`
-        CREATE TABLE IF NOT EXISTS dependencies (
-            id TEXT PRIMARY KEY,
-            from_task_id TEXT NOT NULL,
-            to_task_id TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY (from_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            FOREIGN KEY (to_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            UNIQUE(from_task_id, to_task_id)
-        )
-    `);
+    CREATE TABLE IF NOT EXISTS dependencies (
+      id TEXT PRIMARY KEY,
+      dependency_task_id TEXT NOT NULL,
+      dependee_task_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (dependency_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (dependee_task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      UNIQUE(dependency_task_id, dependee_task_id)
+    )
+  `);
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS dependency_artifacts (

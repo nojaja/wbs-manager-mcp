@@ -1,4 +1,4 @@
-import { initializeDatabase, resolveDatabasePath } from '../../src/mcpServer/db/connection';
+import { initializeDatabase, resolveDatabasePath, closeDatabase } from '../../src/mcpServer/db/connection';
 import type { Task, Artifact, TaskArtifactAssignment, TaskCompletionCondition } from '../../src/mcpServer/db/types';
 import { TaskRepository } from '../../src/mcpServer/repositories/TaskRepository';
 import { ArtifactRepository } from '../../src/mcpServer/repositories/ArtifactRepository';
@@ -45,17 +45,37 @@ describe('db-simple', () => {
     };
   });
 
-  afterEach(() => {
-    // テスト後にDBファイルを削除
+  afterEach(async () => {
+    // 各テスト後にDB接続をクローズしてからファイルを削除
+    try {
+      await closeDatabase();
+    } catch (e) {
+      // ignore close errors in cleanup
+    }
+
     if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
+      try {
+        fs.unlinkSync(testDbPath);
+      } catch (e) {
+        // ignore unlink errors during cleanup (file may be already removed or locked transiently)
+      }
     }
   });
 
-  afterAll(() => {
-    // テスト完了後にテストディレクトリを削除
+  afterAll(async () => {
+    // 全テスト完了後にDB接続をクローズしてからテストディレクトリを削除
+    try {
+      await closeDatabase();
+    } catch (e) {
+      // ignore
+    }
+
     if (fs.existsSync(testDbDir)) {
-      fs.rmSync(testDbDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(testDbDir, { recursive: true, force: true });
+      } catch (e) {
+        // ignore removal errors
+      }
     }
     // 環境変数をクリア
     delete process.env.WBS_MCP_DATA_DIR;

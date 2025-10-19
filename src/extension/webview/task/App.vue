@@ -115,16 +115,16 @@ export default {
   mounted() {
     if (window.__TASK_PAYLOAD__) {
       this.payload = window.__TASK_PAYLOAD__;
-      const t = this.payload.task || {};
-      this.form.title = t.title || '';
-      this.form.description = t.description || '';
-      this.form.assignee = t.assignee || '';
-      this.form.status = t.status || 'pending';
-      this.form.estimate = t.estimate || '';
+      const task = this.payload.task || {};
+      this.form.title = task.title || '';
+      this.form.description = task.description || '';
+      this.form.assignee = task.assignee || '';
+      this.form.status = task.status || 'pending';
+      this.form.estimate = task.estimate || '';
       // initialize raw textareas
-      this.rawDeliverables = this.formatArtifactAssignments(t.deliverables);
-      this.rawPrerequisites = this.formatArtifactAssignments(t.prerequisites);
-      this.rawCompletionConditions = this.formatCompletionConditions(t.completionConditions);
+      this.rawDeliverables = this.formatArtifactAssignments(task.deliverables);
+      this.rawPrerequisites = this.formatArtifactAssignments(task.prerequisites);
+      this.rawCompletionConditions = this.formatCompletionConditions(task.completionConditions);
     }
 
     window.addEventListener('keydown', (e) => {

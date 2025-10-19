@@ -156,13 +156,13 @@ class StdioMCPServer {
                     jsonrpc: '2.0',
                     id,
                     result: {
-                        protocolVersion: '2025-10-17 v2',
+                        protocolVersion: '2025-10-17 v4',
                         capabilities: {
                             tools: {}
                         },
                         serverInfo: {
                             name: 'wbs-mcp-server',
-                            version: '0.1.0.2'
+                            version: '0.1.0.5'
                         }
                     }
                 };

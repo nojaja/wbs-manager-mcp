@@ -31,7 +31,8 @@ export interface Artifact extends CommonArtifact {
  */
 export interface TaskArtifactAssignment extends CommonTaskArtifactAssignment {
     id: string;
-    artifact_id: string;
+    taskId: string;
+    artifactId: string;
     crudOperations?: string | null;
     order: number;
     artifact: Artifact;
@@ -71,6 +72,10 @@ export interface Task extends CommonTask {
 export interface TaskArtifactInput {
     artifactId: string;
     crudOperations?: string | null;
+}
+
+export interface TaskDependenciesInput {
+    taskId: string;
 }
 
 /**

@@ -15,21 +15,21 @@ export class DependenciesRepository {
    * 処理名: 依存関係作成
    * 処理概要: dependencies レコードを作成し、関連する dependency_artifacts を同期する
    * 実装理由: 依存関係作成時にアーティファクトの紐付けも同時に行うことで整合性を保つため
-   * @param fromTaskId 依存元タスクID
-   * @param toTaskId 依存先タスクID
-   * @param artifacts 成果物ID配列（省略可）
+  * @param dependencyTaskId 依存元タスクID
+  * @param dependeeTaskId 依存先タスクID
+  * @param artifacts 成果物ID配列（省略可）
    * @returns 作成された依存関係オブジェクト（getDependencyById の形式）
    */
-  async createDependency(fromTaskId: string, toTaskId: string, artifacts: string[] | undefined) {
+  async createDependency(dependencyTaskId: string, dependeeTaskId: string, artifacts: string[] | undefined) {
     const db = await getDatabase();
     const id = uuidv4();
     const now = new Date().toISOString();
 
     // Validate tasks exist to avoid foreign key constraint failures
-    const fromTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, fromTaskId);
-    if (!fromTask) throw new Error(`Task not found (fromTaskId): ${fromTaskId}`);
-    const toTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, toTaskId);
-    if (!toTask) throw new Error(`Task not found (toTaskId): ${toTaskId}`);
+    const dependencyTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependencyTaskId);
+    if (!dependencyTask) throw new Error(`Task not found (dependencyTaskId): ${dependencyTaskId}`);
+    const dependeeTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependeeTaskId);
+    if (!dependeeTask) throw new Error(`Task not found (dependeeTaskId): ${dependeeTaskId}`);
 
     // Validate artifacts exist before inserting dependency_artifacts
     await this.validateArtifactsExist(db, artifacts);
@@ -37,10 +37,10 @@ export class DependenciesRepository {
     await db.run('BEGIN');
     try {
       await db.run(
-        `INSERT INTO dependencies (id, from_task_id, to_task_id, created_at) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO dependencies (id, dependency_task_id, dependee_task_id, created_at) VALUES (?, ?, ?, ?)`,
         id,
-        fromTaskId,
-        toTaskId,
+        dependencyTaskId,
+        dependeeTaskId,
         now
       );
 
@@ -72,13 +72,13 @@ export class DependenciesRepository {
    * 処理名: 依存関係更新
    * 処理概要: 既存の dependencies レコードを更新し、依存に紐づく dependency_artifacts を置換する
    * 実装理由: 依存関係の変更が発生した際にアーティファクトの差し替えを原子的に行うため
-   * @param dependencyId 更新対象の依存関係ID
-   * @param fromTaskId 依存元タスクID
-   * @param toTaskId 依存先タスクID
-   * @param artifacts 成果物ID配列（省略可）
+  * @param dependencyId 更新対象の依存関係ID
+  * @param dependencyTaskId 依存元タスクID
+  * @param dependeeTaskId 依存先タスクID
+  * @param artifacts 成果物ID配列（省略可）
    * @returns 更新後の依存関係オブジェクト
    */
-  async updateDependency(dependencyId: string, fromTaskId: string, toTaskId: string, artifacts: string[] | undefined) {
+  async updateDependency(dependencyId: string, dependencyTaskId: string, dependeeTaskId: string, artifacts: string[] | undefined) {
     const db = await getDatabase();
     const now = new Date().toISOString();
 
@@ -87,10 +87,10 @@ export class DependenciesRepository {
     if (!existing) throw new Error(`Dependency not found: ${dependencyId}`);
 
     // Validate tasks exist
-    const fromTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, fromTaskId);
-    if (!fromTask) throw new Error(`Task not found (fromTaskId): ${fromTaskId}`);
-    const toTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, toTaskId);
-    if (!toTask) throw new Error(`Task not found (toTaskId): ${toTaskId}`);
+  const dependencyTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependencyTaskId);
+  if (!dependencyTask) throw new Error(`Task not found (dependencyTaskId): ${dependencyTaskId}`);
+  const dependeeTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependeeTaskId);
+  if (!dependeeTask) throw new Error(`Task not found (dependeeTaskId): ${dependeeTaskId}`);
 
     // Validate artifacts exist
     await this.validateArtifactsExist(db, artifacts);
@@ -98,9 +98,9 @@ export class DependenciesRepository {
     await db.run('BEGIN');
     try {
       await db.run(
-        `UPDATE dependencies SET from_task_id = ?, to_task_id = ? WHERE id = ?`,
-        fromTaskId,
-        toTaskId,
+        `UPDATE dependencies SET dependency_task_id = ?, dependee_task_id = ? WHERE id = ?`,
+        dependencyTaskId,
+        dependeeTaskId,
         dependencyId
       );
 
@@ -154,11 +154,42 @@ export class DependenciesRepository {
    */
   async getDependencyById(dependencyId: string) {
     const db = await getDatabase();
-    const dep = await db.get<any>(`SELECT id, from_task_id AS fromTaskId, to_task_id AS toTaskId, created_at FROM dependencies WHERE id = ?`, dependencyId);
+    const dep = await db.get<any>(`SELECT id, dependency_task_id AS dependencyTaskId, dependee_task_id AS dependeeTaskId, created_at FROM dependencies WHERE id = ?`, dependencyId);
     if (!dep) return null;
     const rows = await db.all<any[]>(`SELECT id, artifact_id AS artifactId, order_index AS orderIndex, created_at FROM dependency_artifacts WHERE dependency_id = ? ORDER BY order_index ASC`, dependencyId);
-    return { dependencyId: dep.id, fromTaskId: dep.fromTaskId, toTaskId: dep.toTaskId, createdAt: dep.created_at, artifacts: rows.map(r => ({ id: r.id, artifactId: r.artifactId, orderIndex: r.orderIndex, createdAt: r.created_at })) };
+    return { dependencyId: dep.id, dependencyTaskId: dep.dependencyTaskId, dependeeTaskId: dep.dependeeTaskId, createdAt: dep.created_at, artifacts: rows.map(r => ({ id: r.id, artifactId: r.artifactId, orderIndex: r.orderIndex, createdAt: r.created_at })) };
   }
+
+  /**
+   * 処理名: タスクに関連する依存タスクID取得
+   * 処理概要: 指定タスクIDに関連する dependencies レコードを取得して返す
+   * 実装理由: タスク詳細表示時に、そのタスクが持つ依存関係で取得できるようにするため
+   * @param dependencyTaskId 取得対象のタスクID
+   * @returns 依存関係オブジェクト
+   */
+  async getDependencyByTaskId(dependencyTaskId: string) {
+    const db = await getDatabase();
+    const rows = await db.all<any[]>(`SELECT dependee_task_id FROM dependencies WHERE dependency_task_id = ? `, dependencyTaskId);
+    if (!rows || rows.length === 0) return [];
+    const dependencyIds: string[] = rows.map(row => row.dependee_task_id);
+    return dependencyIds;
+  }
+  
+    /**
+   * 処理名: タスクに関連する依存先タスクID取得
+   * 処理概要: 指定タスクIDに関連する dependencies レコードを取得して返す
+   * 実装理由: タスク詳細表示時に、そのタスクが持つ依存関係で取得できるようにするため
+   * @param dependeeTaskId 取得対象のタスクID
+   * @returns 依存関係オブジェクト
+   */
+  async getDependeeByTaskId(dependeeTaskId: string) {
+    const db = await getDatabase();
+    const rows = await db.all<any[]>(`SELECT dependency_task_id FROM dependencies WHERE dependee_task_id = ? `, dependeeTaskId);
+    if (!rows || rows.length === 0) return [];
+    const dependencyIds: string[] = rows.map(row => row.dependency_task_id);
+    return dependencyIds;
+  }
+  
 
   /**
    * 処理名: タスクに関連する依存関係収集
@@ -173,12 +204,12 @@ export class DependenciesRepository {
     const db = await getDatabase();
     const placeholders = taskIds.map(() => '?').join(', ');
 
-    // 依存元（from_task_id）と依存先（to_task_id）の両方で検索して、それぞれをバケット化する
+    // 依存元（dependency_task_id）と依存先（dependee_task_id）の両方で検索して、それぞれをバケット化する
     const rows = await db.all<any[]>(
-      `SELECT d.id AS dependency_id, d.from_task_id AS from_task_id, d.to_task_id AS to_task_id, da.id AS da_id, da.artifact_id AS artifact_id, da.order_index AS order_index
+      `SELECT d.id AS dependency_id, d.dependency_task_id AS dependency_task_id, d.dependee_task_id AS dependee_task_id, da.id AS da_id, da.artifact_id AS artifact_id, da.order_index AS order_index
        FROM dependencies d
        LEFT JOIN dependency_artifacts da ON da.dependency_id = d.id
-       WHERE d.from_task_id IN (${placeholders}) OR d.to_task_id IN (${placeholders})
+       WHERE d.dependency_task_id IN (${placeholders}) OR d.dependee_task_id IN (${placeholders})
        ORDER BY d.id, da.order_index ASC`,
       ...taskIds,
       ...taskIds
@@ -205,8 +236,8 @@ export class DependenciesRepository {
    */
   private processDependencyRow(row: any, taskIds: string[], result: Map<string, { dependents: any[]; dependees: any[] }>) {
     const depId = row.dependency_id;
-    const fromId = row.from_task_id;
-    const toId = row.to_task_id;
+  const fromId = row.dependency_task_id;
+  const toId = row.dependee_task_id;
     const artifact = row.da_id ? { id: row.da_id, artifactId: row.artifact_id, order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0) } : null;
 
     this.handleFromRow(depId, fromId, toId, artifact, taskIds, result);
@@ -229,7 +260,7 @@ export class DependenciesRepository {
     const bucket = result.get(fromId)!;
     let dep = bucket.dependents.find((d: any) => d.dependencyId === depId);
     if (!dep) {
-      dep = { dependencyId: depId, fromTaskId: fromId, toTaskId: toId, artifacts: [] };
+      dep = { dependencyId: depId, dependencyTaskId: fromId, dependeeTaskId: toId, artifacts: [] };
       bucket.dependents.push(dep);
     }
     if (artifact) dep.artifacts.push(artifact);
@@ -251,7 +282,7 @@ export class DependenciesRepository {
     const bucket = result.get(toId)!;
     let dep = bucket.dependees.find((d: any) => d.dependencyId === depId);
     if (!dep) {
-      dep = { dependencyId: depId, fromTaskId: fromId, toTaskId: toId, artifacts: [] };
+      dep = { dependencyId: depId, dependencyTaskId: fromId, dependeeTaskId: toId, artifacts: [] };
       bucket.dependees.push(dep);
     }
     if (artifact) dep.artifacts.push(artifact);

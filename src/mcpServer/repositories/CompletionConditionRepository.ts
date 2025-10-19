@@ -16,6 +16,81 @@ export class CompletionConditionRepository {
    */
   constructor() { }
 
+
+  /**
+   * 処理名: 完了条件作成
+   * 処理概要: 指定タスクに対する完了条件を新規作成し、DB に保存する
+   * 実装理由: タスク作成/更新時に個別の完了条件を追加できるようにするため
+   * @param {string} taskId Task id to associate the condition with
+   * @param {string} description Description of the completion condition
+   * @returns {Promise<TaskCompletionCondition>} Created completion condition
+   */
+  async createCompletionCondition(
+    taskId: string,
+    description: string
+  ): Promise<TaskCompletionCondition> {
+    const db = await getDatabase();
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    // task_id毎のorderの最大値を取得し、+1するロジックは呼び出し元で実装
+    const maxOrder = await db.get(`SELECT MAX(order_index) as maxOrder FROM task_completion_conditions WHERE task_id = ?`, taskId);
+    const nextOrder = (maxOrder?.maxOrder ?? -1) + 1;
+    const order = nextOrder;
+
+    // DB に完了条件を挿入
+    await db.run(
+      `INSERT INTO task_completion_conditions (
+          id, task_id, description, order_index, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+      id,
+      taskId,
+      description,
+      order,
+      now,
+      now
+    );
+
+    return {
+      id,
+      task_id: taskId,
+      description,
+      order
+    };
+  }
+
+  /**
+   * 処理名: taskIdに紐づく完了条件取得
+   * 処理概要: task_id の完了条件を DB から取得する
+   * @param {string} taskId タスク ID
+   * @returns {Promise<TaskCompletionCondition[]>} 完了条件オブジェクトの配列
+   */
+  async getCompletionConditionByTaskId(
+    taskId: string
+  ): Promise<TaskCompletionCondition[]> {
+    const db = await getDatabase();
+    const rows = await db.all<Array<any>>(
+      `SELECT
+          id,
+          task_id,
+          description,
+          order_index
+       FROM task_completion_conditions
+       WHERE task_id = ?
+       ORDER BY order_index`,
+      taskId
+    );
+
+    if (rows.length === 0) return [];
+
+    return rows.map(row => ({
+      id: row.id,
+      task_id: row.task_id,
+      description: row.description,
+      order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0)
+    }));
+  }
+
   /**
    * 処理名: 完了条件同期
    * 処理概要: 指定タスクの完了条件を一括で同期（既存を削除して指定リストを挿入）する
