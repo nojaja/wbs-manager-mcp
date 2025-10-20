@@ -33,7 +33,8 @@
     "commands": [
       {
         "command": "mcpWbs.start",
-        "title": "MCP WBS: Start Local Server"
+        "title": "MCP WBS: Start Local Server",
+        "icon": "$(play)"
       },
       {
         "command": "wbsTree.refresh",
@@ -42,7 +43,8 @@
       },
       {
         "command": "wbsTree.openTask",
-        "title": "開く"
+        "title": "開く",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "wbsTree.createTask",
@@ -51,11 +53,13 @@
       },
       {
         "command": "wbsTree.deleteTask",
-        "title": "削除"
+        "title": "削除",
+        "icon": "$(trash)"
       },
       {
         "command": "wbsTree.addChildTask",
-        "title": "子タスク追加"
+        "title": "子タスク追加",
+        "icon": "$(add)"
       },
       {
         "command": "artifactTree.refresh",
@@ -69,22 +73,26 @@
       },
       {
         "command": "artifactTree.editArtifact",
-        "title": "成果物を編集"
+        "title": "成果物を編集",
+        "icon": "$(edit)"
       },
       {
         "command": "artifactTree.deleteArtifact",
-        "title": "成果物を削除"
+        "title": "成果物を削除",
+        "icon": "$(trash)"
       }
     ],
     "views": {
       "explorer": [
         {
           "id": "wbsTree",
-          "name": "WBS Projects"
+          "name": "WBS Projects",
+          "icon": "$(project)"
         },
         {
           "id": "artifactTree",
-          "name": "Artifacts"
+          "name": "Artifacts",
+          "icon": "$(file)"
         }
       ]
     },
@@ -139,6 +147,12 @@
         }
       ]
     }
+    ,
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "wbs-mcp"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run test && npm run build",
