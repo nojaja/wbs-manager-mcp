@@ -55,13 +55,12 @@ export interface TaskCompletionCondition extends CommonTaskCompletionCondition {
  * 実装理由: クライアント/サーバ間や内部処理で、タスクの階層構造や関連データを一つのオブジェクトとして扱うため
  */
 export interface Task extends CommonTask {
-    created_at: string;
-    updated_at: string;
-    version: number;
     children?: Task[];
-    deliverables?: TaskArtifactAssignment[];
-    prerequisites?: TaskArtifactAssignment[];
+    dependency?: String[];
+    dependee?: String[];
+    artifact?: String[];
     completionConditions?: TaskCompletionCondition[];
+    version: number;
 }
 
 /**

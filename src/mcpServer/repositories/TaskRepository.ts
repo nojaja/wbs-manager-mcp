@@ -155,7 +155,7 @@ export class TaskRepository {
       const createdTask = await this.createTaskFromObject(t);
       created.push(createdTask);
     }
-  return created;
+    return created;
   }
 
   /**
@@ -199,7 +199,7 @@ export class TaskRepository {
     const val = obj[key];
     return Array.isArray(val) ? val : undefined;
   }
-  
+
 
   /**
    * 処理名: タスク一覧取得
@@ -227,26 +227,32 @@ export class TaskRepository {
       ...params
     );
 
-    const taskIds = rows.map((row: any) => row.id);
-    //const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
-    //const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
-    // 依存関係情報を収集して、deliverables/prerequisites を依存関係ベースで組み立てる
-    //const dependencyMap = await this.dependenciesRepo.collectDependenciesForTasks(taskIds);
+    const taskPromises = rows.map(async (row: any) => {
+      // 必要な ID を集めて関連データを限定取得
+      const completionConditions = await this.completionConditionRepo.getCompletionConditionByTaskId(row.id);
+      const dependencyIds = await this.dependenciesRepo.getDependencyByTaskId(row.id); // 依存関係情報を限定取得
+      const dependeeIds = await this.dependenciesRepo.getDependeeByTaskId(row.id); // 依存関係情報を限定取得
+      const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(row.id);
 
-    return rows.map((row: any) => {
-      //const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
-      //const depBucket = dependencyMap.get(row.id) ?? { dependents: [], dependees: [] };
-      // deliverables は依存関係の dependee_task_id に紐づくエントリ（dependees）、prerequisites は dependency_task_id に紐づくエントリ（dependents）
       return {
-        ...row,
+        id: row.id,
+        parentId: row.parent_id,
+        title: row.title,
+        description: row.description,
+        status: row.status,
+        estimate: row.estimate,
+        version: row.version,
         childCount: typeof row.childCount === 'number' ? row.childCount : Number(row.childCount ?? 0),
         children: [],
-        // 既存の task_artifacts ベースの deliverables/prerequisites は残すが、破壊的変更により依存関係ベースで上書きする
-        // deliverables: depBucket.dependees,
-        // prerequisites: depBucket.dependents,
-        // completionConditions: completionConditions.get(row.id) ?? []
-      };
+        dependency: dependencyIds,
+        dependee: dependeeIds,
+        artifact: artifactIds,
+        completionConditions
+      } as Task;
     });
+
+    return await Promise.all(taskPromises);
+
   }
 
 
@@ -303,7 +309,7 @@ export class TaskRepository {
     const dependeeIds = await this.dependenciesRepo.getDependeeByTaskId(task.id); // 依存関係情報を限定取得
 
 
-    const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(task.id); 
+    const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(task.id);
     const dependencyDetails = await this.getTasks(dependencyIds);
     const dependeeDetails = await this.getTasks(dependeeIds);
 
@@ -315,7 +321,8 @@ export class TaskRepository {
           title: row.title,
           description: row.description,
           status: row.status,
-          estimate: row.estimate
+          estimate: row.estimate,
+          version: row.version
         } as Task;
       }),
       artifact: artifactIds,
@@ -339,7 +346,7 @@ export class TaskRepository {
 
     return target as unknown as Task;
   }
-  
+
 
   /**
    * 処理名: ステータス算出
@@ -379,7 +386,7 @@ export class TaskRepository {
     await this.syncCompletionConditions(taskId, updates.completionConditions ?? [], now);
   }
 
- 
+
 
   /**
    * @private
