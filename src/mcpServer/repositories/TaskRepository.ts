@@ -206,14 +206,20 @@ export class TaskRepository {
    * 処理概要: 親 ID によるフィルタリング（トップレベルまたは子一覧）をサポートするタスク取得処理。関連アーティファクトや完了条件も収集して返す。
    * 実装理由: UI 層が階層化されたタスクリストを表示するために、単一クエリ結果と関連情報を組み合わせた整形済みデータを提供する必要があるため
    * @param {string|null|undefined} parentId Optional parent id
+   * @param {string|null|undefined} status Optional status filter (例: 'draft','pending','in-progress','completed')
    * @returns {Promise<Task[]>} Array of tasks
    */
-  async listTasks(parentId?: string | null): Promise<Task[]> {
+  async listTasks(parentId?: string | null, status?: string | null): Promise<Task[]> {
     const db = await this.db();
 
     const isTopLevel = parentId === undefined || parentId === null;
-    const whereClause = isTopLevel ? 'WHERE parent_id IS NULL' : 'WHERE parent_id = ?';
-    const params = isTopLevel ? [] : [parentId];
+    // Build WHERE clause with optional parent filter and optional status filter
+    const clauses: string[] = [];
+    const params: any[] = [];
+    if (isTopLevel) clauses.push('parent_id IS NULL');
+    else { clauses.push('parent_id = ?'); params.push(parentId); }
+    if (status !== undefined && status !== null) { clauses.push('status = ?'); params.push(status); }
+    const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
     const rows = await db.all<any[]>(
       `SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status,

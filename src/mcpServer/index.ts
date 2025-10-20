@@ -156,13 +156,13 @@ class StdioMCPServer {
                     jsonrpc: '2.0',
                     id,
                     result: {
-                        protocolVersion: '2025-10-17 v4',
+                        protocolVersion: '2025-10-17 v7',
                         capabilities: {
                             tools: {}
                         },
                         serverInfo: {
                             name: 'wbs-mcp-server',
-                            version: '0.1.0.5'
+                            version: '0.1.0.7'
                         }
                     }
                 };
@@ -276,6 +276,7 @@ if (!process.env.JEST_WORKER_ID) {
                 const wbsGet = await import('./tools/wbsGetTaskTool');
                 const wbsUpdate = await import('./tools/wbsUpdateTaskTool');
                 const wbsList = await import('./tools/wbsListTasksTool');
+                const wbsListDraft = await import('./tools/wbsListDraftTasksTool');
                 const wbsDelete = await import('./tools/wbsDeleteTaskTool');
                 const wbsMove = await import('./tools/wbsMoveTaskTool');
                 const wbsImpot = await import('./tools/wbsImpotTaskTool');
@@ -287,10 +288,12 @@ if (!process.env.JEST_WORKER_ID) {
                 const depCreate = await import('./tools/wbsCreateDependencyTool');
                 const depUpdate = await import('./tools/wbsUpdateDependencyTool');
                 const depDelete = await import('./tools/wbsDeleteDependencyTool');
+                const agentGetNext = await import('./tools/wbsAgentGetNextTaskTool');
+                const agentTaskComplete = await import('./tools/wbsAgentTaskCompletionRequestTool');
                 const candidates = [
                     wbsCreate, wbsGet, wbsUpdate, wbsList, wbsDelete, wbsMove, wbsImpot,
                     artList, artGet, artCreate, artUpdate, artDelete
-                    , depCreate, depUpdate, depDelete
+                    , depCreate, depUpdate, depDelete, wbsListDraft, agentGetNext, agentTaskComplete
                 ];
                 for (const mod of candidates) {
                     if (mod && mod.instance) toolRegistry.register(mod.instance);

@@ -74,6 +74,13 @@ export class ExtensionController {
       const serverPath = path.join(this.context.extensionPath, 'out', 'mcpServer', 'index.js');
 
       const provider: vscode.McpServerDefinitionProvider<vscode.McpStdioServerDefinition> = {
+        /**
+         * 処理名: MCP サーバ定義提供
+         * 処理概要: MCP クライアントが利用するためのローカル Stdio サーバ定義を返す
+         * 実装理由: ワークスペースに mcp.json がなくてもローカルサーバを発見できるようにするため
+         * @param token Cancellation token (未使用)
+         * @returns 配列で MCP サーバ定義を返す
+         */
         provideMcpServerDefinitions(token) {
           return [new vscode.McpStdioServerDefinition(
             'wbs-mcp',
@@ -82,6 +89,14 @@ export class ExtensionController {
             { WBS_MCP_DATA_DIR: workspaceRoot }
           )];
         },
+        /**
+         * 処理名: MCP サーバ定義解決
+         * 処理概要: 提供されたサーバ定義を解決/検証して返すフック（ここではパススルー）
+         * 実装理由: 将来的に定義の検証や変換が必要になった場合に拡張しやすくするため
+         * @param server サーバ定義
+         * @param token Cancellation token (未使用)
+         * @returns 解決済みのサーバ定義
+         */
         resolveMcpServerDefinition(server, token) {
           return server;
         }
