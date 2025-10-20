@@ -150,7 +150,8 @@
     ,
     "mcpServerDefinitionProviders": [
       {
-        "id": "wbs-mcp"
+        "id": "wbs-mcp",
+        "label": "WBS MCP"
       }
     ]
   },
