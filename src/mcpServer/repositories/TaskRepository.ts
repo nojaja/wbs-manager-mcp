@@ -3,10 +3,12 @@ import type { Database } from '../db/connection';
 import type {
   Task,
   TaskArtifactInput,
-  TaskCompletionConditionInput
+  TaskCompletionConditionInput,
+  TaskDependenciesInput
 } from '../db/types';
 import { TaskArtifactRepository } from './TaskArtifactRepository';
 import { CompletionConditionRepository } from './CompletionConditionRepository';
+import { DependenciesRepository } from './DependenciesRepository';
 import { getDatabase } from '../db/connection';
 
 /**
@@ -18,6 +20,7 @@ import { getDatabase } from '../db/connection';
 export class TaskRepository {
   private readonly taskArtifactRepo = new TaskArtifactRepository();
   private readonly completionConditionRepo = new CompletionConditionRepository();
+  private readonly dependenciesRepo = new DependenciesRepository();
 
   /**
    * 処理名: コンストラクタ
@@ -46,10 +49,10 @@ export class TaskRepository {
    * @param {string|null} [parentId]
    * @param {string|null} [assignee]
    * @param {string|null} [estimate]
-   * @param {{deliverables?:TaskArtifactInput[],prerequisites?:TaskArtifactInput[],completionConditions?:TaskCompletionConditionInput[]}} [options]
-  * @param {TaskArtifactInput[]} [options.deliverables] 提供物の配列
-  * @param {TaskArtifactInput[]} [options.prerequisites] 前提の配列
-  * @param {TaskCompletionConditionInput[]} [options.completionConditions] 完了条件の配列
+   * @param {{dependencies?:TaskDependenciesInput[],artifacts?:TaskArtifactInput[],completionConditions?:TaskCompletionConditionInput[]}} [options]
+   * @param {TaskDependenciesInput[]} [options.dependencies] 依存関係タスクの配列
+   * @param {TaskArtifactInput[]} [options.artifacts] アーティファクトの配列
+   * @param {TaskCompletionConditionInput[]} [options.completionConditions] 完了条件の配列
    * @returns {Promise<Task>} Created task
    */
   async createTask(
@@ -59,8 +62,8 @@ export class TaskRepository {
     assignee: string | null = null,
     estimate: string | null = null,
     options?: {
-      deliverables?: TaskArtifactInput[];
-      prerequisites?: TaskArtifactInput[];
+      dependencies?: TaskDependenciesInput[];
+      artifacts?: TaskArtifactInput[];
       completionConditions?: TaskCompletionConditionInput[];
     }
   ): Promise<Task> {
@@ -91,9 +94,10 @@ export class TaskRepository {
         now
       );
 
-      await this.taskArtifactRepo.syncTaskArtifacts(id, 'deliverable' as any, options?.deliverables ?? [], now);
-      await this.taskArtifactRepo.syncTaskArtifacts(id, 'prerequisite' as any, options?.prerequisites ?? [], now);
-      await this.completionConditionRepo.syncTaskCompletionConditions(id, options?.completionConditions ?? [], now);
+      // 関連データをヘルパーに委譲
+      await this.insertCompletionConditions(id, options?.completionConditions);
+      await this.insertArtifacts(id, options?.artifacts);
+      await this.insertDependencies(id, options?.dependencies);
 
       await db.run('COMMIT');
     } catch (error) {
@@ -105,6 +109,39 @@ export class TaskRepository {
   }
 
   /**
+   * Insert completion conditions helper
+   * @param {string} taskId
+   * @param {TaskCompletionConditionInput[]|undefined} conditions
+   */
+  private async insertCompletionConditions(taskId: string, conditions?: TaskCompletionConditionInput[]) {
+    for (const cond of conditions ?? []) {
+      await this.completionConditionRepo.createCompletionCondition(taskId, cond.description);
+    }
+  }
+
+  /**
+   * Insert artifact mappings helper
+   * @param {string} taskId
+   * @param {TaskArtifactInput[]|undefined} artifacts
+   */
+  private async insertArtifacts(taskId: string, artifacts?: TaskArtifactInput[]) {
+    for (const art of artifacts ?? []) {
+      await this.taskArtifactRepo.createTaskArtifactMap(taskId, art.artifactId);
+    }
+  }
+
+  /**
+   * Insert dependencies helper
+   * @param {string} taskId
+   * @param {TaskDependenciesInput[]|undefined} dependencies
+   */
+  private async insertDependencies(taskId: string, dependencies?: TaskDependenciesInput[]) {
+    for (const dep of dependencies ?? []) {
+      await this.dependenciesRepo.createDependency(taskId, dep.taskId, []);
+    }
+  }
+
+  /**
    * 処理名: タスク一括インポート
    * 処理概要: プレーンなオブジェクト配列からタスクを順に作成するユーティリティ
    * 実装理由: 外部ワークスペースやテンプレートからのデータ取り込みを簡便に行うための補助機能として提供する
@@ -113,24 +150,56 @@ export class TaskRepository {
    */
   async importTasks(tasksTasks: Array<any>): Promise<Task[]> {
     const created: Task[] = [];
-    for (const t of tasksTasks || []) {
-      if (!t || !t.title) continue;
-      const task = await this.createTask(
-        t.title,
-        t.description ?? '',
-        t.parentId ?? null,
-        t.assignee ?? null,
-        t.estimate ?? null,
-        {
-          deliverables: Array.isArray(t.deliverables) ? t.deliverables.map((d: any) => ({ artifactId: d.artifactId, crudOperations: d.crudOperations ?? d.crud ?? null })) : [],
-          prerequisites: Array.isArray(t.prerequisites) ? t.prerequisites.map((p: any) => ({ artifactId: p.artifactId, crudOperations: p.crudOperations ?? null })) : [],
-          completionConditions: Array.isArray(t.completionConditions) ? t.completionConditions.filter((c: any) => typeof c?.description === 'string' && c.description.trim().length > 0).map((c: any) => ({ description: c.description.trim() })) : []
-        }
-      );
-      created.push(task);
+    if (!Array.isArray(tasksTasks) || tasksTasks.length === 0) return created;
+    for (const t of tasksTasks) {
+      const createdTask = await this.createTaskFromObject(t);
+      created.push(createdTask);
     }
     return created;
   }
+
+  /**
+   * Convert a plain object to task creation call
+   * @param {any} t
+   * @returns {Promise<Task>}
+   */
+  private async createTaskFromObject(t: any): Promise<Task> {
+    const title = this.stringField(t, 'title');
+    const description = this.stringField(t, 'description');
+    const parentId = this.stringField(t, 'parentId') || null;
+    const assignee = this.stringField(t, 'assignee') || null;
+    const estimate = this.stringField(t, 'estimate') || null;
+    const options = {
+      dependencies: this.arrayField(t, 'dependencies'),
+      artifacts: this.arrayField(t, 'artifacts'),
+      completionConditions: this.arrayField(t, 'completionConditions')
+    };
+    return await this.createTask(title, description, parentId, assignee, estimate, options as any);
+  }
+  /**
+   * 文字列フィールド取得（安全に）
+   * @param {any} obj
+   * @param {string} key
+   * @returns {string}
+   */
+  private stringField(obj: any, key: string): string {
+    if (!obj) return '';
+    const val = obj[key];
+    return typeof val === 'string' ? val : '';
+  }
+
+  /**
+   * 配列フィールド取得（存在しない場合 undefined を返す）
+   * @param {any} obj
+   * @param {string} key
+   * @returns {any[]|undefined}
+   */
+  private arrayField(obj: any, key: string): any[] | undefined {
+    if (!obj) return undefined;
+    const val = obj[key];
+    return Array.isArray(val) ? val : undefined;
+  }
+
 
   /**
    * 処理名: タスク一覧取得
@@ -158,27 +227,60 @@ export class TaskRepository {
       ...params
     );
 
-    const taskIds = rows.map((row: any) => row.id);
-    const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
-    const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
+    const taskPromises = rows.map(async (row: any) => {
+      // 必要な ID を集めて関連データを限定取得
+      const completionConditions = await this.completionConditionRepo.getCompletionConditionByTaskId(row.id);
+      const dependencyIds = await this.dependenciesRepo.getDependencyByTaskId(row.id); // 依存関係情報を限定取得
+      const dependeeIds = await this.dependenciesRepo.getDependeeByTaskId(row.id); // 依存関係情報を限定取得
+      const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(row.id);
 
-    return rows.map((row: any) => {
-      const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
       return {
-        ...row,
+        id: row.id,
+        parentId: row.parent_id,
+        title: row.title,
+        description: row.description,
+        status: row.status,
+        estimate: row.estimate,
+        version: row.version,
         childCount: typeof row.childCount === 'number' ? row.childCount : Number(row.childCount ?? 0),
         children: [],
-        deliverables: artifactInfo.deliverables,
-        prerequisites: artifactInfo.prerequisites,
-        completionConditions: completionConditions.get(row.id) ?? []
-      };
+        dependency: dependencyIds,
+        dependee: dependeeIds,
+        artifact: artifactIds,
+        completionConditions
+      } as Task;
     });
+
+    return await Promise.all(taskPromises);
+
+  }
+
+
+  /**
+   * 処理名: タスク取得
+   * 処理概要: 指定 ID のタスクを取得する
+   * 実装理由: 特定のタスク情報を取得するための基本的なデータアクセス手段を提供するため
+  * @param {string[]} taskIds Task id to fetch
+  * @returns {Promise<Task[]>} The tasks (empty array when none found)
+  */
+  async getTasks(taskIds: string[]): Promise<Task[]> {
+    const db = await this.db();
+    const tasks = await db.all<Task[]>(
+      `SELECT id, parent_id, title, description, assignee, status,
+              estimate, created_at, updated_at, version
+       FROM tasks
+       WHERE id IN (?)`,
+      taskIds
+    );
+    if (!tasks || tasks.length === 0) return [];
+
+    return tasks as unknown as Task[];
   }
 
   /**
-   * 処理名: タスクツリー取得
-   * 処理概要: 指定 ID のタスクを取得し、全タスクを走査して階層構造（children）と関連データを組み立てて返す
-   * 実装理由: 単一クエリでは階層データの組み立てが困難なため、アプリケーション側でツリーを再構築して返すことで呼び出し側の処理を単純化するため
+   * 処理名: タスク取得
+   * 処理概要: 指定 ID のタスクを取得し、その直下の子タスク、関連アーティファクト割当、完了条件も含めて返す
+   * 実装理由: タスク詳細表示や編集画面で、完全なタスクオブジェクトを提供するため
    * @param {string} taskId Task id to fetch
    * @returns {Promise<Task|null>} The task or null
    */
@@ -192,36 +294,59 @@ export class TaskRepository {
       taskId
     );
     if (!task) return null;
+    // ターゲットとその直下の子のみを取得してツリーを構築する（効率化）
+    const childRows = await db.all<any[]>(
+      `SELECT id, parent_id, title, description, assignee, status, estimate, created_at, updated_at, version
+       FROM tasks
+       WHERE parent_id = ?
+       ORDER BY created_at ASC`,
+      taskId
+    );
 
-    const rows = await db.all<Task[]>(`SELECT id, parent_id, title, description, assignee, status, estimate, created_at, updated_at, version FROM tasks ORDER BY created_at ASC`);
+    // 必要な ID を集めて関連データを限定取得
+    const completionConditions = await this.completionConditionRepo.getCompletionConditionByTaskId(task.id);
+    const dependencyIds = await this.dependenciesRepo.getDependencyByTaskId(task.id); // 依存関係情報を限定取得
+    const dependeeIds = await this.dependenciesRepo.getDependeeByTaskId(task.id); // 依存関係情報を限定取得
 
-    const taskMap = new Map<string, Task>();
-    const taskIds = rows.map((row: any) => row.id);
-    const artifacts = await this.taskArtifactRepo.collectTaskArtifacts(taskIds);
-    const completionConditions = await this.completionConditionRepo.collectCompletionConditions(taskIds);
 
-    rows.forEach((row: any) => {
-      const artifactInfo = artifacts.get(row.id) ?? { deliverables: [], prerequisites: [] };
-      taskMap.set(row.id, {
-        ...row,
-        children: [],
-        deliverables: artifactInfo.deliverables,
-        prerequisites: artifactInfo.prerequisites,
-        completionConditions: completionConditions.get(row.id) ?? []
-      });
-    });
+    const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(task.id);
+    const dependencyDetails = await this.getTasks(dependencyIds);
+    const dependeeDetails = await this.getTasks(dependeeIds);
 
-    rows.forEach((row: any) => {
-      if (row.parent_id && taskMap.has(row.parent_id)) {
-        const parent = taskMap.get(row.parent_id)!;
-        parent.children!.push(taskMap.get(row.id)!);
-      }
-    });
+    const target = {
+      ...task,
+      children: childRows.map((row: any) => {
+        return {
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          status: row.status,
+          estimate: row.estimate,
+          version: row.version
+        } as Task;
+      }),
+      artifact: artifactIds,
+      dependees: dependeeDetails.map(dependeeDetail => ({
+        id: dependeeDetail.id,
+        description: dependeeDetail.description,
+        status: dependeeDetail.status,
+        estimate: dependeeDetail.estimate
+      })),
+      dependents: dependencyDetails.map(dependencyDetail => ({
+        id: dependencyDetail.id,
+        description: dependencyDetail.description,
+        status: dependencyDetail.status,
+        estimate: dependencyDetail.estimate
+      })),
+      completionConditions: completionConditions.map(completionCondition => ({
+        id: completionCondition.id,
+        description: completionCondition.description
+      }))
+    };
 
-    const target = taskMap.get(taskId);
-    if (!target) return { ...task, children: [] };
-    return target;
+    return target as unknown as Task;
   }
+
 
   /**
    * 処理名: ステータス算出
@@ -256,15 +381,44 @@ export class TaskRepository {
     updates: Partial<Task> & { deliverables?: TaskArtifactInput[]; prerequisites?: TaskArtifactInput[]; completionConditions?: TaskCompletionConditionInput[] },
     now: string
   ): Promise<void> {
-    if (updates.deliverables !== undefined) {
-      await this.taskArtifactRepo.syncTaskArtifacts(taskId, 'deliverable' as any, updates.deliverables ?? [], now);
-    }
-    if (updates.prerequisites !== undefined) {
-      await this.taskArtifactRepo.syncTaskArtifacts(taskId, 'prerequisite' as any, updates.prerequisites ?? [], now);
-    }
-    if (updates.completionConditions !== undefined) {
-      await this.completionConditionRepo.syncTaskCompletionConditions(taskId, updates.completionConditions ?? [], now);
-    }
+    await this.syncDeliverables(taskId, updates.deliverables ?? [], now);
+    await this.syncPrerequisites(taskId, updates.prerequisites ?? [], now);
+    await this.syncCompletionConditions(taskId, updates.completionConditions ?? [], now);
+  }
+
+
+
+  /**
+   * @private
+   * @param {string} taskId
+   * @param {TaskArtifactInput[]} deliverables
+   * @param {string} now
+   */
+  private async syncDeliverables(taskId: string, deliverables: TaskArtifactInput[] = [], now: string) {
+    if (deliverables.length === 0) return;
+    await this.taskArtifactRepo.syncTaskArtifacts(taskId, 'deliverable' as any, deliverables ?? [], now);
+  }
+
+  /**
+   * @private
+   * @param {string} taskId
+   * @param {TaskArtifactInput[]} prerequisites
+   * @param {string} now
+   */
+  private async syncPrerequisites(taskId: string, prerequisites: TaskArtifactInput[] = [], now: string) {
+    if (prerequisites.length === 0) return;
+    await this.taskArtifactRepo.syncTaskArtifacts(taskId, 'prerequisite' as any, prerequisites ?? [], now);
+  }
+
+  /**
+   * @private
+   * @param {string} taskId
+   * @param {TaskCompletionConditionInput[]} completionConditions
+   * @param {string} now
+   */
+  private async syncCompletionConditions(taskId: string, completionConditions: TaskCompletionConditionInput[] = [], now: string) {
+    if (completionConditions.length === 0) return;
+    await this.completionConditionRepo.syncTaskCompletionConditions(taskId, completionConditions ?? [], now);
   }
 
   /**

@@ -13,9 +13,9 @@ export interface Artifact {
 
 export interface TaskArtifactAssignment {
   // support both client-side and server-side shapes
-  artifactId?: string;
-  artifact_id?: string;
   id?: string;
+  artifactId?: string;
+  taskId?: string;
   role: TaskArtifactRole;
   crudOperations?: string | null;
   order?: number;

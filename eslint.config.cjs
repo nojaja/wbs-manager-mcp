@@ -2,7 +2,8 @@
 // See: https://eslint.org/docs/latest/use/configure/migration-guide
 
 // Load dependencies via CommonJS requires (flat config file itself is not type-checked)
-const tseslint = require('typescript-eslint');
+const tsparser = require('@typescript-eslint/parser');
+const tsplugin = require('@typescript-eslint/eslint-plugin');
 const jsdoc = require('eslint-plugin-jsdoc');
 const sonarjs = require('eslint-plugin-sonarjs');
 
@@ -23,7 +24,7 @@ module.exports = [
   {
     files: ['**/*.ts'],
     languageOptions: {
-      parser: tseslint.parser,
+      parser: tsparser,
       parserOptions: {
         ecmaVersion: 2021,
         sourceType: 'module',
@@ -32,11 +33,14 @@ module.exports = [
     plugins: {
       jsdoc,
       sonarjs,
+      '@typescript-eslint': tsplugin,
     },
     settings: {
       jsdoc: { mode: 'typescript' },
     },
     rules: {
+      'eqeqeq': 'warn',
+      'no-throw-literal': 'warn',
       // Minimal required rules from the request
       'sonarjs/cognitive-complexity': ['error', 10],
       'jsdoc/require-jsdoc': [

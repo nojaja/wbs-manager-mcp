@@ -16,6 +16,80 @@ export class TaskArtifactRepository {
    */
   constructor() { }
 
+
+  /**
+   * 処理名: タスク-成果物マップ作成
+   * 処理概要: 指定タスクと成果物の関連付けを新規作成し、DB に保存する
+   * 実装理由: タスクに対して成果物を割り当てる操作を提供するため
+   * @param {string} taskId Task id to associate the artifact with
+   * @param {string} artifactId Artifact id to be associated
+   * @returns {Promise<TaskArtifactAssignment>} Created task-artifact assignment
+   */
+  async createTaskArtifactMap(
+    taskId: string,
+    artifactId: string
+  ): Promise<TaskArtifactAssignment> {
+    const db = await getDatabase();
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    const defaultRole: TaskArtifactRole = 'deliverable';
+    await db.run(
+      `INSERT INTO task_artifacts (
+          id, task_id, artifact_id, role, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+      id,
+      taskId,
+      artifactId,
+      defaultRole,
+      now,
+      now
+    );
+
+    // Return object shaped as TaskArtifactAssignment
+    return {
+      id: id,
+      taskId: taskId,
+      artifactId: artifactId,
+      role: defaultRole,
+      order: 0,
+      artifact: {
+        id: artifactId,
+        title: '',
+        created_at: now,
+        updated_at: now,
+        version: 1
+      }
+    };
+  }
+
+  /**
+   * 処理名: taskIdに紐づく成果物ID取得
+   * 処理概要: task_id の成果物IDを DB から取得する
+   * @param {string} taskId タスク ID
+   * @returns {Promise<string[]>} 成果物IDの配列
+   */
+  async getArtifactIdsByTaskIds(
+    taskId: string
+  ): Promise<string[]> {
+    const db = await getDatabase();
+    const rows = await db.all<Array<any>>(
+      `SELECT
+            id,
+            task_id,
+            artifact_id,
+            crud_operations
+         FROM task_artifacts
+         WHERE task_id = ?
+         ORDER BY order_index`,
+      taskId
+    );
+
+    if (rows.length === 0) return [];
+
+    return rows.map(row => row.id);
+  }
+
   /**
    * 処理名: 割当同期
    * 処理概要: 指定タスクとロールに対する成果物割当を一括同期（既存削除後に挿入）する
@@ -98,7 +172,8 @@ export class TaskArtifactRepository {
     for (const row of rows) {
       const assignment: TaskArtifactAssignment = {
         id: row.assignment_id,
-        artifact_id: row.artifact_id,
+        taskId: row.task_id,
+        artifactId: row.artifact_id,
         role: row.role as TaskArtifactRole,
         crudOperations: row.crud_operations ?? undefined,
         order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0),

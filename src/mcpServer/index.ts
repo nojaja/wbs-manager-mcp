@@ -156,13 +156,13 @@ class StdioMCPServer {
                     jsonrpc: '2.0',
                     id,
                     result: {
-                        protocolVersion: '2024-11-05',
+                        protocolVersion: '2025-10-17 v4',
                         capabilities: {
                             tools: {}
                         },
                         serverInfo: {
                             name: 'wbs-mcp-server',
-                            version: '0.1.0'
+                            version: '0.1.0.5'
                         }
                     }
                 };
@@ -284,9 +284,13 @@ if (!process.env.JEST_WORKER_ID) {
                 const artCreate = await import('./tools/artifactsCreateArtifactTool');
                 const artUpdate = await import('./tools/artifactsUpdateArtifactTool');
                 const artDelete = await import('./tools/artifactsDeleteArtifactTool');
+                const depCreate = await import('./tools/wbsCreateDependencyTool');
+                const depUpdate = await import('./tools/wbsUpdateDependencyTool');
+                const depDelete = await import('./tools/wbsDeleteDependencyTool');
                 const candidates = [
                     wbsCreate, wbsGet, wbsUpdate, wbsList, wbsDelete, wbsMove, wbsImpot,
                     artList, artGet, artCreate, artUpdate, artDelete
+                    , depCreate, depUpdate, depDelete
                 ];
                 for (const mod of candidates) {
                     if (mod && mod.instance) toolRegistry.register(mod.instance);

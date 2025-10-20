@@ -1,5 +1,6 @@
 import { Tool } from './Tool';
 import { TaskRepository } from '../repositories/TaskRepository';
+import { DependenciesRepository } from '../repositories/DependenciesRepository';
 
 /**
  * 処理名: wbs.planMode.createTask ツール実装
@@ -9,6 +10,7 @@ import { TaskRepository } from '../repositories/TaskRepository';
  */
 export default class WbsCreateTaskTool extends Tool {
     private readonly repo: TaskRepository;
+    private readonly dependenciesRepo: DependenciesRepository;
     /**
      * 処理名: コンストラクタ
      * 処理概要: ツールのメタ情報を設定し、内部で使用する TaskRepository を生成する
@@ -17,37 +19,40 @@ export default class WbsCreateTaskTool extends Tool {
     constructor() {
         super({
             name: 'wbs.planMode.createTask',
-            description: 'Create a new task (tool plugin wrapper)',
+            description: 'Tool to create a WBS task. If `parentId` is provided the new task will be created as a child of that parent; if omitted the task is registered at the root level. When creation succeeds a task ID is issued and the created task can be retrieved in lists via `wbs.planMode.listTasks`. For LLM-driven automation, provide a clear "description" prompt with execution instructions, use `completionConditions.description` for audit/acceptance prompts, and list any affected artifacts in `artifacts` for traceability.',
             inputSchema: {
                 type: 'object',
                 properties: {
-                    title: { type: 'string', description: 'Task title' },
-                    description: { type: 'string', description: 'Task description' },
-                    assignee: { type: 'string', description: 'Assignee name' },
-                    estimate: { type: 'string', description: 'Time estimate' },
+                    parentId: { type: 'string', description: 'Parent task ID. If provided the new task will be registered as a child of this task. If null or omitted the task will be created at the root level.' },
+                    title: { type: 'string', description: 'Task title (required). A short, descriptive label for the task.' },
+                    description: { type: 'string', description: 'Instruction prompt describing what must be done to complete the task. Write concrete steps or acceptance criteria so an LLM or a human can act on it.' },
+                    assignee: { type: 'string', description: 'Assignee name or user identifier. If omitted the task will be unassigned.' },
+                    estimate: { type: 'string', description: "Estimated time required for the task (examples: '4h', '2d'). If the work exceeds 8 hours it is recommended to split it into subtasks." },
                     completionConditions: {
                         type: 'array',
+                        description: 'An array of audit/acceptance prompts used to determine whether the task is complete. Each item should contain a description that can be used as a verification checklist or test prompt.',
                         items: {
                             type: 'object',
-                            properties: { description: { type: 'string' } },
+                            properties: { description: { type: 'string', description: 'A verification/audit prompt describing how to judge that the task is complete. Be specific and include measurable checks where possible.' } },
                             required: ['description']
                         }
                     },
-                    parentId: { type: 'string', description: 'Parent task ID' },
-                    deliverables: {
+                    artifacts: {
                         type: 'array',
+                        description: 'List of artifacts that will be added or modified by this task. Use this to link deliverables or files to the task.',
                         items: {
                             type: 'object',
-                            properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } },
+                            properties: { artifactId: { type: 'string', description: 'ID of the artifact that will be added or modified by the task.' }, crudOperations: { type: 'string', description: "CRUD operation(s) applied to the artifact: use C, R, U, D (create/read/update/delete). If multiple, use a agreed format such as comma-separated values." } },
                             required: ['artifactId']
                         }
                     },
-                    prerequisites: {
+                    dependency: {
                         type: 'array',
+                        description: 'Array of related task references. Use `taskId` to point to successor or dependent tasks.',
                         items: {
                             type: 'object',
-                            properties: { artifactId: { type: 'string' }, crudOperations: { type: 'string' } },
-                            required: ['artifactId']
+                            properties: { taskId: { type: 'string', description: 'ID of a related task (for example a successor or dependency).' } },
+                            required: ['taskId']
                         }
                     }
                 },
@@ -55,6 +60,7 @@ export default class WbsCreateTaskTool extends Tool {
             }
         });
         this.repo = new TaskRepository();
+        this.dependenciesRepo = new DependenciesRepository();
     }
 
     /**
@@ -69,29 +75,24 @@ export default class WbsCreateTaskTool extends Tool {
             // リポジトリの存在確認
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
-            // 引数を正規化して DB に渡す（deliverables/prerequisites/conditions の整形と検証）
+            const depRepo = this.dependenciesRepo;
+            if (!depRepo) throw new Error('DependenciesRepository not injected');
+            // Normalize inputs and create the task
+            // Support both 'dependencies' and singular 'dependency' keys from callers/tests
+            const inputArgs = { ...args };
+            if (!inputArgs.dependencies && inputArgs.dependency) inputArgs.dependencies = inputArgs.dependency;
+            const { dependencies, artifacts, completionConditions } = this.normalizeInputs(inputArgs);
             const task = await repo.createTask(
                 args.title,
                 args.description ?? '',
                 args.parentId ?? null,
                 args.assignee ?? null,
                 args.estimate ?? null,
-                {
-                    deliverables: Array.isArray(args.deliverables) ? args.deliverables.map((item: any) => ({
-                        artifactId: item?.artifactId,
-                        crudOperations: item?.crudOperations ?? item?.crud ?? null
-                    })) : [],
-                    prerequisites: Array.isArray(args.prerequisites) ? args.prerequisites.map((item: any) => ({
-                        artifactId: item?.artifactId,
-                        crudOperations: item?.crudOperations ?? item?.crud ?? null
-                    })) : [],
-                    completionConditions: Array.isArray(args.completionConditions)
-                        ? args.completionConditions
-                            .filter((item: any) => typeof item?.description === 'string' && item.description.trim().length > 0)
-                            .map((item: any) => ({ description: item.description.trim() }))
-                        : []
-                }
+                { dependencies, artifacts, completionConditions }
             );
+
+            // Create dependencies (if any) in a separated helper to keep complexity low
+            const dependencyResults = await this.createDependenciesForTask(task, inputArgs.dependencies);
             // task オブジェクトに加え、mcpClient側のLLMに渡すためのヒント情報を付与します。
             // llmHints の構造:
             // {
@@ -100,17 +101,18 @@ export default class WbsCreateTaskTool extends Tool {
             // }
             // LLM ヒントは専用メソッドで生成して run() の複雑さを下げる
             const llmHints = this.buildLlmHintsForTask(task);
-            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }], llmHints };
+            // Include dependency creation results to help the caller understand any partial failures
+            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }], llmHints, dependencies: dependencyResults };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = {
                 nextActions: [
-                    { action: 'retryCreate', detail: '引数を検証して再試行してください' },
-                    { action: 'checkRepo', detail: 'リポジトリの注入状態を確認してください' }
+                    { action: 'retryCreate', detail: 'Validate input arguments and retry.' },
+                    { action: 'checkRepo', detail: 'Verify repository injection and database availability.' }
                 ],
                 notes: [
-                    `例外メッセージ: ${message}`,
-                    'エラー発生時は詳細ログをサーバー側で確認してください。'
+                    `Exception message: ${message}`,
+                    'Check server logs for full stack trace and details.'
                 ]
             };
             return { content: [{ type: 'text', text: `❌ Failed to create task: ${message}` }], llmHints };
@@ -194,6 +196,68 @@ export default class WbsCreateTaskTool extends Tool {
         for (const field of missingFields) {
             nextActions.push(this.buildUpdateActionForField(field, taskId));
         }
+    }
+
+    /**
+     * Normalize input arrays for dependencies/artifacts/completionConditions
+     * @param {any} args Raw tool arguments
+     * @returns {{dependencies:any[],artifacts:any[],completionConditions:any[]}} Normalized arrays ready for TaskRepository
+     */
+    private normalizeInputs(args: any) {
+        const dependencySource = Array.isArray(args.dependencies) ? args.dependencies : [];
+        const artifactsSource = Array.isArray(args.artifacts) ? args.artifacts : [];
+
+        const dependencies = dependencySource.map((item: any) => ({
+            artifactId: item?.artifactId,
+            crudOperations: item?.crudOperations ?? item?.crud ?? null
+        }));
+
+        const artifacts = artifactsSource.map((item: any) => ({
+            artifactId: item?.artifactId,
+            crudOperations: item?.crudOperations ?? item?.crud ?? null
+        }));
+
+        const completionConditions = Array.isArray(args.completionConditions)
+            ? args.completionConditions
+                .filter((item: any) => typeof item?.description === 'string' && item.description.trim().length > 0)
+                .map((item: any) => ({ description: item.description.trim() }))
+            : [];
+
+        return { dependencies, artifacts, completionConditions };
+    }
+
+    /**
+     * Create dependency records for the newly created task.
+     * @param {any} task Created task object (expects task.id)
+     * @param {any} dependencyInput Raw dependency input value from args
+     * @returns {Promise<any[]>} Array of result objects describing success/failure per dependency
+     */
+    private async createDependenciesForTask(task: any, dependencyInput: any): Promise<any[]> {
+        const results: any[] = [];
+        if (!task || !task.id) return results;
+        if (!Array.isArray(dependencyInput) || dependencyInput.length === 0) return results;
+
+        const validItems = dependencyInput.filter((d: any) => d && typeof d.taskId === 'string' && d.taskId.trim().length > 0).map((d: any) => ({
+            taskId: d.taskId,
+            artifacts: Array.isArray(d.artifacts) ? d.artifacts.filter((a: any) => typeof a === 'string') : undefined
+        }));
+
+        if (validItems.length === 0) return results;
+
+        const promises = validItems.map((it: any) => this.dependenciesRepo.createDependency(task.id, it.taskId, it.artifacts));
+        const settled = await Promise.allSettled(promises);
+
+        for (let i = 0; i < settled.length; i++) {
+            const s = settled[i];
+            const input = validItems[i];
+            if (s.status === 'fulfilled') {
+                results.push({ success: true, dependency: s.value });
+            } else {
+                results.push({ success: false, error: s.reason instanceof Error ? s.reason.message : String(s.reason), input });
+            }
+        }
+
+        return results;
     }
 
 }

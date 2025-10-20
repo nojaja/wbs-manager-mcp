@@ -18,8 +18,8 @@ export interface Artifact extends CommonArtifact {
 
 export interface TaskArtifactAssignment extends CommonTaskArtifactAssignment {
     // server representation may include DB ids and ordering
-    id?: string;
-    artifact_id?: string;
+    taskId?: string;
+    artifactId?: string;
     order?: number;
     // keep nested artifact shape
     artifact?: Artifact;
