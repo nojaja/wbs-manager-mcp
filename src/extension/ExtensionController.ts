@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { WBSTreeDragAndDropController } from './views/explorer/wbsTree';
 import { ArtifactTreeItem } from './views/explorer/artifactTree';
 import { ServerService } from './server/ServerService';
@@ -62,6 +63,35 @@ export class ExtensionController {
 
     // start server and clients
     await this.serverService.startLocalServer(this.context, [this.initializeClient, this.taskClient, this.artifactClient]);
+
+    // Register MCP server definition provider so that MCP clients (Copilot, etc.)
+    // can discover the local MCP server without relying on a workspace mcp.json file.
+    try {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      const workspaceRoot = workspaceFolders && workspaceFolders.length > 0
+        ? workspaceFolders[0].uri.fsPath
+        : this.context.extensionPath;
+      const serverPath = path.join(this.context.extensionPath, 'out', 'mcpServer', 'index.js');
+
+      const provider: vscode.McpServerDefinitionProvider<vscode.McpStdioServerDefinition> = {
+        provideMcpServerDefinitions(token) {
+          return [new vscode.McpStdioServerDefinition(
+            'wbs-mcp',
+            process.execPath,
+            [serverPath],
+            { WBS_MCP_DATA_DIR: workspaceRoot }
+          )];
+        },
+        resolveMcpServerDefinition(server, token) {
+          return server;
+        }
+      };
+      const disposable = vscode.lm.registerMcpServerDefinitionProvider('wbs-mcp', provider as any);
+      this.context.subscriptions.push(disposable);
+      this.outputChannel.appendLine('Registered MCP server definition provider');
+    } catch (err) {
+      this.outputChannel.appendLine(`Failed to register MCP server provider: ${String(err)}`);
+    }
 
     // create tree views
     const dragAndDropController = new WBSTreeDragAndDropController(wbsProvider);

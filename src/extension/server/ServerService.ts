@@ -367,10 +367,13 @@ export class ServerService {
           await client.start();
         }
       }
-      this.createMcpConfig(workspaceRoot, serverPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.outputChannel.appendLine(`Failed to start and attach MCP client: ${message}`);
     }
   }
+
+  // NOTE: createMcpConfig was removed in favor of using vscode.lm.registerMcpServerDefinitionProvider
+  // to register MCP servers dynamically. Writing to `.vscode/mcp.json` caused unintentional
+  // overwrites of user configurations and has been replaced by provider-based registration.
 }

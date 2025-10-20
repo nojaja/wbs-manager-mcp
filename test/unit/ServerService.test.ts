@@ -220,44 +220,7 @@ describe('ServerService', () => {
   });
 
   describe('createMcpConfig', () => {
-    it('should create MCP config file in existing .vscode directory', () => {
-      mockedFs.existsSync.mockReturnValue(true);
-      mockedFs.writeFileSync.mockImplementation(() => {});
-      
-      serverService.createMcpConfig('/workspace', '/path/to/server.js');
-      
-      const expectedConfig = {
-        servers: {
-          'wbs-mcp': {
-            command: process.execPath,
-            args: ['/path/to/server.js'],
-            type: 'stdio',
-            env: { WBS_MCP_DATA_DIR: '${workspaceFolder}' }
-          }
-        }
-      };
-      
-      expect(mockedFs.writeFileSync).toHaveBeenCalledWith(
-        path.join('/workspace', '.vscode', 'mcp.json'),
-        JSON.stringify(expectedConfig, null, 2)
-      );
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        `Created MCP configuration at: ${path.join('/workspace', '.vscode', 'mcp.json')}`
-      );
-    });
-
-    it('should create .vscode directory if it does not exist', () => {
-      mockedFs.existsSync.mockReturnValue(false);
-      mockedFs.mkdirSync.mockImplementation(() => '');
-      mockedFs.writeFileSync.mockImplementation(() => {});
-      
-      serverService.createMcpConfig('/workspace', '/path/to/server.js');
-      
-      expect(mockedFs.mkdirSync).toHaveBeenCalledWith(
-        path.join('/workspace', '.vscode'),
-        { recursive: true }
-      );
-    });
+    // createMcpConfig removed: registration is now done via vscode.lm.registerMcpServerDefinitionProvider
   });
 
   describe('getServerProcess', () => {
