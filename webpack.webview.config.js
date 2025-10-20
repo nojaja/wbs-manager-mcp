@@ -4,8 +4,8 @@ const { VueLoaderPlugin } = require('vue-loader');
 
 module.exports = {
   entry: {
-    task: path.resolve('./src/extension/webview/task/main.js'),
-    artifact: path.resolve('./src/extension/webview/artifact/main.js')
+    task: path.resolve('./src/extension/webview/task/main.ts'),
+    artifact: path.resolve('./src/extension/webview/artifact/main.ts')
   },
   output: {
     filename: '[name].bundle.js',
@@ -22,6 +22,11 @@ module.exports = {
       {
         test: /\.css$/,
         use: ['style-loader', 'css-loader']
+      },
+      {
+        test: /\.ts$/,
+        use: ['ts-loader'],
+        exclude: /node_modules/
       },
       {
         test: /\.js$/,
@@ -49,7 +54,7 @@ module.exports = {
     })
   ],
   resolve: {
-    extensions: ['.js', '.vue'],
+    extensions: ['.ts', '.vue'],
     alias: {
       vue: 'vue/dist/vue.esm-bundler.js'
     }

@@ -28,7 +28,7 @@
   "categories": [
     "Other"
   ],
-  "main": "./out/extension/extension.js",
+  "main": "./out/extension/index.js",
   "contributes": {
     "commands": [
       {
