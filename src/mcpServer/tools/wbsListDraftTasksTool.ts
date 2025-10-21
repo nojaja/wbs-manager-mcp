@@ -30,11 +30,11 @@ export default class WbsListDraftTasksTool extends Tool {
     constructor() {
         super({
             name: 'wbs.planMode.listDraftTasks',
-            description: "List draft tasks (status='draft') for a given parentId or top-level tasks when parentId is omitted. Returns the same task object structure as 'wbs.planMode.listTasks'.",
+            description: "List draft tasks (status='draft') for a given parentId or top-level tasks when parentId is omitted.  Note for LLMs and automated agents: if a task owns child tasks, update those child tasks before updating the parent. To retrieve child tasks for a specific parent, pass that parent's ID in the parentId parameter. Use parentId to focus on a subtree and ensure children are completed before promoting the parent out of draft.",
             inputSchema: {
                 type: 'object',
                 properties: {
-                    parentId: { type: 'string', description: "Optional parent task ID. If omitted or null, the tool returns top-level (root) draft tasks." }
+                    parentId: { type: 'string', description: "Optional parent task ID. If omitted, the tool returns top-level (root) draft tasks." }
                 }
             }
         });
@@ -54,7 +54,7 @@ export default class WbsListDraftTasksTool extends Tool {
             // 実装理由: クライアントやエージェントがドラフトタスクを容易に取得できるようにするため
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
-            const tasks = await this.repo.listTasks(args?.parentId, 'draft');
+            const tasks = await this.repo.leafTaskList(args?.parentId, 'draft');
             const llmHints = { nextActions: [], notes: ['Draft task list retrieved successfully.'] };
             return { content: [{ type: 'text', text: JSON.stringify(tasks, null, 2) }], llmHints };
         } catch (error) {

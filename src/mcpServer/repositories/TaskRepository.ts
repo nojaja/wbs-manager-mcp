@@ -62,18 +62,18 @@ export class TaskRepository {
       return { status: 'draft', reasonCode: 'MISSING_REQUIRED_FIELDS', reasonMessage: 'タイトル/説明/見積り/完了条件/アーティファクトのいずれかが不足しています' };
     }
 
-  // ルール2: dependees が存在する場合、そのステータスを確認
-  // 処理概要: 依存タスクが未完了であれば待機状態('pending')にする
-  // 実装理由: 依存タスクが完了していなければ開始できないため
+    // ルール2: dependees が存在する場合、そのステータスを確認
+    // 処理概要: 依存タスクが未完了であれば待機状態('pending')にする
+    // 実装理由: 依存タスクが完了していなければ開始できないため
     const depIds: string[] = (current.dependee ?? []).filter(Boolean) as string[];
     if (depIds.length > 0) {
       const anyNotCompleted = await this.anyDependeeNotCompleted(depIds);
       if (anyNotCompleted) return { status: 'pending', reasonCode: 'WAITING_DEPENDEES', reasonMessage: '依存先のタスクが完了していないため待機中です' };
     }
 
-  // ルール3: children が存在する場合、そのステータスを確認
-  // 処理概要: 子タスクの状態により親の状態を決定する（draft/in-progress/completed など）
-  // 実装理由: 親は子タスクの進捗に依存するため、子の状態を参照して整合性を取る
+    // ルール3: children が存在する場合、そのステータスを確認
+    // 処理概要: 子タスクの状態により親の状態を決定する（draft/in-progress/completed など）
+    // 実装理由: 親は子タスクの進捗に依存するため、子の状態を参照して整合性を取る
     const childIds: string[] = (current.children ?? []).map((c: any) => c.id).filter(Boolean);
     if (childIds.length > 0) {
       const childEval = await this.evaluateChildrenStatus(childIds, status);
@@ -425,7 +425,7 @@ export class TaskRepository {
   async listTasks(parentId?: string | null, status?: string | null): Promise<Task[]> {
     const db = await this.db();
 
-    const isTopLevel = parentId === undefined || parentId === null;
+    const isTopLevel = parentId === undefined || parentId === null || parentId === '';
     // Build WHERE clause with optional parent filter and optional status filter
     const clauses: string[] = [];
     const params: any[] = [];
@@ -471,6 +471,124 @@ export class TaskRepository {
 
     return await Promise.all(taskPromises);
 
+  }
+
+
+  /**
+   * 処理名: 末端のタスク一覧 (leafTaskList)
+   * 処理概要: 指定 parentId 配下の全ての子孫を探索し、子を持たない（真の leaf）タスクを抽出して返す。
+   *           status フィルタを任意で指定でき、status は文字列または文字列配列を受け付ける。
+   * 実装理由: 特定 status のタスクをまとめて修正するための修正候補取得に利用する
+   * @param {string|null|undefined} parentId Optional parent id
+   * @param {string|string[]|null|undefined} status Optional status filter (単一または配列)。小文字化して完全一致で比較する
+   * @returns {Promise<Task[]>} Array of tasks (flat list, listTasks と同様のフォーマット)
+   */
+  async leafTaskList(parentId?: string | null, status?: string | string[] | null): Promise<Task[]> {
+    const db = await this.db();
+
+    const isTopLevel = parentId === undefined || parentId === null || parentId === '';
+
+    // Build recursive CTE to collect all descendants of the given parent(s).
+    // If parentId is not provided, start from all roots (parent_id IS NULL).
+    // Start seed depends on parentId existence.
+    let cteSeedSql: string;
+    const params: any[] = [];
+    if (isTopLevel) {
+      cteSeedSql = `SELECT id FROM tasks WHERE parent_id IS NULL`;
+    } else {
+      // verify parent exists; if not, return empty array (requirement)
+      const parentRow = await db.get<{ id: string }>(`SELECT id FROM tasks WHERE id = ?`, parentId);
+      if (!parentRow) return [];
+      cteSeedSql = `SELECT id FROM tasks WHERE id = ?`;
+      params.push(parentId);
+    }
+
+    // Prepare status filter list (lowercased). Accept string or array.
+    const statusList = this.buildStatusList(status);
+
+    // Recursive CTE: collect all descendant ids starting from seed(s)
+    // Then select those ids where there are no children (pure leaf), excluding the seed parent itself
+    // Note: status filter is applied AFTER selecting leaf nodes as required
+    const placeholders = statusList ? statusList.map(() => '?').join(',') : '';
+    const sql = `WITH RECURSIVE descendants(id) AS (
+        ${cteSeedSql}
+      UNION ALL
+        SELECT t.id FROM tasks t JOIN descendants d ON t.parent_id = d.id
+    )
+    SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status, t.estimate, t.created_at, t.updated_at, t.version
+    FROM tasks t
+    WHERE t.id IN (SELECT id FROM descendants)
+      AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = t.id)
+      ${statusList ? `AND LOWER(t.status) IN (${placeholders})` : ''}
+    ORDER BY t.created_at ASC`;
+
+    const rows = await db.all<any[]>(sql, ...params, ...(statusList ?? []));
+
+    if (!rows || rows.length === 0) return [];
+
+    const taskPromises = rows.map(async (row: any) => {
+      const completionConditions = await this.completionConditionRepo.getCompletionConditionByTaskId(row.id);
+      const dependencyIds = await this.dependenciesRepo.getDependencyByTaskId(row.id);
+      const dependeeIds = await this.dependenciesRepo.getDependeeByTaskId(row.id);
+      const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(row.id);
+
+      return {
+        id: row.id,
+        parentId: row.parent_id,
+        title: row.title,
+        description: row.description,
+        status: row.status,
+        estimate: row.estimate,
+        version: row.version,
+        childCount: 0,
+        children: [],
+        dependency: dependencyIds,
+        dependee: dependeeIds,
+        artifact: artifactIds,
+        completionConditions
+      } as Task;
+    });
+
+    return await Promise.all(taskPromises);
+  }
+
+  /**
+   * ヘルパ: status 引数からプレーンな小文字化されたステータス配列を返す
+   * @param {string|string[]|null|undefined} status
+   * @returns {string[]|null}
+   */
+  private buildStatusList(status?: string | string[] | null): string[] | null {
+    if (status === undefined || status === null) return null;
+    if (Array.isArray(status)) {
+      const list = status.map(s => (s ?? '').toString().toLowerCase()).filter(s => s.length > 0);
+      return list.length === 0 ? null : list;
+    }
+    const single = (status ?? '').toString().toLowerCase();
+    return single.length === 0 ? null : [single];
+  }
+
+  /**
+   * 指定 taskId の既存依存(dependents) を削除し、新しい依存配列を作成するヘルパ
+   * @param {string} taskId
+   * @param {Array<any>} existingDependents
+   * @param {TaskDependenciesInput[]} newDeps
+   */
+  private async syncTaskDependencies(taskId: string, existingDependents: Array<any>, newDeps: TaskDependenciesInput[] = []) {
+    // 既存依存を削除
+    for (const dep of existingDependents ?? []) {
+      if (dep && dep.dependencyId) {
+        try {
+          await this.dependenciesRepo.deleteDependency(dep.dependencyId);
+        } catch (err: any) {
+          console.error('依存関係の削除に失敗しました:', (err as any)?.message ?? err);
+        }
+      }
+    }
+
+    // 新しい依存を作成
+    for (const dep of newDeps ?? []) {
+      await this.dependenciesRepo.createDependency(taskId, dep.taskId, []);
+    }
   }
 
 
@@ -626,15 +744,40 @@ export class TaskRepository {
    * 処理名: タスク更新
    * 処理概要: 指定された部分更新をトランザクション内で適用し、関連データの同期とバージョニングを処理して更新済みオブジェクトを返す
    * 実装理由: 排他制御（ifVersion）や関連データの整合性確保が必要なため、単一の原子的な更新処理として提供する
-   * @param {string} taskId
-   * @param {Partial<Task> & {ifVersion?:number,deliverables?:TaskArtifactInput[],prerequisites?:TaskArtifactInput[],completionConditions?:TaskCompletionConditionInput[]}} updates
+  * @param {string} taskId
+  * @param {string} [title]
+  * @param {string} [description]
+  * @param {string|null} [parentId]
+  * @param {string|null} [assignee]
+  * @param {string|null} [estimate]
+  * @param {Object} [options] オプションパラメータ
+  * @param {TaskDependenciesInput[]} [options.dependencies] 依存タスク配列
+  * @param {TaskArtifactInput[]} [options.artifacts] アーティファクト入力配列
+  * @param {TaskCompletionConditionInput[]} [options.completionConditions] 完了条件入力配列
+  * @param {number} [options.ifVersion] 排他制御用のバージョン
    * @returns {Promise<Task>}
    */
-  async updateTask(taskId: string, updates: Partial<Task> & { ifVersion?: number; deliverables?: TaskArtifactInput[]; prerequisites?: TaskArtifactInput[]; completionConditions?: TaskCompletionConditionInput[] }): Promise<Task> {
+  async updateTask(
+    taskId: string,
+    title?: string,
+    description: string = '',
+    parentId: string | null = null,
+    assignee: string | null = null,
+    estimate: string | null = null,
+    options?: {
+      dependencies?: TaskDependenciesInput[];
+      artifacts?: TaskArtifactInput[];
+      completionConditions?: TaskCompletionConditionInput[];
+      ifVersion?: number;
+    }
+  ): Promise<Task> {
     const db = await this.db();
     const current = await this.getTask(taskId);
     if (!current) throw new Error(`Task not found: ${taskId}`);
-    if (updates.ifVersion !== undefined && current.version !== updates.ifVersion) throw new Error('Task has been modified by another user');
+
+    // バージョンチェック(ifVersion)は options に含める
+    if (options?.ifVersion !== undefined && current.version !== options.ifVersion) throw new Error('Task has been modified by another user');
+
     const now = new Date().toISOString();
     const newVersion = current.version + 1;
 
@@ -646,19 +789,38 @@ export class TaskRepository {
              description = ?,
              assignee = ?,
              estimate = ?,
+             parent_id = ?,
              updated_at = ?,
              version = ?
          WHERE id = ?`,
-        updates.title ?? current.title,
-        updates.description ?? current.description ?? null,
-        updates.assignee ?? current.assignee ?? null,
-        updates.estimate ?? current.estimate ?? null,
+        title ?? (current as any).title,
+        (description ?? (current as any).description) ?? null,
+        assignee ?? (current as any).assignee ?? null,
+        estimate ?? (current as any).estimate ?? null,
+        parentId ?? (current as any).parentId ?? (current as any).parent_id ?? null,
         now,
         newVersion,
         taskId
       );
 
-      await this.applySyncs(taskId, updates, now);
+      // createTask の options 形式に合わせて受け取り、内部の同期処理に渡す形に変換する
+      // 型の違いを回避するため any を使って同期用オブジェクトを組み立てる
+      const syncUpdates: any = {
+        deliverables: options?.artifacts ?? [],
+        prerequisites: [],
+        completionConditions: options?.completionConditions ?? []
+      };
+
+      await this.applySyncs(taskId, syncUpdates, now);
+
+      // 依存タスク (task-level dependencies) が渡された場合は既存の依存を削除して再登録する
+      if (options?.dependencies && Array.isArray(options.dependencies)) {
+        // 既存依存を DependenciesRepository を介して削除してから再作成する（サブリポジトリに委譲）
+        const collected = await this.dependenciesRepo.collectDependenciesForTasks([taskId]);
+        const bucket = collected.get(taskId) ?? { dependents: [], dependees: [] };
+        // dependents はこのタスクが dependency_task_id の行
+        await this.syncTaskDependencies(taskId, bucket.dependents, options.dependencies);
+      }
 
       await db.run('COMMIT');
     } catch (error) {
