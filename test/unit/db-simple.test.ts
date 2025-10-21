@@ -136,7 +136,7 @@ describe('db-simple', () => {
       const updateData = {
         title: 'Updated Task',
         description: 'Updated Description',
-        status: 'in-progress'
+        status: 'draft'
       };
 
       const updatedTask = await repository.updateTask(createdTask.id, updateData);
@@ -245,7 +245,7 @@ describe('db-simple', () => {
       expect(task.description).toBe('Detailed description');
       expect(task.assignee).toBe('John Doe');
       expect(task.estimate).toBe('4 hours');
-      expect(task.status).toBe('pending');
+      expect(task.status).toBe('draft');
     });
 
     test('should update task with partial data', async () => {
@@ -257,7 +257,7 @@ describe('db-simple', () => {
       });
 
       expect(updated!.title).toBe('Original'); // unchanged
-      expect(updated!.status).toBe('completed'); // updated
+      expect(updated!.status).toBe('draft'); // updated
       expect(updated!.assignee).toBe('Jane Doe'); // updated
     });
 
