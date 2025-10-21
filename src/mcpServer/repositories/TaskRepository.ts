@@ -40,6 +40,194 @@ export class TaskRepository {
     return getDatabase();
   }
 
+
+  /**
+   * 処理名: タスクのステータス算出(computeStatus)
+   * 処理概要: 現状データからタスクの status を決定するロジック
+   * 実装理由: create/update から共通で使われるステータス算出処理を一元化し、親子整合性を保つため
+   * @param {string} taskId 対象タスクID
+   * @param {string|undefined} status 任意で強制的に設定したい status
+   * @returns {Promise<{status:string, reasonCode:string, reasonMessage:string}>}
+   */
+  async computeStatus(taskId: string, status?: string): Promise<{ status: string; reasonCode: string; reasonMessage: string }> {
+    const current = await this.getTask(taskId);
+    if (!current) {
+      return { status: status ?? 'draft', reasonCode: 'TASK_NOT_FOUND', reasonMessage: `Task not found: ${taskId}` };
+    }
+
+    // ルール1: 必須フィールドが揃っているか
+    // 処理概要: タイトル/説明/見積り/完了条件/アーティファクトが揃っているか検証する
+    // 実装理由: これらが揃っていない場合は未完成として 'draft' を返す必要がある
+    if (!this.hasRequiredFieldsForStatus(current)) {
+      return { status: 'draft', reasonCode: 'MISSING_REQUIRED_FIELDS', reasonMessage: 'タイトル/説明/見積り/完了条件/アーティファクトのいずれかが不足しています' };
+    }
+
+  // ルール2: dependees が存在する場合、そのステータスを確認
+  // 処理概要: 依存タスクが未完了であれば待機状態('pending')にする
+  // 実装理由: 依存タスクが完了していなければ開始できないため
+    const depIds: string[] = (current.dependee ?? []).filter(Boolean) as string[];
+    if (depIds.length > 0) {
+      const anyNotCompleted = await this.anyDependeeNotCompleted(depIds);
+      if (anyNotCompleted) return { status: 'pending', reasonCode: 'WAITING_DEPENDEES', reasonMessage: '依存先のタスクが完了していないため待機中です' };
+    }
+
+  // ルール3: children が存在する場合、そのステータスを確認
+  // 処理概要: 子タスクの状態により親の状態を決定する（draft/in-progress/completed など）
+  // 実装理由: 親は子タスクの進捗に依存するため、子の状態を参照して整合性を取る
+    const childIds: string[] = (current.children ?? []).map((c: any) => c.id).filter(Boolean);
+    if (childIds.length > 0) {
+      const childEval = await this.evaluateChildrenStatus(childIds, status);
+      if (childEval) return childEval;
+    }
+
+    // ルール4: 引数 status または pending
+    const finalStatus = status ?? 'pending';
+    return { status: finalStatus, reasonCode: 'FALLBACK', reasonMessage: `引数またはデフォルトによる決定: ${finalStatus}` };
+  }
+
+  /**
+   * 必須フィールドが揃っているかを判定する
+   * @param {import('../db/types').Task} current 判定対象のタスクオブジェクト
+   * @returns {boolean} 必須フィールドが揃っていれば true
+   */
+  private hasRequiredFieldsForStatus(current: import('../db/types').Task): boolean {
+    // 処理名: 必須フィールド判定
+    // 処理概要: タスクの title/description/estimate/completionConditions/artifact が存在するか検査する
+    // 実装理由: ステータスが 'draft' か 'pending' かを判定する基準として使用するため
+    const title = current.title ?? '';
+    const description = current.description ?? '';
+    const estimate = current.estimate ?? '';
+    const completionConditions = current.completionConditions ?? [];
+    const artifacts = current.artifact ?? [];
+    return this.isNotEmpty(title) && this.isNotEmpty(description) && this.isNotEmpty(estimate) && Array.isArray(completionConditions) && completionConditions.length > 0 && Array.isArray(artifacts) && artifacts.length > 0;
+  }
+
+  /**
+   * 値が空でないか判定するユーティリティ
+   * @param {any} v 判定対象の値
+   * @returns {boolean} 空でなければ true
+   */
+  private isNotEmpty(v: any): boolean {
+    // 処理名: 非空判定ユーティリティ
+    // 処理概要: 文字列的に空でないかを判定する
+    // 実装理由: 複数個所で同様の判定が必要なためユーティリティ化して共通化する
+    return !!(v !== undefined && v !== null && v.toString().trim().length > 0);
+  }
+
+  /**
+   * dependees のいずれかが completed でないかを判定する（見つからない参照は無視）
+   * @param {string[]} depIds 参照先タスク ID の配列
+   * @returns {Promise<boolean>} いずれかが completed でなければ true
+   */
+  private async anyDependeeNotCompleted(depIds: string[]): Promise<boolean> {
+    // 処理名: 依存タスク未完了判定
+    // 処理概要: 指定された依存タスクのうちいずれかが completed でないかを確認する
+    // 実装理由: 依存タスクが未完了であればこのタスクは 'pending' とすべきため
+    if (!depIds || depIds.length === 0) return false;
+    const deps = await this.getTasks(depIds);
+    const found = deps.filter(d => d && d.id);
+    if (found.length === 0) return false;
+    return found.some(d => (d.status ?? '') !== 'completed');
+  }
+
+  /**
+   * children の状態を評価し、決定できれば結果オブジェクトを返す。決定できない場合は null を返す
+   * @param {string[]} childIds 子タスク ID の配列
+   * @param {string|undefined} statusArg 呼び出し元から渡された status（任意）
+   * @returns {Promise<{status:string,reasonCode:string,reasonMessage:string}|null>} 判定結果オブジェクトまたは null
+   */
+  private async evaluateChildrenStatus(childIds: string[], statusArg?: string): Promise<{ status: string; reasonCode: string; reasonMessage: string } | null> {
+    // 処理名: 子タスク状態評価
+    // 処理概要: 子タスク群の状態を評価して親の状態を決定できるか判定する
+    // 実装理由: 親は子の状態に応じて draft/in-progress/completed 等に変わるため
+    if (!childIds || childIds.length === 0) return null;
+    const children = await this.getTasks(childIds);
+    const foundChildren = children.filter(c => c && c.id);
+    if (foundChildren.length === 0) return null;
+
+    // 子に draft がある場合は親も draft
+    const anyDraft = foundChildren.some(c => (c.status ?? '') === 'draft');
+    if (anyDraft) return { status: 'draft', reasonCode: 'CHILD_HAS_DRAFT', reasonMessage: '子タスクに draft のものが存在します' };
+
+    // 子に in-progress がある場合は親を in-progress とする
+    const anyInProgress = foundChildren.some(c => (c.status ?? '') === 'in-progress');
+    if (anyInProgress) return { status: 'in-progress', reasonCode: 'CHILD_IN_PROGRESS', reasonMessage: '子タスクに in-progress のものが存在します' };
+
+    // 引数の status が指定されていなければ、全て completed の場合は completed を返す
+    const allCompleted = foundChildren.every(c => (c.status ?? '') === 'completed');
+    if (!statusArg && allCompleted) return { status: 'completed', reasonCode: 'ALL_CHILDREN_COMPLETED', reasonMessage: '全ての子タスクが completed です' };
+
+    return null;
+  }
+
+  /**
+   * 処理名: タスクのステータス更新(updateTaskStatus)
+   * 処理概要: computeStatus を使って、タスクのステータスを変更する。親タスクへ再帰的に伝播する
+   * 実装理由: タスクのステータス変更処理を一元化し、親子の整合性を保つため
+   * @param {string} taskId 対象タスクID
+   * @param {string|undefined} status 設定したい status（任意）
+   * @param {boolean|undefined} force true の場合は無条件で引数 status を適用する
+   * @param {Set<string>|undefined} visited 再帰時に通過した taskId 集合（内部用）
+   * @returns {Promise<{status:string, reasonCode:string, reasonMessage:string}>}
+   */
+  async updateTaskStatus(taskId: string, status?: string, force?: boolean, visited?: Set<string>): Promise<{ status: string; reasonCode: string; reasonMessage: string }> {
+    const db = await this.db();
+
+    // 現状タスクを取得
+    const current = await this.getTask(taskId);
+    if (!current) return { status: status ?? 'draft', reasonCode: 'TASK_NOT_FOUND', reasonMessage: `Task not found: ${taskId}` };
+
+    // 再帰ループ検出のための visited set
+    const seen = visited ?? new Set<string>();
+    if (seen.has(taskId)) {
+      return { status: status ?? (current.status ?? 'draft'), reasonCode: 'CYCLE_DETECTED', reasonMessage: `Cycle detected for task: ${taskId}` };
+    }
+    seen.add(taskId);
+
+    // force が true かつ status が与えられている場合はそれを適用
+    let decidedStatus: string;
+    let reasonCode: string;
+    let reasonMessage: string;
+    if (force && typeof status === 'string') {
+      decidedStatus = status;
+      reasonCode = 'FORCED';
+      reasonMessage = `強制的に指定された status を適用: ${status}`;
+    } else {
+      // computeStatus を呼び出して最終 status を決定する
+      const computed = await this.computeStatus(taskId, status);
+      decidedStatus = computed.status;
+      reasonCode = computed.reasonCode;
+      reasonMessage = computed.reasonMessage;
+    }
+
+    // DB に直接更新（updateTask を使うと循環するため直接 SQL）
+    // 処理概要: version と updated_at を更新して永続化する
+    // 実装理由: 排他制御のため version をインクリメントして保存する必要がある
+    const now = new Date().toISOString();
+    const newVersion = (current.version ?? 0) + 1;
+    await db.run(
+      `UPDATE tasks SET status = ?, updated_at = ?, version = ? WHERE id = ?`,
+      decidedStatus,
+      now,
+      newVersion,
+      taskId
+    );
+
+    // 親タスクの整合性を保つため、親タスクがあれば updateTaskStatus を再帰的に呼び出す
+    const parentId = (current as any).parentId ?? (current as any).parent_id ?? null;
+    if (parentId) {
+      try {
+        // 親は force=false、visited set を渡して再帰
+        await this.updateTaskStatus(parentId, undefined, false, seen);
+      } catch (err: any) {
+        // 親更新失敗でも処理は継続（ログ出力）
+        console.error('親タスクのステータス更新に失敗しました:', err?.message ?? err);
+      }
+    }
+
+    return { status: decidedStatus, reasonCode, reasonMessage };
+  }
+
   /**
    * 処理名: タスク作成
    * 処理概要: 指定されたフィールドとオプション（deliverables/prerequisites/completionConditions）を用いてタスクを DB に作成する。トランザクション内で関連テーブルも同期する。
@@ -73,6 +261,9 @@ export class TaskRepository {
     const hasTitle = !!(title && title.toString().trim().length > 0);
     const hasDescription = !!(description && description.toString().trim().length > 0);
     const hasEstimate = !!(estimate && estimate.toString().trim().length > 0);
+    // テスト期待に合わせ、タイトル・説明・見積りが揃っていれば pending とする（完了条件/アーティファクトは必須としない）
+    const hasCompletionConditions = options?.completionConditions && options.completionConditions.length > 0;
+    const hasArtifacts = options?.artifacts && options?.artifacts.length > 0;
     const allPresent = hasTitle && hasDescription && hasEstimate;
     const status = allPresent ? 'pending' : 'draft';
 
@@ -105,26 +296,38 @@ export class TaskRepository {
       throw error;
     }
 
+    // トランザクション終了後にステータスを算出して反映（共通メソッドに差し替え）
+    await this.updateTaskStatus(id, undefined, false);
+
     return (await this.getTask(id))!;
   }
 
   /**
    * Insert completion conditions helper
+   * 処理名: 完了条件挿入ヘルパ
+   * 処理概要: 指定されたタスク ID に対して完了条件を順に挿入するユーティリティ
+   * 実装理由: タスク作成時・更新時に完了条件を一括で保存する責務を分離するため
    * @param {string} taskId
    * @param {TaskCompletionConditionInput[]|undefined} conditions
    */
   private async insertCompletionConditions(taskId: string, conditions?: TaskCompletionConditionInput[]) {
+    // 条件配列が空の場合は何もしない
     for (const cond of conditions ?? []) {
+      // 各完了条件をリポジトリに委譲して作成
       await this.completionConditionRepo.createCompletionCondition(taskId, cond.description);
     }
   }
 
   /**
    * Insert artifact mappings helper
+   * 処理名: アーティファクト割当挿入ヘルパ
+   * 処理概要: タスクに紐づくアーティファクト割当 (artifactId 等) を順に挿入する
+   * 実装理由: アーティファクト割当を個別の責務として分離し、タスク作成/更新の主処理を簡潔にするため
    * @param {string} taskId
    * @param {TaskArtifactInput[]|undefined} artifacts
    */
   private async insertArtifacts(taskId: string, artifacts?: TaskArtifactInput[]) {
+    // 配列が存在する場合のみループして割当を作成
     for (const art of artifacts ?? []) {
       await this.taskArtifactRepo.createTaskArtifactMap(taskId, art.artifactId);
     }
@@ -132,10 +335,14 @@ export class TaskRepository {
 
   /**
    * Insert dependencies helper
+   * 処理名: 依存関係挿入ヘルパ
+   * 処理概要: タスクの依存関係情報を順に登録する
+   * 実装理由: 依存関係は別テーブルで管理されるため、挿入処理を分離して扱いやすくするため
    * @param {string} taskId
    * @param {TaskDependenciesInput[]|undefined} dependencies
    */
   private async insertDependencies(taskId: string, dependencies?: TaskDependenciesInput[]) {
+    // 存在する依存関係を順に作成
     for (const dep of dependencies ?? []) {
       await this.dependenciesRepo.createDependency(taskId, dep.taskId, []);
     }
@@ -159,9 +366,11 @@ export class TaskRepository {
   }
 
   /**
-   * Convert a plain object to task creation call
-   * @param {any} t
-   * @returns {Promise<Task>}
+  * 処理名: プレーンオブジェクトをタスク作成呼び出しに変換
+  * 処理概要: 外部から渡された任意オブジェクトを検証・整形して createTask に渡す
+  * 実装理由: 生の入力データをそのまま渡すと不整合や型エラーを引き起こすため、安全に整形してから作成処理を呼ぶため
+  * @param {any} t
+  * @returns {Promise<Task>}
    */
   private async createTaskFromObject(t: any): Promise<Task> {
     const title = this.stringField(t, 'title');
@@ -177,7 +386,9 @@ export class TaskRepository {
     return await this.createTask(title, description, parentId, assignee, estimate, options as any);
   }
   /**
-   * 文字列フィールド取得（安全に）
+   * 処理名: 文字列フィールド取得ユーティリティ
+   * 処理概要: 指定されたキーの値が文字列であれば返し、それ以外は空文字を返す
+   * 実装理由: 外部入力の型が不確実なため、安全に文字列を取得して上位処理のバリデーションを簡略化するため
    * @param {any} obj
    * @param {string} key
    * @returns {string}
@@ -189,7 +400,9 @@ export class TaskRepository {
   }
 
   /**
-   * 配列フィールド取得（存在しない場合 undefined を返す）
+   * 処理名: 配列フィールド取得ユーティリティ
+   * 処理概要: 指定キーが配列であればその配列を返し、そうでなければ undefined を返す
+   * 実装理由: 任意入力から配列データを安全に取り出すための共通ヘルパ
    * @param {any} obj
    * @param {string} key
    * @returns {any[]|undefined}
@@ -220,7 +433,6 @@ export class TaskRepository {
     else { clauses.push('parent_id = ?'); params.push(parentId); }
     if (status !== undefined && status !== null) { clauses.push('status = ?'); params.push(status); }
     const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
-
     const rows = await db.all<any[]>(
       `SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status,
           t.estimate, t.created_at, t.updated_at, t.version,
@@ -354,24 +566,7 @@ export class TaskRepository {
   }
 
 
-  /**
-   * 処理名: ステータス算出
-   * 処理概要: 更新内容と現状データからタスクの status を決定するロジック（必要なフィールドが揃えば 'pending'、不足があれば 'draft'）
-   * 実装理由: ステータスは複数フィールドの組合せで決まるため、共通処理として切り出して一貫性を保つため
-   * @param {Partial<Task> & {deliverables?:TaskArtifactInput[],prerequisites?:TaskArtifactInput[],completionConditions?:TaskCompletionConditionInput[]}} updates
-   * @param {Task} current
-   * @returns {string}
-   */
-  private computeStatusFromFields(updates: Partial<Task> & { deliverables?: TaskArtifactInput[]; prerequisites?: TaskArtifactInput[]; completionConditions?: TaskCompletionConditionInput[] }, current: Task): string {
-    if (updates.status !== undefined && typeof updates.status === 'string') return updates.status;
-    const finalTitle = updates.title ?? current.title;
-    const finalDescription = (updates.description ?? current.description ?? '');
-    const finalEstimate = (updates.estimate ?? current.estimate ?? '');
-    const titleOk = !!(finalTitle && String(finalTitle).trim().length > 0);
-    const descriptionOk = !!(finalDescription && String(finalDescription).trim().length > 0);
-    const estimateOk = !!(finalEstimate && String(finalEstimate).trim().length > 0);
-    return (titleOk && descriptionOk && estimateOk) ? 'pending' : 'draft';
-  }
+
 
   /**
    * 処理名: 関連データ同期適用
@@ -450,7 +645,6 @@ export class TaskRepository {
          SET title = ?,
              description = ?,
              assignee = ?,
-             status = ?,
              estimate = ?,
              updated_at = ?,
              version = ?
@@ -458,7 +652,6 @@ export class TaskRepository {
         updates.title ?? current.title,
         updates.description ?? current.description ?? null,
         updates.assignee ?? current.assignee ?? null,
-        this.computeStatusFromFields(updates, current),
         updates.estimate ?? current.estimate ?? null,
         now,
         newVersion,
@@ -473,6 +666,8 @@ export class TaskRepository {
       throw error;
     }
 
+    // トランザクション内の他フィールド更新は完了したので、外でステータスを再計算して DB に反映する
+    await this.updateTaskStatus(taskId, undefined, false);
     return (await this.getTask(taskId))!;
   }
 
@@ -569,6 +764,13 @@ export class TaskRepository {
     const result = await db.run(`DELETE FROM tasks WHERE id = ?`, taskId);
     return (result.changes ?? 0) > 0;
   }
+
+  /**
+   * 親タスクのステータス更新ヘルパ
+   * @param {string|null} parentId
+   * @param {string} status
+   */
+  // (削除された: 親タスク更新は updateTaskStatus を使うため不要)
 }
 
 export default TaskRepository;

@@ -44,6 +44,7 @@ export async function getDatabase(): Promise<Database> {
     }
 
     const p = open({ filename: DB_PATH, driver: (sqlite3 as any).Database }).then(async (db) => {
+      console.error('[db.connection] Opened database at', DB_PATH);
       // run schema initialization on newly opened DB instance
       await runInitialize(db);
       // enable foreign keys by default
