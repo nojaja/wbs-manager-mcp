@@ -163,7 +163,7 @@ class StdioMCPServer {
                         serverInfo: {
                             name: 'wbs-mcp-server',
                             title: 'wbs作成ツールVSCode拡張用MCPサーバ',
-                            version: '0.1.0.7'
+                            version: '0.1.0.8'
                         }
                     }
                 };

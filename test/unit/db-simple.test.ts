@@ -34,7 +34,29 @@ describe('db-simple', () => {
       importTasks: (...args: any[]) => (taskRepo.importTasks as any).apply(taskRepo, args),
       listTasks: (...args: any[]) => (taskRepo.listTasks as any).apply(taskRepo, args),
       getTask: (...args: any[]) => (taskRepo.getTask as any).apply(taskRepo, args),
-      updateTask: (...args: any[]) => (taskRepo.updateTask as any).apply(taskRepo, args),
+      updateTask: (...args: any[]) => {
+        // サポート: 旧来の (id, updatesObject) と新シグネチャ (id, title?, description?, parentId?, assignee?, estimate?, options?) の両方を受け付ける
+        if (args.length === 2 && typeof args[1] === 'object' && !Array.isArray(args[1])) {
+          const id = args[0];
+          const upd = args[1] as any;
+          // マッピングを新シグネチャに変換して呼び出す
+          return (taskRepo.updateTask as any).apply(taskRepo, [
+            id,
+            upd.title,
+            upd.description,
+            upd.parentId ?? upd.parent_id ?? null,
+            upd.assignee ?? null,
+            upd.estimate ?? null,
+            {
+              dependencies: upd.dependency ?? upd.dependencies ?? undefined,
+              artifacts: upd.deliverables ?? upd.artifacts ?? undefined,
+              completionConditions: upd.completionConditions ?? undefined,
+              ifVersion: upd.ifVersion ?? upd.ifversion ?? undefined
+            }
+          ]);
+        }
+        return (taskRepo.updateTask as any).apply(taskRepo, args);
+      },
       moveTask: (...args: any[]) => (taskRepo.moveTask as any).apply(taskRepo, args),
       deleteTask: (...args: any[]) => (taskRepo.deleteTask as any).apply(taskRepo, args),
       listArtifacts: (...args: any[]) => (artifactRepo.listArtifacts as any).apply(artifactRepo, args),

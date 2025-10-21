@@ -120,11 +120,15 @@ export default class WbsAgentGetNextTaskTool extends Tool {
 
   if (okToStart) {
         // 選定されたタスクを in-progress に遷移
-        const current = await this.repo.getTask(taskId);
-        if (!current) continue; // defensive
-        const updated = await this.repo.updateTask(taskId, { status: 'in-progress', ifVersion: current.version });
-        const llmHints = { nextActions: [], notes: ['Selected task transitioned to in-progress'] };
-        return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }], llmHints };
+  const current = await this.repo.getTask(taskId);
+  if (!current) continue; // defensive
+  // 処理概要: タスクを in-progress に遷移させる
+  // 実装理由: 以前は updateTask に status を渡していたが、updateTask のシグネチャ変更に伴い
+  //           ステータス更新は専用メソッド updateTaskStatus を使用する
+  await this.repo.updateTaskStatus(taskId, 'in-progress', true);
+  const updated = await this.repo.getTask(taskId);
+  const llmHints = { nextActions: [], notes: ['Selected task transitioned to in-progress'] };
+  return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }], llmHints };
         }
     }
 

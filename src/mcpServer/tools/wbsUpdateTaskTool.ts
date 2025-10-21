@@ -100,7 +100,24 @@ export default class WbsUpdateTaskTool extends Tool {
 
             // 更新データを組み立てて DB を更新する
             const updateData = this.buildUpdateData(args, currentTask);
-            const updatedTask = await repo.updateTask(args.taskId, updateData);
+                // 新しい updateTask シグネチャ: updateTask(taskId, title?, description?, parentId?, assignee?, estimate?, options?)
+                const options: any = {
+                    dependencies: args.dependency ?? undefined,
+                    artifacts: updateData.deliverables ?? undefined,
+                    completionConditions: updateData.completionConditions ?? undefined,
+                    ifVersion: args.ifVersion
+                };
+                const parentIdVal = args.parentId !== undefined ? args.parentId : (currentTask.parent_id ?? null);
+                // cast to any because TaskRepository.updateTask has a specific signature
+                const updatedTask = await (repo as any).updateTask(
+                    args.taskId,
+                    updateData.title,
+                    updateData.description,
+                    parentIdVal,
+                    updateData.assignee ?? null,
+                    updateData.estimate ?? null,
+                    options
+                );
             return { content: [{ type: 'text', text: `✅ Task updated successfully!\n\n${JSON.stringify(updatedTask, null, 2)}` }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `❌ Failed to update task: ${error instanceof Error ? error.message : String(error)}` }] };
