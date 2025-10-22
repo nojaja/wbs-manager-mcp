@@ -1,10 +1,10 @@
 import { jest } from '@jest/globals';
+import { CommandRegistry } from '../../src/extension/CommandRegistry';
+import { Logger } from '../../src/extension/Logger';
 
-// dynamic import to load module under test
 describe('CommandRegistry', () => {
   it('registerAll returns array of disposables and uses injected showTaskDetail', async () => {
     const mockContext: any = { subscriptions: [], extensionUri: {} };
-    const mockOutput: any = { appendLine: jest.fn() };
 
     // minimal mocks for dependencies passed to CommandRegistry
     const serverService = { startLocalServer: jest.fn(), stopServerProcess: jest.fn() };
@@ -22,20 +22,13 @@ describe('CommandRegistry', () => {
     let showTaskDetailCalled = false;
     const showTaskDetail = async (id: string) => { showTaskDetailCalled = true; };
 
-    const { CommandRegistry } = await import('../../src/extension/CommandRegistry');
+  const logger = { log: jest.fn(), show: jest.fn() };
+  jest.spyOn(Logger, 'getInstance').mockReturnValue(logger as any);
 
     const registry = new CommandRegistry({
       context: mockContext,
-      outputChannel: mockOutput,
-      serverService,
-      initializeClient,
-      taskClient,
-      artifactClient,
-      wbsProvider,
-      artifactProvider,
       treeView,
-      artifactTreeView,
-      showTaskDetail
+      artifactTreeView
     });
 
     let disposables: any;

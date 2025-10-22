@@ -30,9 +30,9 @@ describe('TaskDetailPanel', () => {
   });
 
   test('getHtmlForWebview contains task data payload and script', async () => {
-  const deps = createDeps();
-  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(deps.taskClient as any);
-  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(deps.artifactClient as any);
+  const { taskClient: taskClientMock, artifactClient: artifactClientMock } = createDeps();
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
   const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     const html = (panel as any).getHtmlForWebview({ id: 't1', title: 'Hello', status: 'pending', version: 1 });
     // Title and container exist
@@ -48,9 +48,9 @@ describe('TaskDetailPanel', () => {
   });
 
   test('buildUpdateObject forwards new collections and version', () => {
-  const deps = createDeps();
-  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(deps.taskClient as any);
-  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(deps.artifactClient as any);
+  const { taskClient: taskClientMock, artifactClient: artifactClientMock } = createDeps();
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
   const panel: any = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2');
     panel._task = { version: 42 };
     const updates = panel.buildUpdateObject({

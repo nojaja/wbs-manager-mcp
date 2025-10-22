@@ -78,7 +78,7 @@ describe('TaskDetailPanel branches', () => {
 
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+    expect(taskClientMock.updateTask).toHaveBeenCalled();
     expect(infoSpy).toHaveBeenCalledWith('Task updated successfully');
     expect(loadSpy).toHaveBeenCalled();
     expect(execSpy).toHaveBeenCalledWith('wbsTree.refresh');
@@ -96,7 +96,7 @@ describe('TaskDetailPanel branches', () => {
 
     await (panelReload as any).saveTask({ title: 'New' });
 
-  expect(depsReload.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMockReload.updateTask).toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
     expect(loadSpy).toHaveBeenCalled();
   });
@@ -113,7 +113,7 @@ describe('TaskDetailPanel branches', () => {
 
     await (panelCancel as any).saveTask({ title: 'New' });
 
-  expect(depsCancel.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMockCancel.updateTask).toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
     expect(loadSpy).not.toHaveBeenCalled();
   });

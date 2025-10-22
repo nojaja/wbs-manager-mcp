@@ -197,8 +197,12 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
         getArtifact: jest.fn().mockResolvedValue(mockArtifact),
         updateArtifact: jest.fn().mockResolvedValue({ success: false, error: 'Validation failed' })
       };
+      // ArtifactDetailPanel's constructor reads MCPArtifactClient.getInstance(),
+      // so ensure the singleton returns our fake client.
+      const { MCPArtifactClient } = require('../../src/extension/repositories/mcp/artifactClient');
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       const saveData = { title: 'Updated Artifact' };
       await (panel as any).saveArtifact(saveData);

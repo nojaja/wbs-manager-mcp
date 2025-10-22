@@ -1,15 +1,19 @@
+import { AddChildTaskHandler } from '../../src/extension/commands/addChildTask';
+import { WBSTreeProvider } from '../../src/extension/views/explorer/wbsTree';
+import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
+
 describe('addChildTaskCommandHandler', () => {
   it('creates a child task and opens detail', async () => {
-    const wbsProvider: any = { createTask: async () => ({ taskId: 'c1' }) };
-    const treeView: any = { selection: [{ id: 'root' }] };
-    const opened: string[] = [];
-    const showDetail = async (id: string) => { opened.push(id); };
+    const fakeProvider: any = { createTask: jest.fn().mockResolvedValue({ taskId: 'c1' }) };
+    jest.spyOn(WBSTreeProvider as any, 'getInstance').mockReturnValue(fakeProvider);
+    const tdSpy = jest.spyOn(TaskDetailPanel as any, 'createOrShow').mockResolvedValue(undefined as any);
 
-    const mod = await import('../../src/extension/commands/addChildTask');
-  const { AddChildTaskHandler } = mod;
-  const handler = new AddChildTaskHandler();
-  const res = await handler.handle({ extensionUri: {} } as any, treeView);
+    const treeView: any = { selection: [{ id: 'root' }] };
+    const handler = new AddChildTaskHandler();
+    const res = await handler.handle({ extensionUri: {} } as any, treeView.selection[0], treeView);
+
+    expect(fakeProvider.createTask).toHaveBeenCalled();
     expect(res.taskId).toBe('c1');
-    expect(opened[0]).toBe('c1');
+    expect(tdSpy).toHaveBeenCalled();
   });
 });

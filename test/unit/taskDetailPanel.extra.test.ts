@@ -23,7 +23,7 @@ describe('TaskDetailPanel save flows', () => {
     // call private saveTask
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 
   test('saveTask conflict path triggers reload option', async () => {
@@ -35,7 +35,7 @@ describe('TaskDetailPanel save flows', () => {
     const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 
   test('saveTask failure shows error', async () => {
@@ -47,6 +47,6 @@ describe('TaskDetailPanel save flows', () => {
     const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 });

@@ -51,7 +51,7 @@ describe('TaskDetailPanel constructor and dispose', () => {
     messageHandlers[0](saveMsg);
 
     // updateTask should have been called via saveTask
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 
   test('dispose clears currentPanel and disposables', () => {

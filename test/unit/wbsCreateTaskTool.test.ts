@@ -1,18 +1,8 @@
 import { jest } from '@jest/globals';
 
-// Use dynamic import to allow jest.unstable_mockModule patterns if needed
-let WbsCreateTaskTool: any;
-let TaskRepository: any;
-let DependenciesRepository: any;
-
-beforeAll(async () => {
-  const taskMod: any = await import('../../src/mcpServer/repositories/TaskRepository');
-  TaskRepository = taskMod.TaskRepository;
-  const depMod: any = await import('../../src/mcpServer/repositories/DependenciesRepository');
-  DependenciesRepository = depMod.DependenciesRepository;
-  const mod: any = await import('../../src/mcpServer/tools/wbsCreateTaskTool');
-  WbsCreateTaskTool = mod.default;
-});
+const TaskRepository = require('../../src/mcpServer/repositories/TaskRepository').TaskRepository;
+const DependenciesRepository = require('../../src/mcpServer/repositories/DependenciesRepository').DependenciesRepository;
+const WbsCreateTaskTool = require('../../src/mcpServer/tools/wbsCreateTaskTool').default;
 
 describe('wbs.planMode.createTask tool', () => {
   beforeEach(() => {

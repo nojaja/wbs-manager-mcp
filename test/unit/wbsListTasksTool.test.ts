@@ -1,14 +1,7 @@
 import { jest } from '@jest/globals';
 
-let WbsListTasksTool: any;
-let TaskRepository: any;
-
-beforeAll(async () => {
-  const taskMod: any = await import('../../src/mcpServer/repositories/TaskRepository');
-  TaskRepository = taskMod.TaskRepository;
-  const mod: any = await import('../../src/mcpServer/tools/wbsListTasksTool');
-  WbsListTasksTool = mod.default;
-});
+const TaskRepository = require('../../src/mcpServer/repositories/TaskRepository').TaskRepository;
+const WbsListTasksTool = require('../../src/mcpServer/tools/wbsListTasksTool').default;
 
 describe('wbs.planMode.listTasks tool', () => {
   beforeEach(() => jest.clearAllMocks());

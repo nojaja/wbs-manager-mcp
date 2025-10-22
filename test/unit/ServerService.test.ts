@@ -33,18 +33,18 @@ describe('ServerService', () => {
       kill: jest.fn()
     };
 
+    // ensure fresh singleton so outputChannel is assigned from mocked Logger
+    (ServerService as any).instance = undefined;
     serverService = ServerService.getInstance();
   });
 
   describe('constructor', () => {
     it('should create ServerService with output channel', () => {
-      const outputChannel = { appendLine: jest.fn(), show: jest.fn() };
-  const service = ServerService.getInstance();
-  expect(service).toBeInstanceOf(ServerService);
+      const service = ServerService.getInstance();
+      expect(service).toBeInstanceOf(ServerService);
     });
 
     it('should create ServerService with minimal output channel', () => {
-      const outputChannel = { appendLine: jest.fn() };
   const service = ServerService.getInstance();
   expect(service).toBeInstanceOf(ServerService);
     });
@@ -179,6 +179,8 @@ describe('ServerService', () => {
     });
 
     it('should handle missing server process', () => {
+  // ensure a fresh instance with no serverProcess
+  (ServerService as any).instance = undefined;
   const service = ServerService.getInstance();
   service.setupServerProcessHandlers();
       

@@ -2,18 +2,24 @@ import { jest } from '@jest/globals';
 
 describe('startServerCommandHandler', () => {
   it('calls startLocalServer with given clients and context', async () => {
-    const server = { startLocalServer: jest.fn() };
     const ctx = { subscriptions: [] } as any;
-    const clients = [{}, {}];
 
-  const mod = await import('../../src/extension/commands/startServer');
-  const { StartServerHandler } = mod;
-  const handler = new StartServerHandler();
-  // ServerService is obtained internally; we only need to ensure our mocked server's method is called
-  const serverService = (await import('../../src/extension/server/ServerService')).ServerService.getInstance();
-  // Spy on startLocalServer and call handler
-  const spy = jest.spyOn(serverService, 'startLocalServer').mockResolvedValue(undefined as any);
-  await handler.handle(ctx as any);
-  expect(spy).toHaveBeenCalled();
+    const { StartServerHandler } = require('../../src/extension/commands/startServer');
+    const ServerService = require('../../src/extension/server/ServerService').ServerService;
+    const MCPInitializeClient = require('../../src/extension/repositories/mcp/initializeClient').MCPInitializeClient;
+    const MCPTaskClient = require('../../src/extension/repositories/mcp/taskClient').MCPTaskClient;
+    const MCPArtifactClient = require('../../src/extension/repositories/mcp/artifactClient').MCPArtifactClient;
+
+  // cast mock to any to avoid strict TypeScript issues in test environment
+  const fakeServer: any = { startLocalServer: (jest.fn() as any).mockResolvedValue(undefined) };
+    jest.spyOn(ServerService as any, 'getInstance').mockReturnValue(fakeServer);
+    // mock clients returned by getInstance
+    jest.spyOn(MCPInitializeClient as any, 'getInstance').mockReturnValue({} as any);
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue({} as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue({} as any);
+
+    const handler = new StartServerHandler();
+    await handler.handle(ctx as any);
+    expect(fakeServer.startLocalServer).toHaveBeenCalled();
   });
 });

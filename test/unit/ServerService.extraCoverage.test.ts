@@ -18,6 +18,8 @@ describe('ServerService extra coverage', () => {
     jest.clearAllMocks();
     loggerMock = { log: jest.fn(), show: jest.fn() };
     jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+    // reset singleton to ensure mocked Logger is used
+    (ServerService as any).instance = undefined;
     serverService = ServerService.getInstance();
 
     mockChildProcess = {

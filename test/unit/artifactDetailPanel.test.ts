@@ -1,4 +1,6 @@
+import { jest } from '@jest/globals';
 import { ArtifactDetailPanel } from '../../src/extension/views/panels/artifactDetailPanel';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 describe('ArtifactDetailPanel', () => {
   const fakePanel: any = {
@@ -9,6 +11,29 @@ describe('ArtifactDetailPanel', () => {
     dispose: jest.fn(),
     webviewOptions: {}
   };
+
+// shared fake MCP client for tests
+const sharedFakeMcp: any = {
+  // cast each jest.fn() to any to avoid strict TypeScript inference issues in tests
+  getArtifact: (jest.fn() as any).mockResolvedValue(null),
+  updateArtifact: (jest.fn() as any).mockResolvedValue({ success: true }),
+  listArtifacts: (jest.fn() as any).mockResolvedValue([])
+};
+
+beforeEach(() => {
+  jest.resetAllMocks();
+  // ensure MCPArtifactClient.getInstance is mocked in every test
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(sharedFakeMcp as any);
+  // mock vscode.createWebviewPanel globally for these tests
+  const vscode = require('vscode');
+  vscode.window.createWebviewPanel = jest.fn().mockReturnValue(fakePanel);
+  (ArtifactDetailPanel as any).currentPanel = undefined;
+});
+
+afterEach(() => {
+  (ArtifactDetailPanel as any).currentPanel = undefined;
+  jest.restoreAllMocks();
+});
 
   test('createOrShow creates new panel when no current panel exists', () => {
     const fakeMcp: any = { getProjectArtifact: jest.fn() };
@@ -22,6 +47,8 @@ describe('ArtifactDetailPanel', () => {
     const mockCreatePanel = jest.fn().mockReturnValue(fakePanel);
     vscode.window.createWebviewPanel = mockCreatePanel;
 
+  // ensure createOrShow does not call the real MCP client
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp as any);
   ArtifactDetailPanel.createOrShow(fakeUri, 'artifact-123');
 
     expect(mockCreatePanel).toHaveBeenCalledWith(
@@ -45,7 +72,9 @@ describe('ArtifactDetailPanel', () => {
     
     const updateArtifactSpy = jest.spyOn(existingPanel, 'updateArtifact' as any).mockImplementation(() => Promise.resolve());
 
-    ArtifactDetailPanel.createOrShow(fakeUri, 'new-artifact', fakeMcp);
+  // createOrShow now obtains client via MCPArtifactClient.getInstance internally
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp as any);
+  ArtifactDetailPanel.createOrShow(fakeUri, 'new-artifact');
 
     expect(fakePanel.reveal).toHaveBeenCalled();
     expect(updateArtifactSpy).toHaveBeenCalledWith('new-artifact');
