@@ -22,7 +22,7 @@ describe('ArtifactDetailPanel', () => {
     const mockCreatePanel = jest.fn().mockReturnValue(fakePanel);
     vscode.window.createWebviewPanel = mockCreatePanel;
 
-    ArtifactDetailPanel.createOrShow(fakeUri, 'artifact-123', fakeMcp);
+  ArtifactDetailPanel.createOrShow(fakeUri, 'artifact-123');
 
     expect(mockCreatePanel).toHaveBeenCalledWith(
       'artifactDetail',
@@ -40,7 +40,7 @@ describe('ArtifactDetailPanel', () => {
     const fakeUri: any = { path: '' };
     
     // Create a mock existing panel
-    const existingPanel = new (ArtifactDetailPanel as any)(fakePanel, fakeUri, 'old-artifact', fakeMcp);
+  const existingPanel = new (ArtifactDetailPanel as any)(fakePanel, fakeUri, 'old-artifact');
     (ArtifactDetailPanel as any).currentPanel = existingPanel;
     
     const updateArtifactSpy = jest.spyOn(existingPanel, 'updateArtifact' as any).mockImplementation(() => Promise.resolve());
@@ -53,7 +53,7 @@ describe('ArtifactDetailPanel', () => {
 
   test('escapeHtml escapes special characters', () => {
     const fakeMcp: any = { getProjectArtifact: jest.fn() };
-    const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
+  const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1');
     const unsafe = '& < > " \'';
     const escaped = (panel as any).escapeHtml(unsafe);
     expect(escaped).toContain('&amp;');
@@ -65,7 +65,7 @@ describe('ArtifactDetailPanel', () => {
 
   test('getHtmlForWebview generates minimal HTML with payload and script', () => {
     const fakeMcp: any = { getProjectArtifact: jest.fn() };
-    const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
+  const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1');
     
     const artifact = {
       id: 'artifact-123',
@@ -90,7 +90,7 @@ describe('ArtifactDetailPanel', () => {
 
   test('dispose cleans up resources', () => {
     const fakeMcp: any = { getProjectArtifact: jest.fn() };
-    const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
+  const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1');
     
     panel.dispose();
     

@@ -24,7 +24,7 @@ describe('WBSTreeProvider.containsTask (via private access)', () => {
     };
 
     const client = makeMockClient(chain);
-    const provider = new WBSTreeProvider(client);
+  const provider = new (await import('../../src/extension/views/explorer/wbsTree')).WBSTreeProvider(client);
 
     const dragged = { id: 'grand', parent_id: null } as any;
 
@@ -40,7 +40,7 @@ describe('WBSTreeProvider.containsTask (via private access)', () => {
     };
 
     const client = makeMockClient(chain);
-    const provider = new WBSTreeProvider(client);
+  const provider = new (await import('../../src/extension/views/explorer/wbsTree')).WBSTreeProvider(client);
 
     const dragged = { id: 'x', parent_id: null } as any;
     const result = await (provider as any)['containsTask'](dragged, 'a');

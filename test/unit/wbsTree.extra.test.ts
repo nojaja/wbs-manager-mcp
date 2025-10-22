@@ -8,7 +8,7 @@ describe('WBSTreeProvider extra tests', () => {
   let provider: WBSTreeProvider;
 
   beforeEach(() => {
-    provider = new WBSTreeProvider(fakeTaskClient);
+  provider = new (await import('../../src/extension/views/explorer/wbsTree')).WBSTreeProvider(fakeTaskClient);
     jest.clearAllMocks();
   });
 

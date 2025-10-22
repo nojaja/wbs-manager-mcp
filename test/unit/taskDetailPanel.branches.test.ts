@@ -1,5 +1,7 @@
 import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
 import * as vscode from 'vscode';
+import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 const createDeps = (overrides: {
   taskClient?: Partial<{ getTask: jest.Mock; updateTask: jest.Mock }>;
@@ -38,8 +40,11 @@ describe('TaskDetailPanel branches', () => {
   });
 
   test('updateTask calls loadTask with new id', async () => {
-    const deps = createDeps({ taskClient: { getTask: jest.fn().mockResolvedValue({ id: 't2', title: 'T2', version: 1 }) } });
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+  const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't2', title: 'T2', version: 1 }) };
+  const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
     const spyLoad = jest.spyOn(panel as any, 'loadTask');
     await (panel as any).updateTask('t2');
@@ -49,8 +54,11 @@ describe('TaskDetailPanel branches', () => {
   });
 
   test('loadTask shows error when getTask throws', async () => {
-    const deps = createDeps({ taskClient: { getTask: jest.fn().mockRejectedValue(new Error('fail')) } });
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+  const taskClientMock = { getTask: jest.fn().mockRejectedValue(new Error('fail')) };
+  const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
     const errSpy = jest.spyOn(vscode.window, 'showErrorMessage');
     await (panel as any).loadTask();
@@ -58,8 +66,11 @@ describe('TaskDetailPanel branches', () => {
   });
 
   test('saveTask success triggers load and executeCommand', async () => {
-    const deps = createDeps();
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+  const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: true }) };
+  const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
     const loadSpy = jest.spyOn(panel as any, 'loadTask').mockImplementation(async () => {});
     const execSpy = jest.spyOn(vscode.commands, 'executeCommand');
@@ -74,8 +85,11 @@ describe('TaskDetailPanel branches', () => {
   });
 
   test('saveTask conflict and Reload choice triggers loadTask', async () => {
-    const depsReload = createDeps({ taskClient: { updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true }) } });
-    const panelReload = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', depsReload);
+  const taskClientMockReload = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true }) };
+  const artifactClientMockReload = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMockReload as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMockReload as any);
+  const panelReload = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
   const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('Reload' as any);
   const loadSpy = jest.spyOn(panelReload as any, 'loadTask').mockImplementation(async () => {});
@@ -88,8 +102,11 @@ describe('TaskDetailPanel branches', () => {
   });
 
   test('saveTask conflict and Cancel choice does not reload', async () => {
-    const depsCancel = createDeps({ taskClient: { updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true }) } });
-    const panelCancel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', depsCancel);
+  const taskClientMockCancel = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true }) };
+  const artifactClientMockCancel = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMockCancel as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMockCancel as any);
+  const panelCancel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
   const warnSpy = jest.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('Cancel' as any);
   const loadSpy = jest.spyOn(panelCancel as any, 'loadTask').mockImplementation(async () => {});
@@ -102,8 +119,11 @@ describe('TaskDetailPanel branches', () => {
   });
 
   test('saveTask shows error when updateTask throws', async () => {
-    const depsError = createDeps({ taskClient: { updateTask: jest.fn().mockRejectedValue(new Error('boom')) } });
-    const panelError = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', depsError);
+  const taskClientMockError = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockRejectedValue(new Error('boom')) };
+  const artifactClientMockError = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMockError as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMockError as any);
+  const panelError = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
     const errSpy = jest.spyOn(vscode.window, 'showErrorMessage');
     await (panelError as any).saveTask({ title: 'New' });

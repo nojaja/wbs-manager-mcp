@@ -1,4 +1,5 @@
 import { ArtifactDetailPanel } from '../../src/extension/views/panels/artifactDetailPanel';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 describe('ArtifactDetailPanel additional coverage tests', () => {
   const fakePanel: any = {
@@ -48,8 +49,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
       const fakeMcp: any = {
         getArtifact: jest.fn().mockResolvedValue(mockArtifact)
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // loadArtifact is called in constructor, so we test it indirectly
       await new Promise(resolve => setTimeout(resolve, 0)); // Allow async operations to complete
@@ -62,8 +64,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
       const fakeMcp: any = {
         getArtifact: jest.fn().mockRejectedValue(new Error('Network error'))
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // Wait for async operations to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -75,12 +78,13 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
       const fakeMcp: any = {
         getArtifact: jest.fn().mockResolvedValue(null)
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
       // Reset panel state
       fakePanel.title = '';
       fakePanel.webview.html = '';
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // Wait for async operations to complete
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -102,8 +106,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
         getArtifact: jest.fn().mockResolvedValue(mockArtifact),
         updateArtifact: jest.fn().mockResolvedValue({ success: true })
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // Wait for initial load
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -139,10 +144,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
         getArtifact: jest.fn().mockResolvedValue(mockArtifact),
         updateArtifact: jest.fn().mockResolvedValue({ success: false, conflict: true })
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      mockShowWarningMessage.mockResolvedValue('Reload');
-
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // Wait for initial load
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -168,10 +172,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
         getArtifact: jest.fn().mockResolvedValue(mockArtifact),
         updateArtifact: jest.fn().mockResolvedValue({ success: false, conflict: true })
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      mockShowWarningMessage.mockResolvedValue('Cancel');
-
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // Reset call count from constructor
       fakeMcp.getArtifact.mockClear();
@@ -214,8 +217,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
         getArtifact: jest.fn().mockResolvedValue(mockArtifact),
         updateArtifact: jest.fn().mockRejectedValue(new Error('Network error'))
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       const saveData = { title: 'Updated Artifact' };
       await (panel as any).saveArtifact(saveData);
@@ -229,8 +233,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
       const fakeMcp: any = {
         getArtifact: jest.fn().mockResolvedValue(null)
       };
+      jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
 
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123', fakeMcp);
+      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'artifact-123');
       
       // Verify that message handler was registered
       expect(fakePanel.webview.onDidReceiveMessage).toHaveBeenCalled();
@@ -254,8 +259,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
 
   describe('HTML generation edge cases', () => {
   test('getHtmlForWebview embeds payload even with undefined values', () => {
-      const fakeMcp: any = { getArtifact: jest.fn() };
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
+  const fakeMcp: any = { getArtifact: jest.fn() };
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
+  const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1');
       
       const artifact = {
         id: 'artifact-123',
@@ -276,8 +282,9 @@ describe('ArtifactDetailPanel additional coverage tests', () => {
     });
 
     test('getHtmlForWebview generates minimal HTML structure with script', () => {
-      const fakeMcp: any = { getArtifact: jest.fn() };
-      const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1', fakeMcp);
+  const fakeMcp: any = { getArtifact: jest.fn() };
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(fakeMcp);
+  const panel = new (ArtifactDetailPanel as any)(fakePanel, { path: '' } as any, 'a1');
       
       const artifact = {
         id: 'artifact-123',

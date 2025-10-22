@@ -1,5 +1,3 @@
-// Refactored TaskDetailPanel (single export) — uses WebviewPanelBase implementation.
-// Keep this file focused on the derived class; common helpers are in WebviewPanelBase.
 import * as vscode from 'vscode';
 import type { ArtifactClientLike, TaskClientLike } from '../../services/clientContracts';
 import { buildUpdateTaskPayload, type UpdateTaskParams } from '../../tasks/taskPayload';

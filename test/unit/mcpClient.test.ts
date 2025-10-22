@@ -2,19 +2,21 @@ import { MCPBaseClient } from '../../src/extension/repositories/mcp/baseClient';
 import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
 import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 import { MCPInitializeClient } from '../../src/extension/repositories/mcp/initializeClient';
-
-const fakeOutput = { appendLine: jest.fn() } as any;
+import { Logger } from '../../src/extension/Logger';
 
 describe('MCP repository clients', () => {
   let taskClient: MCPTaskClient;
   let artifactClient: MCPArtifactClient;
   let initializeClient: MCPInitializeClient;
+  let loggerMock: { log: jest.Mock; show: jest.Mock };
 
   beforeEach(() => {
     jest.useFakeTimers();
-    taskClient = new MCPTaskClient(fakeOutput);
-    artifactClient = new MCPArtifactClient(fakeOutput);
-    initializeClient = new MCPInitializeClient(fakeOutput);
+    loggerMock = { log: jest.fn(), show: jest.fn() };
+    jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+    taskClient = new MCPTaskClient();
+    artifactClient = new MCPArtifactClient();
+    initializeClient = new MCPInitializeClient();
   });
 
   afterEach(() => {

@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import * as vscode from 'vscode';
 import { ArtifactTreeItem, ArtifactTreeProvider } from '../../src/extension/views/explorer/artifactTree';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 import type { Artifact } from '../../src/extension/repositories/mcp/types';
 import type { ArtifactClientLike } from '../../src/extension/services/clientContracts';
 
@@ -18,7 +19,9 @@ describe('ProjectArtifactTreeProvider', () => {
       updateArtifact: jest.fn(async () => ({ success: true })),
       deleteArtifact: jest.fn(async () => ({ success: true }))
     };
-    provider = new ArtifactTreeProvider(artifactClient);
+    // モッククライアントを返すように MCPArtifactClient.getInstance をスパイする
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClient as any);
+    provider = new ArtifactTreeProvider();
     jest.clearAllMocks();
   });
 

@@ -1,15 +1,18 @@
 import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
 import { MCPInitializeClient } from '../../src/extension/repositories/mcp/initializeClient';
+import { Logger } from '../../src/extension/Logger';
 
 describe('MCP client branch coverage', () => {
-  const fakeOutput = { appendLine: jest.fn() } as any;
   let taskClient: MCPTaskClient;
   let initClient: MCPInitializeClient;
+  let loggerMock: { log: jest.Mock; show: jest.Mock };
 
   beforeEach(() => {
     jest.useFakeTimers();
-    taskClient = new MCPTaskClient(fakeOutput);
-    initClient = new MCPInitializeClient(fakeOutput);
+    loggerMock = { log: jest.fn(), show: jest.fn() };
+    jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+    taskClient = new MCPTaskClient();
+    initClient = new MCPInitializeClient();
   });
 
   afterEach(() => {
@@ -23,9 +26,9 @@ describe('MCP client branch coverage', () => {
   });
 
   test('handleResponseFromServer logs parse errors and onServerExit rejects pending requests', () => {
-    taskClient.setWriter(() => {});
-    taskClient.handleResponseFromServer('not-json');
-    expect(fakeOutput.appendLine).toHaveBeenCalledWith(expect.stringContaining('Failed to parse response'));
+  taskClient.setWriter(() => {});
+  taskClient.handleResponseFromServer('not-json');
+  expect(Logger.getInstance().log).toHaveBeenCalledWith(expect.stringContaining('Failed to parse response'));
 
     const rejectMock = jest.fn();
     (taskClient as any).pendingRequests.set(42, { resolve: jest.fn(), reject: rejectMock });

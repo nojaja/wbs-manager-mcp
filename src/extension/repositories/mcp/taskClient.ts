@@ -17,17 +17,29 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.listTasks', args);
             const parsed = this.parseToolResponse(result);
-            if (Array.isArray(parsed.parsed)) {
-                return parsed.parsed;
-            }
-            if (parsed.error) {
-                this.outputChannel.log(`[MCP Client] Failed to parse task list: ${parsed.error}`);
-            }
-            return [];
+            return this.extractTaskList(parsed);
         } catch (error) {
             this.outputChannel.log(`[MCP Client] Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`);
             return [];
         }
+    }
+
+    /**
+     * Extract task list array from parsed response, logging on error.
+     * @param parsed normalized parse result from parseToolResponse
+     * @param parsed.parsed the parsed payload (may be array)
+     * @param parsed.error error string if present
+     * @param parsed.rawText raw text fallback
+     * @returns an array of tasks when parse succeeded, otherwise empty array
+     */
+    private extractTaskList(parsed: { parsed?: any; error?: string; rawText?: string }): any[] {
+        if (Array.isArray(parsed.parsed)) {
+            return parsed.parsed;
+        }
+        if (parsed.error) {
+            this.outputChannel.log(`[MCP Client] Failed to parse task list: ${parsed.error}`);
+        }
+        return [];
     }
 
     /**

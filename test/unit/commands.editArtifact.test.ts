@@ -11,8 +11,10 @@ describe('editArtifactCommandHandler', () => {
     const orig = modPanel.ArtifactDetailPanel;
     modPanel.ArtifactDetailPanel = { createOrShow: jest.fn() } as any;
 
-    const mod = await import('../../src/extension/commands/editArtifact');
-    await mod.editArtifactCommandHandler(artifactTreeView, artifactProvider, context, artifactClient);
+  const mod = await import('../../src/extension/commands/editArtifact');
+  const { EditArtifactHandler } = mod;
+  const handler = new EditArtifactHandler();
+  await handler.handle(context, artifactTreeView.selection[0]);
 
     expect((modPanel.ArtifactDetailPanel as any).createOrShow).toHaveBeenCalledWith(context.extensionUri, 'a1', { artifactClient });
 

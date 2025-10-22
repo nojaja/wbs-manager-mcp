@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import type { ArtifactClientLike } from '../../services/clientContracts';
 import { WebviewPanelBase } from './WebviewPanelBase';
 import type { Artifact as ArtifactType } from '../../types';
-
 import { MCPArtifactClient } from '../../repositories/mcp/artifactClient';
 
 // Removed local Artifact interface in favor of centralized import

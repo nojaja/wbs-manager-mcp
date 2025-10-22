@@ -6,7 +6,9 @@ describe('createArtifactCommandHandler', () => {
     let called = false;
     const artifactProvider: any = { createArtifact: async () => { called = true; return result; } };
     const mod = await import('../../src/extension/commands/createArtifact');
-    const res = await mod.createArtifactCommandHandler(artifactProvider);
+  const { CreateArtifactHandler } = mod;
+  const handler = new CreateArtifactHandler();
+  const res = await handler.handle(undefined, artifactProvider);
     expect(called).toBe(true);
     expect(res).toBe(result);
   });

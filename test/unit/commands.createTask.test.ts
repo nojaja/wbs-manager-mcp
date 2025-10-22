@@ -8,8 +8,10 @@ describe('createTaskCommandHandler', () => {
     const opened: string[] = [];
     const showDetail = async (id: string) => { opened.push(id); };
 
-    const mod = await import('../../src/extension/commands/createTask');
-    const res = await mod.createTaskCommandHandler(wbsProvider, treeView, showDetail);
+      const mod = await import('../../src/extension/commands/createTask');
+      const { CreateTaskHandler } = mod;
+      const handler = new CreateTaskHandler();
+      const res = await handler.handle({ extensionUri: {} } as any, treeView);
     expect(res).toBe(created);
     expect(opened[0]).toBe('t1');
   });

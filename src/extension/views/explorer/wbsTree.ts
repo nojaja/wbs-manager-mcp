@@ -47,7 +47,7 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     /**
      * コンストラクタ
     * MCPクライアントを受け取り初期化する
-     * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
+    * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
     */
     constructor() {
         this.taskClient = (MCPTaskClient as any).getInstance();

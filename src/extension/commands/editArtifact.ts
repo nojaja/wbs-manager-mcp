@@ -1,13 +1,18 @@
 import { CommandHandler } from './CommandHandler';
 
 /**
- * artifactTree.editArtifact のハンドラ
- * @param context
- * @param artifactTreeView
- * @param item 対象アイテム（未指定時は現在の selection を使う）
- * @returns void
+ * EditArtifactHandler
+ * artifact 編集用ハンドラ（ArtifactDetailPanel を表示）。
  */
 export class EditArtifactHandler extends CommandHandler {
+
+  /**
+   * Handle edit artifact command
+   * @param context Extension context
+   * @param artifactTreeView Artifact TreeView instance
+   * @param item 対象アイテム（未指定時は現在の selection を使う）
+   * @returns void
+   */
   async handle(context: any, artifactTreeView: any, item?: any) {
     const target = item ?? this.pickTarget(undefined, artifactTreeView);
     if (target) {
@@ -16,5 +21,3 @@ export class EditArtifactHandler extends CommandHandler {
     }
   }
 }
-
-

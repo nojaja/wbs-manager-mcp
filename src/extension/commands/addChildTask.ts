@@ -2,6 +2,7 @@ import { CommandHandler } from './CommandHandler';
 import { WBSTreeProvider } from '../views/explorer/wbsTree';
 import { TaskDetailPanel } from '../views/panels/taskDetailPanel';
 
+
 /**
  * AddChildTaskHandler
  * WBSツリーに子タスクを追加するコマンドのハンドラです。
@@ -9,11 +10,19 @@ import { TaskDetailPanel } from '../views/panels/taskDetailPanel';
  */
 export class AddChildTaskHandler extends CommandHandler {
   private wbsProvider: WBSTreeProvider = WBSTreeProvider.getInstance();
+
   /**
    * wbsTree.addChildTask ハンドラ
    * @param context
    * @param item
    * @param treeView
+   * @returns 作成されたタスク情報または undefined
+   */
+  /**
+   * Handle add child task command
+   * @param context Extension context
+   * @param item 可選のターゲットアイテム
+   * @param treeView TreeView instance
    * @returns 作成されたタスク情報または undefined
    */
   async handle(context: any, item: any, treeView: any) {

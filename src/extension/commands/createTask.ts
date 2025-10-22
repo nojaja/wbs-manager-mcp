@@ -2,9 +2,10 @@ import { CommandHandler } from './CommandHandler';
 import { WBSTreeProvider } from '../views/explorer/wbsTree';
 import { TaskDetailPanel } from '../views/panels/taskDetailPanel';
 
+
 /**
- * CreateTaskHandler は wbsTree.createTask コマンドのハンドラで、
- * WBSTreeProvider を使ってタスクを作成し、必要なら TaskDetailPanel を表示します。
+ * CreateTaskHandler
+ * wbsTree.createTask コマンドのハンドラ（タスク作成と詳細パネル表示）。
  */
 export class CreateTaskHandler extends CommandHandler {
   /**
@@ -12,12 +13,12 @@ export class CreateTaskHandler extends CommandHandler {
    */
   private wbsProvider: WBSTreeProvider = WBSTreeProvider.getInstance();
 
- /**
- * wbsTree.createTask のハンドラ
- * @param context
- * @param treeView
- * @returns 作成されたタスク情報または undefined
- */
+  /**
+   * Handle create task command
+   * @param context Extension context
+   * @param treeView TreeView instance
+   * @returns 作成されたタスク情報または undefined
+   */
   async handle(context: any, treeView: any) {
     const selected = this.pickTarget(undefined, treeView);
     const result = await this.wbsProvider.createTask(selected as any);
@@ -27,4 +28,3 @@ export class CreateTaskHandler extends CommandHandler {
     return result;
   }
 }
-

@@ -4,7 +4,9 @@ describe('deleteTaskCommandHandler', () => {
     const wbsProvider: any = { deleteTask: async (t: any) => { called.push(t); return true; } };
     const treeView: any = { selection: [{ id: 'x' }] };
     const mod = await import('../../src/extension/commands/deleteTask');
-    const res = await mod.deleteTaskCommandHandler(wbsProvider, treeView);
+  const { DeleteTaskHandler } = mod;
+  const handler = new DeleteTaskHandler();
+  const res = await handler.handle(wbsProvider, treeView.selection[0]);
     expect(called[0]).toBe(treeView.selection[0]);
     expect(res).toBe(true);
   });

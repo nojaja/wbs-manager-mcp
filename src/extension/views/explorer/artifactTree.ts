@@ -23,9 +23,10 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
 
     /**
      * コンストラクタ
+     * @param artifactClient オプション: テスト時に注入するartifact client
      */
-    constructor() {
-        this.artifactClient = (MCPArtifactClient as any).getInstance();
+    constructor(artifactClient?: ArtifactClientLike) {
+        this.artifactClient = artifactClient ?? (MCPArtifactClient as any).getInstance();
     }
 
     /**

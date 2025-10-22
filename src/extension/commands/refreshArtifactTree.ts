@@ -1,11 +1,5 @@
-import { ArtifactTreeProvider} from '../views/explorer/artifactTree';
-
-/**
- * artifactTree.refresh 用のコマンドハンドラ
- * @param context ExtensionContext
- * @param clients MCP clients 配列
- */
 import { CommandHandler } from './CommandHandler';
+import { ArtifactTreeProvider} from '../views/explorer/artifactTree';
 
 /**
  * Command handler to refresh the WBS tree view.
@@ -15,9 +9,8 @@ import { CommandHandler } from './CommandHandler';
  */
 export class RefreshArtifactTreeHandler extends CommandHandler {
   /**
-   * Handle the refreshTree command.
-   *
-   * @param {any} context Extension context (not used)
+   * Handle artifact tree refresh
+   * @param context Extension context (optional)
    */
   async handle(context: any) {
     const artifactProvider = ArtifactTreeProvider.getInstance();

@@ -29,7 +29,7 @@ describe('サーバプロセス管理の現状動作テスト', () => {
     workspaceRoot = path.join(__dirname, '..');
     mockProcess = {};
     outputChannel = { appendLine: jest.fn(), show: jest.fn() };
-    service = new ServerService(outputChannel as any);
+  service = ServerService.getInstance();
   });
 
   it('サーバファイル存在チェック: 存在しない場合はfalse', () => {

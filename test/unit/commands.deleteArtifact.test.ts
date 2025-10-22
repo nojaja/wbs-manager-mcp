@@ -6,7 +6,9 @@ describe('deleteArtifactCommandHandler', () => {
     const artifactProvider: any = { deleteArtifact: async (t: any) => { calledWith.push(t); return true; } };
     const target = { id: 'a1' };
     const mod = await import('../../src/extension/commands/deleteArtifact');
-    const res = await mod.deleteArtifactCommandHandler(artifactProvider, target);
+  const { DeleteArtifactHandler } = mod;
+  const handler = new DeleteArtifactHandler();
+  const res = await handler.handle(artifactProvider, target);
     expect(calledWith[0]).toBe(target);
     expect(res).toBe(true);
   });

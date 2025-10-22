@@ -46,8 +46,9 @@ export class MCPBaseClient {
     protected readonly outputChannel: Logger = Logger.getInstance();
 
     /**
-    * @param opts オプション: requestTimeoutMs (ms)
-    * @param opts.requestTimeoutMs リクエストタイムアウト（ミリ秒）。未指定時は10000
+     * コンストラクタ
+     * @param opts オプションオブジェクト
+     * @param opts.requestTimeoutMs リクエストタイムアウト（ミリ秒）。未指定時は10000
      */
     constructor(opts?: { requestTimeoutMs?: number }) {
         this.requestTimeoutMs = opts?.requestTimeoutMs ?? 10000;
@@ -61,7 +62,6 @@ export class MCPBaseClient {
         this.writerReady = { promise: p, resolve: resolveFn, reject: rejectFn };
     }
 
-    // サブクラス呼び出し時にそのサブクラスのインスタンス（シングルトン）を返す汎用実装
     /**
      * サブクラスのシングルトンインスタンスを返します。サブクラス側で初回呼び出し時にインスタンスが生成されます。
      *

@@ -28,10 +28,18 @@ export class CommandRegistry {
 
   /**
    * CommandRegistry を構築します。
-   * @param opts 設定オブジェクト
-   * @param opts.context VS Code の ExtensionContext
-   * @param opts.treeView WBS 用 TreeView
-   * @param opts.artifactTreeView Artifact 用 TreeView
+  * @param opts 設定オブジェクト
+  * @param opts.context VS Code の ExtensionContext
+  * @param opts.treeView WBS 用 TreeView
+  * @param opts.artifactTreeView Artifact 用 TreeView
+  * @param opts.serverService optional ServerService instance
+  * @param opts.initializeClient optional initialize client
+  * @param opts.taskClient optional MCP task client
+  * @param opts.artifactClient optional MCP artifact client
+  * @param opts.wbsProvider optional WBS provider
+  * @param opts.artifactProvider optional Artifact provider
+  * @param opts.showTaskDetail optional show detail callback
+  * @param opts.outputChannel optional output channel
    */
   constructor(opts: {
     context: vscode.ExtensionContext,

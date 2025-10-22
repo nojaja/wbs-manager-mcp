@@ -6,7 +6,9 @@ describe('addChildTaskCommandHandler', () => {
     const showDetail = async (id: string) => { opened.push(id); };
 
     const mod = await import('../../src/extension/commands/addChildTask');
-    const res = await mod.addChildTaskCommandHandler(wbsProvider, treeView, showDetail);
+  const { AddChildTaskHandler } = mod;
+  const handler = new AddChildTaskHandler();
+  const res = await handler.handle({ extensionUri: {} } as any, treeView);
     expect(res.taskId).toBe('c1');
     expect(opened[0]).toBe('c1');
   });

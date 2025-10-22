@@ -1,19 +1,17 @@
+import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
+import { OpenTaskHandler } from '../../src/extension/commands/openTask';
+
 describe('openTaskCommandHandler', () => {
-  it('opens task detail when item provided', async () => {
+  it('opens task detail when item provided', () => {
     const context: any = { extensionUri: {} };
     const item: any = { itemId: 't1', label: 'task' };
-    const taskClient: any = {};
-    const artifactClient: any = {};
 
-    const modPanel = await import('../../src/extension/views/panels/taskDetailPanel');
-    const orig = modPanel.TaskDetailPanel;
-    modPanel.TaskDetailPanel = { createOrShow: jest.fn() } as any;
+  const createSpy = jest.spyOn(TaskDetailPanel, 'createOrShow').mockImplementation(() => {});
 
-    const mod = await import('../../src/extension/commands/openTask');
-    mod.openTaskCommandHandler(context, item, taskClient, artifactClient);
+    const handler = new OpenTaskHandler();
+    handler.handle(context, item);
 
-    expect((modPanel.TaskDetailPanel as any).createOrShow).toHaveBeenCalledWith(context.extensionUri, 't1', { taskClient, artifactClient });
-
-    modPanel.TaskDetailPanel = orig;
+    expect(createSpy).toHaveBeenCalledWith(context.extensionUri, 't1');
+    createSpy.mockRestore();
   });
 });

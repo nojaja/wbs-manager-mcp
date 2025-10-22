@@ -6,6 +6,9 @@ import * as vscode from 'vscode';
 //Logger
 import { Logger } from '../Logger';
 
+/**
+ * クライアント登録情報の形
+ */
 type ClientRegistration = {
   handleResponseFromServer?: (resp: string) => void;
   handleResponse?: (resp: any) => void;
@@ -13,6 +16,7 @@ type ClientRegistration = {
   setWriter?: (writer: (payload: string) => void) => void;
   start?: () => Promise<void>;
 };
+
 /**
  * サーバプロセス管理専用サービス
  */
