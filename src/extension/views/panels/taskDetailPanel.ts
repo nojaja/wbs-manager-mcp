@@ -6,6 +6,7 @@ import type { Task, TaskArtifactAssignment, TaskCompletionCondition, Artifact } 
 
 import { MCPTaskClient } from '../../repositories/mcp/taskClient';
 import { MCPArtifactClient } from '../../repositories/mcp/artifactClient';
+import { MCPBaseClient } from '../../repositories/mcp/baseClient';
 
 
 /**
@@ -83,7 +84,7 @@ export class TaskDetailPanel extends WebviewPanelBase {
     }
 
     /**
-     * Load task data and render the webview
+     * Load task data with dependencies and render the webview
      */
     private async loadTask() {
         try {
@@ -91,6 +92,7 @@ export class TaskDetailPanel extends WebviewPanelBase {
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
                 let artifacts: Artifact[] = [];
+
                 try {
                     if (this.artifactClient) {
                         artifacts = await this.artifactClient.listArtifacts();
@@ -98,7 +100,23 @@ export class TaskDetailPanel extends WebviewPanelBase {
                 } catch (e) {
                     // ignore
                 }
-                this._panel.webview.html = this.buildHtmlForWebview('__TASK_PAYLOAD__', { task: this._task, artifacts }, undefined, `Task: ${this._task.title}`);
+
+                // getTaskの結果に既にdependeesとdependentsが含まれている
+                const dependees = (this._task as any).dependees || [];
+                const dependents = (this._task as any).dependents || [];
+
+                this._panel.webview.html = this.buildHtmlForWebview(
+                    '__TASK_PAYLOAD__',
+                    {
+                        task: this._task,
+                        artifacts,
+                        dependees,
+                        dependents,
+                        suggestedArtifacts: [] // 将来的に実装
+                    },
+                    undefined,
+                    `Task: ${this._task.title}`
+                );
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to load task: ${error}`);
@@ -183,6 +201,11 @@ export class TaskDetailPanel extends WebviewPanelBase {
         switch (message.command) {
             case 'save':
                 this.saveTask(message.data);
+                return;
+            case 'selectTask':
+                if (message.taskId) {
+                    this.updateTask(message.taskId);
+                }
                 return;
         }
     }
