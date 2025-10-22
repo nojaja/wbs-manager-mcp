@@ -7,6 +7,10 @@ import { TreeItem } from './TreeItem';
 import type { Task } from '../../types';
 import { buildCreateTaskPayload } from '../../tasks/taskPayload';
 
+import { MCPTaskClient } from '../../repositories/mcp/taskClient';
+
+//Logger
+import { Logger } from '../../Logger';
 
 /**
  * タスク情報を表現するインターフェース
@@ -26,22 +30,38 @@ type DropDecision =
  * VSCode拡張のエクスプローラ部にWBS（Work Breakdown Structure）を表示するためのメインクラス
  */
 export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
+
+    
+    private static instance: WBSTreeProvider;
+
     // ツリーの更新イベント管理用（ツリーの再描画を通知するために必要）
     private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     // ツリー更新イベント（外部から購読可能）
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     // ビジネスロジックサービス（WBS の操作はこのサービス経由で行う）
-    private readonly taskClient: TaskClientLike;
+    private readonly taskClient: MCPTaskClient;
+    /** 出力チャネル */
+    protected readonly outputChannel: Logger = Logger.getInstance();
 
     /**
      * コンストラクタ
     * MCPクライアントを受け取り初期化する
-    * @param taskClient タスク操作を提供するクライアント
-     * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
+    * なぜ必要か: API経由でプロジェクト・タスク情報を取得するため
     */
-    constructor(taskClient: TaskClientLike) {
-        this.taskClient = taskClient;
+    constructor() {
+        this.taskClient = (MCPTaskClient as any).getInstance();
+    }
+
+    /**
+     * WBSTreeProviderクラスのシングルトンインスタンスを取得します
+     * @returns {WBSTreeProvider} WBSTreeProviderインスタンス
+     */
+    public static getInstance(): WBSTreeProvider {
+        if (!WBSTreeProvider.instance) {
+            WBSTreeProvider.instance = new WBSTreeProvider();
+        }
+        return WBSTreeProvider.instance;
     }
 
     /**
@@ -136,12 +156,12 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         // 処理名: タスク追加処理
         // 処理概要: 選択されたノードの下に新しいタスクを作成する
         // 実装理由: ユーザが UI 上から直接タスクを追加できるようにするため
-        if (!target) {
-            // 処理概要: 作成先が指定されていない場合は警告を表示して処理を中止する
-            // 実装理由: 作成先が不明だと階層構造が不定になるため、明示的に指定させる
-            vscode.window.showWarningMessage('作成先のプロジェクトまたはタスクを選択してください。');
-            return { success: false };
-        }
+        // if (!target) {
+        //     // 処理概要: 作成先が指定されていない場合は警告を表示して処理を中止する
+        //     // 実装理由: 作成先が不明だと階層構造が不定になるため、明示的に指定させる
+        //     vscode.window.showWarningMessage('作成先のプロジェクトまたはタスクを選択してください。');
+        //     return { success: false };
+        // }
 
         const { parentId } = this.resolveCreationContext(target);
 
@@ -509,6 +529,10 @@ export class WBSTreeProvider implements vscode.TreeDataProvider<TreeItem> {
  * ツリー内のタスク移動操作をハンドリングし、WBSTreeProviderへ委譲する
  */
 export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropController<TreeItem> {
+
+    private static instance: WBSTreeDragAndDropController;
+    private readonly provider: WBSTreeProvider = WBSTreeProvider.getInstance();
+    
     readonly dragMimeTypes = ['application/vnd.code.tree.wbsTree'];
     readonly dropMimeTypes = ['application/vnd.code.tree.wbsTree'];
 
@@ -518,8 +542,18 @@ export class WBSTreeDragAndDropController implements vscode.TreeDragAndDropContr
     * なぜ必要か: Drag&DropのUI制御とデータ更新（サーバ呼び出し）を分離し、責務を明確化するため
      * @param provider ドロップ処理を委譲するWBSツリープロバイダ
      */
-    constructor(private readonly provider: WBSTreeProvider) { }
+    constructor() { }
 
+    /**
+     * WBSTreeDragAndDropControllerクラスのシングルトンインスタンスを取得します
+     * @returns {WBSTreeDragAndDropController} WBSTreeDragAndDropControllerインスタンス
+     */
+    public static getInstance(): WBSTreeDragAndDropController {
+        if (!WBSTreeDragAndDropController.instance) {
+            WBSTreeDragAndDropController.instance = new WBSTreeDragAndDropController();
+        }
+        return WBSTreeDragAndDropController.instance;
+    }
     /**
      * ドラッグ開始処理
      * データ転送にタスクID一覧を格納する

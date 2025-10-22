@@ -2,19 +2,21 @@ import { MCPBaseClient } from '../../src/extension/repositories/mcp/baseClient';
 import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
 import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 import { MCPInitializeClient } from '../../src/extension/repositories/mcp/initializeClient';
-
-const fakeOutput = { appendLine: jest.fn() } as any;
+import { Logger } from '../../src/extension/Logger';
 
 describe('MCP repository clients', () => {
   let taskClient: MCPTaskClient;
   let artifactClient: MCPArtifactClient;
   let initializeClient: MCPInitializeClient;
+  let loggerMock: { log: jest.Mock; show: jest.Mock };
 
   beforeEach(() => {
     jest.useFakeTimers();
-    taskClient = new MCPTaskClient(fakeOutput);
-    artifactClient = new MCPArtifactClient(fakeOutput);
-    initializeClient = new MCPInitializeClient(fakeOutput);
+    loggerMock = { log: jest.fn(), show: jest.fn() };
+    jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+    taskClient = new MCPTaskClient();
+    artifactClient = new MCPArtifactClient();
+    initializeClient = new MCPInitializeClient();
   });
 
   afterEach(() => {
@@ -103,20 +105,22 @@ describe('MCP repository clients', () => {
 
   test('task client create/delete/move propagate parameters', async () => {
     const spy = jest.spyOn(taskClient as any, 'callTool');
-    spy.mockResolvedValueOnce({ content: [{ text: '✅ Task created\nID: new-id' }] });
-    const created = await taskClient.createTask({ parentId: 'root', title: 'Task' });
-    expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', { parentId: 'root', title: 'Task' });
-    expect(created).toEqual({ success: true, taskId: 'new-id', message: '✅ Task created\nID: new-id' });
+  // Return structured JSON containing task.id so createTask can read parsed.parsed.task.id
+  spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ task: { id: 'new-id' } }) }] });
+  const created = await taskClient.createTask({ parentId: 'root', title: 'Task' });
+  expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', { parentId: 'root', title: 'Task' });
+  expect(created.success).toBe(true);
+  expect(created.taskId).toBe('new-id');
 
     spy.mockResolvedValueOnce({ content: [{ text: '✅ removed' }] });
     const deleted = await taskClient.deleteTask('t1');
     expect(spy).toHaveBeenCalledWith('wbs.planMode.deleteTask', { taskId: 't1' });
-    expect(deleted.success).toBe(true);
+  expect(deleted.success).toBe(true);
 
     spy.mockResolvedValueOnce({ content: [{ text: '✅ moved' }] });
     const moved = await taskClient.moveTask('t1', null);
     expect(spy).toHaveBeenCalledWith('wbs.planMode.moveTask', { taskId: 't1', newParentId: null });
-    expect(moved.success).toBe(true);
+  expect(moved.success).toBe(true);
 
     spy.mockRestore();
   });

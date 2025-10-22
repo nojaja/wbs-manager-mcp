@@ -1,12 +1,14 @@
 import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
+import { Logger } from '../../src/extension/Logger';
 
 describe('MCPClient extra tests', () => {
   let client: MCPArtifactClient;
-  const fakeOutput = { appendLine: jest.fn() } as any;
+  const loggerMock = { log: jest.fn(), show: jest.fn() } as any;
 
   beforeEach(() => {
     jest.useFakeTimers();
-  client = new MCPArtifactClient(fakeOutput);
+    jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+    client = new MCPArtifactClient();
   });
 
   afterEach(() => {

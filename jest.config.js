@@ -17,6 +17,7 @@ module.exports = {
   moduleNameMapper: {
     '^vscode$': '<rootDir>/__mocks__/vscode.ts'
   },
+  setupFilesAfterEnv: ['<rootDir>/test/jest.setup.js'],
   coverageThreshold: {
     global: {
       branches: 50,

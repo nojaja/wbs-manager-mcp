@@ -102,7 +102,7 @@ export default class WbsCreateTaskTool extends Tool {
             // LLM ヒントは専用メソッドで生成して run() の複雑さを下げる
             const llmHints = this.buildLlmHintsForTask(task);
             // Include dependency creation results to help the caller understand any partial failures
-            return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }], llmHints, dependencies: dependencyResults };
+            return { content: [{ type: 'text', text: JSON.stringify({task, llmHints}, null, 2) }], dependencies: dependencyResults };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = {
@@ -127,9 +127,19 @@ export default class WbsCreateTaskTool extends Tool {
      * @returns {{nextActions: any[], notes: string[]}} llmHints オブジェクト
      */
     private buildLlmHintsForTask(task: any) {
-        const nextActions: any[] = [
-            { action: 'linkArtifacts', detail: (task?.deliverables && task.deliverables.length > 0) || (task?.options && Array.isArray(task.options.deliverables) && task.options.deliverables.length > 0) ? '紐付けられた成果物を確認してください' : '成果物が未指定です。必要なら deliverables を追加してください' }
-        ];
+        const nextActions: any[] = [];
+        //dependenciesが未指定の場合のnextAction追加
+        if (!task.dependencies || task.dependencies.length === 0) {
+            nextActions.push({ action: 'addDependencies', detail: '依存関係が未指定です。後続タスクがある場合はdependenciesに設定してください' });
+        }
+        //artifactsが未指定の場合のnextAction追加
+        if (!task.artifacts || task.artifacts.length === 0) {
+            nextActions.push({ action: 'addArtifacts', detail: '成果物は必須です。タスクで編集する成果物をartifactsに設定してください' });
+        }
+        //completionConditionsが未指定の場合のnextAction追加
+        if (!task.completionConditions || task.completionConditions.length === 0) {
+            nextActions.push({ action: 'addCompletionConditions', detail: '完了条件は必須です。タスクの完了条件をcompletionConditionsに設定してください' });
+        }
 
         const notes: string[] = [
             `作業を細分化できる場合は、このtaskIdをparentIdに指定して詳細タスクを登録してください。追加するにはツール 'wbs.planMode.createTask' を使用してください。`,

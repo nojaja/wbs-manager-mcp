@@ -1,18 +1,21 @@
 import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
 import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 import { MCPInitializeClient } from '../../src/extension/repositories/mcp/initializeClient';
+import { Logger } from '../../src/extension/Logger';
 
 describe('MCP client additional coverage tests', () => {
-  const fakeOutput = { appendLine: jest.fn() } as any;
   let taskClient: MCPTaskClient;
   let artifactClient: MCPArtifactClient;
   let initClient: MCPInitializeClient;
+  let logSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    jest.useFakeTimers();
-    taskClient = new MCPTaskClient(fakeOutput);
-    artifactClient = new MCPArtifactClient(fakeOutput);
-    initClient = new MCPInitializeClient(fakeOutput);
+  jest.useFakeTimers();
+  // spy on Logger to capture logging performed by MCP clients
+  logSpy = jest.spyOn(Logger.getInstance(), 'log').mockImplementation(() => {});
+  taskClient = new MCPTaskClient();
+  artifactClient = new MCPArtifactClient();
+  initClient = new MCPInitializeClient();
   });
 
   afterEach(() => {
@@ -67,9 +70,7 @@ describe('MCP client additional coverage tests', () => {
 
       const result = await taskClient.listTasks();
       expect(result).toEqual([]);
-      expect(fakeOutput.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('[MCP Client] Failed to parse task list:')
-      );
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MCP Client] Failed to parse task list:'));
       expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 
       callToolSpy.mockRestore();
@@ -81,9 +82,7 @@ describe('MCP client additional coverage tests', () => {
 
       const result = await taskClient.listTasks();
       expect(result).toEqual([]);
-      expect(fakeOutput.appendLine).toHaveBeenCalledWith(
-        '[MCP Client] Failed to list tasks: Network error'
-      );
+      expect(logSpy).toHaveBeenCalledWith('[MCP Client] Failed to list tasks: Network error');
       expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 
       callToolSpy.mockRestore();

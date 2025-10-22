@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
+import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 describe('TaskDetailPanel constructor and dispose', () => {
   afterEach(() => {
@@ -15,15 +17,10 @@ describe('TaskDetailPanel constructor and dispose', () => {
     (TaskDetailPanel as any).currentPanel = fakePanelInstance;
 
     const fakeUri: any = { path: '' };
-    TaskDetailPanel.createOrShow(fakeUri, 't1', {
-      taskClient: {
-        getTask: jest.fn(),
-        updateTask: jest.fn()
-      },
-      artifactClient: {
-        listArtifacts: jest.fn()
-      }
-    });
+    // Mock internal clients
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue({ getTask: jest.fn(), updateTask: jest.fn() } as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue({ listArtifacts: jest.fn() } as any);
+    TaskDetailPanel.createOrShow(fakeUri, 't1');
 
     expect(fakePanelInstance._panel.reveal).toHaveBeenCalled();
     expect(fakePanelInstance.updateTask).toHaveBeenCalledWith('t1');
@@ -40,17 +37,12 @@ describe('TaskDetailPanel constructor and dispose', () => {
       dispose: jest.fn()
     };
 
-    const deps = {
-      taskClient: {
-        getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-        updateTask: jest.fn().mockResolvedValue({ success: true })
-      },
-      artifactClient: {
-        listArtifacts: jest.fn().mockResolvedValue([])
-      }
-    };
+    const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: true }) };
+    const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
     // simulate a save message
     expect(messageHandlers.length).toBeGreaterThan(0);
@@ -59,7 +51,7 @@ describe('TaskDetailPanel constructor and dispose', () => {
     messageHandlers[0](saveMsg);
 
     // updateTask should have been called via saveTask
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 
   test('dispose clears currentPanel and disposables', () => {
@@ -72,16 +64,11 @@ describe('TaskDetailPanel constructor and dispose', () => {
       dispose: jest.fn()
     };
 
-    const deps = {
-      taskClient: {
-        getTask: jest.fn(),
-        updateTask: jest.fn()
-      },
-      artifactClient: {
-        listArtifacts: jest.fn()
-      }
-    };
-    const inst = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+    const taskClientMock = { getTask: jest.fn(), updateTask: jest.fn() };
+    const artifactClientMock = { listArtifacts: jest.fn() };
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
+    const inst = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     // push a disposable and call dispose
     (inst as any)._disposables.push(disposable as any);
 

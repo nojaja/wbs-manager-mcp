@@ -1,15 +1,30 @@
+import { CommandHandler } from './CommandHandler';
+import { WBSTreeProvider } from '../views/explorer/wbsTree';
+import { TaskDetailPanel } from '../views/panels/taskDetailPanel';
+
+
 /**
- * wbsTree.createTask のハンドラ
- * @param wbsProvider
- * @param treeView
- * @param showDetail callback to open task detail: async (taskId:string)=>void
- * @returns 作成されたタスク情報または undefined
+ * CreateTaskHandler
+ * wbsTree.createTask コマンドのハンドラ（タスク作成と詳細パネル表示）。
  */
-export async function createTaskCommandHandler(wbsProvider: any, treeView: any, showDetail?: (taskId: string) => Promise<void>) {
-  const selected = treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined;
-  const result = await wbsProvider.createTask(selected as any);
-  if (result?.taskId && showDetail) {
-    await showDetail(result.taskId);
+export class CreateTaskHandler extends CommandHandler {
+  /**
+   * WBSTreeProvider のシングルトンインスタンス（タスク作成に使用）
+   */
+  private wbsProvider: WBSTreeProvider = WBSTreeProvider.getInstance();
+
+  /**
+   * Handle create task command
+   * @param context Extension context
+   * @param treeView TreeView instance
+   * @returns 作成されたタスク情報または undefined
+   */
+  async handle(context: any, treeView: any) {
+    const selected = this.pickTarget(undefined, treeView);
+    const result = await this.wbsProvider.createTask(selected as any);
+    if (result?.taskId) {
+      await TaskDetailPanel.createOrShow(context.extensionUri, result.taskId);
+    }
+    return result;
   }
-  return result;
 }

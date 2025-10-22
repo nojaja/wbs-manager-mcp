@@ -1,4 +1,6 @@
 import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
+import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 describe('TaskDetailPanel HTML and escapeHtml', () => {
   const fakePanel: any = {
@@ -21,7 +23,11 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('getHtmlForWebview embeds task payload and references bundle', () => {
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', createDeps());
+  const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }) };
+  const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
 
     const task = { id: 't1', title: 'X', status: 'in-progress', version: 42, description: 'D', assignee: 'A', estimate: '3d' };
     const html = (panel as any).getHtmlForWebview(task);
@@ -38,7 +44,11 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('getHtmlForWebview includes pending status in payload', () => {
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2', createDeps());
+  const taskClientMock2 = { getTask: jest.fn().mockResolvedValue({ id: 't2', title: 'T2', version: 1 }) };
+  const artifactClientMock2 = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock2 as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock2 as any);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2');
     const task = { id: 't2', title: 'Y', status: 'pending', version: 1 };
     const html = (panel as any).getHtmlForWebview(task);
     const m = html.match(/window.__TASK_PAYLOAD__ = (.*?);<\/script>/s);
@@ -48,7 +58,11 @@ describe('TaskDetailPanel HTML and escapeHtml', () => {
   });
 
   test('escapeHtml escapes special characters', () => {
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't3', createDeps());
+  const taskClientMock3 = { getTask: jest.fn().mockResolvedValue({ id: 't3', title: 'T3', version: 1 }) };
+  const artifactClientMock3 = { listArtifacts: jest.fn().mockResolvedValue([]) };
+  jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock3 as any);
+  jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock3 as any);
+  const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't3');
     const unsafe = '& < > " \'';
     const escaped = (panel as any).escapeHtml(unsafe);
     expect(escaped).toContain('&amp;');

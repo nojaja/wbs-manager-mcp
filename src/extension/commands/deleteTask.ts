@@ -1,11 +1,21 @@
+import { CommandHandler } from './CommandHandler';
+import { WBSTreeProvider} from '../views/explorer/wbsTree';
+
 /**
- * wbsTree.deleteTask のハンドラ
- * @param wbsProvider
- * @param treeView
- * @param item
- * @returns 削除結果（プロミス）
+ * DeleteTaskHandler
+ * wbsTree.deleteTask のハンドラ（タスク削除）。
  */
-export async function deleteTaskCommandHandler(wbsProvider: any, treeView: any, item?: any) {
-  const target = item ?? (treeView.selection && treeView.selection.length > 0 ? treeView.selection[0] : undefined);
-  return wbsProvider.deleteTask(target as any);
+export class DeleteTaskHandler extends CommandHandler {
+  private wbsProvider: WBSTreeProvider = WBSTreeProvider.getInstance();
+
+  /**
+   * Handle delete task command
+   * @param treeView TreeView instance
+   * @param item optional target item
+   * @returns 削除結果
+   */
+  async handle(treeView: any, item?: any) {
+    const target = item ?? this.pickTarget(undefined, treeView);
+    return this.wbsProvider.deleteTask(target as any);
+  }
 }

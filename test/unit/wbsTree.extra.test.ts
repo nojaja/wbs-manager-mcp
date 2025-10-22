@@ -8,8 +8,10 @@ describe('WBSTreeProvider extra tests', () => {
   let provider: WBSTreeProvider;
 
   beforeEach(() => {
-    provider = new WBSTreeProvider(fakeTaskClient);
     jest.clearAllMocks();
+  const { MCPTaskClient } = require('../../src/extension/repositories/mcp/taskClient');
+  jest.spyOn(MCPTaskClient, 'getInstance').mockReturnValue(fakeTaskClient as any);
+  provider = new WBSTreeProvider();
   });
 
   test('getChildren root lists tasks', async () => {

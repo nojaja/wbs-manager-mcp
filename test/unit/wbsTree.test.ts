@@ -13,8 +13,10 @@ describe('WBSTreeProvider', () => {
   let provider: WBSTreeProvider;
 
   beforeEach(() => {
-  provider = new WBSTreeProvider(fakeTaskClient);
     jest.clearAllMocks();
+  const { MCPTaskClient } = require('../../src/extension/repositories/mcp/taskClient');
+  jest.spyOn(MCPTaskClient, 'getInstance').mockReturnValue(fakeTaskClient as any);
+  provider = new WBSTreeProvider();
   });
 
 
@@ -38,11 +40,19 @@ describe('WBSTreeProvider', () => {
   });
 
   test('createTask warns when no selection', async () => {
-    const warningSpy = jest.spyOn(vscode.window, 'showWarningMessage');
+    // current implementation creates at workspace/root when no selection is provided
+    const infoSpy = jest.spyOn(vscode.window, 'showInformationMessage');
+    const refreshSpy = jest.spyOn(provider, 'refresh').mockImplementation(() => {});
+    fakeTaskClient.createTask.mockResolvedValue({ success: true, taskId: 'root-1' });
+
     const result = await provider.createTask();
-    expect(result.success).toBe(false);
-    expect(warningSpy).toHaveBeenCalled();
-    warningSpy.mockRestore();
+    expect(result.success).toBe(true);
+    expect(result.taskId).toBe('root-1');
+    expect(fakeTaskClient.createTask).toHaveBeenCalled();
+    expect(refreshSpy).toHaveBeenCalled();
+    expect(infoSpy).toHaveBeenCalled();
+    refreshSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 
   test('createTask delegates to client and refreshes', async () => {

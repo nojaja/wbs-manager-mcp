@@ -156,13 +156,14 @@ class StdioMCPServer {
                     jsonrpc: '2.0',
                     id,
                     result: {
-                        protocolVersion: '2025-10-17 v4',
+                        protocolVersion: '2025-06-18',
                         capabilities: {
-                            tools: {}
+                            tools: { "listChanged": true }
                         },
                         serverInfo: {
                             name: 'wbs-mcp-server',
-                            version: '0.1.0.5'
+                            title: 'wbs作成ツールVSCode拡張用MCPサーバ',
+                            version: '0.1.0.8'
                         }
                     }
                 };
@@ -248,6 +249,18 @@ class StdioMCPServer {
 
 
     /**
+     * 処理名: 通知送信
+     * 処理概要: JSON-RPC 通知メッセージを文字列化して標準出力に書き出す
+     * @param notification 通知オブジェクト
+     */
+    public sendNotification(notification: JsonRpcNotification) {
+        const notificationStr = JSON.stringify(notification);
+        const debuggingStr = JSON.stringify(notification, null, 2); // for easier debugging
+        console.error(`[MCP Server] Notification Sending: ${debuggingStr}`);
+        process.stdout.write(notificationStr + '\n');
+    }
+
+    /**
      * 処理名: レスポンス送信
      * 処理概要: JSON-RPC レスポンスオブジェクトを文字列化して標準出力に書き出す
      * 実装理由: 拡張クライアントは標準出力の各行を JSON-RPC レスポンスとして読み取るため、正確に一行ずつ出力する必要がある
@@ -276,6 +289,7 @@ if (!process.env.JEST_WORKER_ID) {
                 const wbsGet = await import('./tools/wbsGetTaskTool');
                 const wbsUpdate = await import('./tools/wbsUpdateTaskTool');
                 const wbsList = await import('./tools/wbsListTasksTool');
+                const wbsListDraft = await import('./tools/wbsListDraftTasksTool');
                 const wbsDelete = await import('./tools/wbsDeleteTaskTool');
                 const wbsMove = await import('./tools/wbsMoveTaskTool');
                 const wbsImpot = await import('./tools/wbsImpotTaskTool');
@@ -287,10 +301,12 @@ if (!process.env.JEST_WORKER_ID) {
                 const depCreate = await import('./tools/wbsCreateDependencyTool');
                 const depUpdate = await import('./tools/wbsUpdateDependencyTool');
                 const depDelete = await import('./tools/wbsDeleteDependencyTool');
+                const agentGetNext = await import('./tools/wbsAgentGetNextTaskTool');
+                const agentTaskComplete = await import('./tools/wbsAgentTaskCompletionRequestTool');
                 const candidates = [
                     wbsCreate, wbsGet, wbsUpdate, wbsList, wbsDelete, wbsMove, wbsImpot,
                     artList, artGet, artCreate, artUpdate, artDelete
-                    , depCreate, depUpdate, depDelete
+                    , depCreate, depUpdate, depDelete, wbsListDraft, agentGetNext, agentTaskComplete
                 ];
                 for (const mod of candidates) {
                     if (mod && mod.instance) toolRegistry.register(mod.instance);
@@ -299,7 +315,18 @@ if (!process.env.JEST_WORKER_ID) {
             } catch (err) {
                 console.error('[MCP Server] Failed to register built-in tools:', err);
             }
-            new StdioMCPServer();
+            const instance = new StdioMCPServer();
+            instance.sendNotification({
+                "jsonrpc": "2.0",
+                "method": "notifications/tools/list_changed"
+            });//ツールの更新を通知
+
+            instance.sendNotification({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized"
+            });//初期化完了を通知
+
+
         } catch (error) {
             console.error('[MCP Server] Failed to start server:', error);
             process.exit(1);

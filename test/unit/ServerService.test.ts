@@ -2,6 +2,7 @@ import { ServerService } from '../../src/extension/server/ServerService';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as child_process from 'child_process';
+import { Logger } from '../../src/extension/Logger';
 
 // モックの設定
 jest.mock('fs');
@@ -12,7 +13,7 @@ const mockedChildProcess = child_process as jest.Mocked<typeof child_process>;
 
 describe('ServerService', () => {
   let serverService: ServerService;
-  let mockOutputChannel: { appendLine: jest.Mock; show: jest.Mock };
+  let loggerMock: { log: jest.Mock; show: jest.Mock };
   let mockChildProcess: {
     stdout: { on: jest.Mock };
     stderr: { on: jest.Mock };
@@ -22,11 +23,8 @@ describe('ServerService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    mockOutputChannel = {
-      appendLine: jest.fn(),
-      show: jest.fn()
-    };
+    loggerMock = { log: jest.fn(), show: jest.fn() };
+    jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
 
     mockChildProcess = {
       stdout: { on: jest.fn() },
@@ -35,20 +33,20 @@ describe('ServerService', () => {
       kill: jest.fn()
     };
 
-    serverService = new ServerService(mockOutputChannel);
+    // ensure fresh singleton so outputChannel is assigned from mocked Logger
+    (ServerService as any).instance = undefined;
+    serverService = ServerService.getInstance();
   });
 
   describe('constructor', () => {
     it('should create ServerService with output channel', () => {
-      const outputChannel = { appendLine: jest.fn(), show: jest.fn() };
-      const service = new ServerService(outputChannel);
+      const service = ServerService.getInstance();
       expect(service).toBeInstanceOf(ServerService);
     });
 
     it('should create ServerService with minimal output channel', () => {
-      const outputChannel = { appendLine: jest.fn() };
-      const service = new ServerService(outputChannel);
-      expect(service).toBeInstanceOf(ServerService);
+  const service = ServerService.getInstance();
+  expect(service).toBeInstanceOf(ServerService);
     });
   });
 
@@ -68,9 +66,7 @@ describe('ServerService', () => {
       const result = serverService.validateServerPath('/path/to/nonexistent.js');
       
       expect(result).toBe(false);
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        'Error: Server file not found at /path/to/nonexistent.js'
-      );
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('Error: Server file not found at /path/to/nonexistent.js');
     });
   });
 
@@ -96,9 +92,7 @@ describe('ServerService', () => {
         ...process.env,
         WBS_MCP_DATA_DIR: '.'
       });
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        'Starting MCP server from: /path/to/server.js'
-      );
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('Starting MCP server from: /path/to/server.js');
     });
   });
 
@@ -142,8 +136,8 @@ describe('ServerService', () => {
       const stderrCallback = mockChildProcess.stderr.on.mock.calls.find(call => call[0] === 'data')[1];
       stderrCallback(Buffer.from('test error'));
       
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('test error');
-      expect(mockOutputChannel.show).toHaveBeenCalled();
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('test error');
+      expect(Logger.getInstance().show).toHaveBeenCalled();
     });
 
     it('should setup exit handler with normal exit', () => {
@@ -156,7 +150,7 @@ describe('ServerService', () => {
       const exitCallback = mockChildProcess.on.mock.calls.find(call => call[0] === 'exit')[1];
       exitCallback(0, null);
       
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('Server process exited with code 0, signal: null');
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('Server process exited with code 0, signal: null');
       expect(onExitCallback).toHaveBeenCalledWith(0, null);
     });
 
@@ -167,8 +161,8 @@ describe('ServerService', () => {
       const exitCallback = mockChildProcess.on.mock.calls.find(call => call[0] === 'exit')[1];
       exitCallback(1, 'SIGTERM');
       
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('Server process exited with code 1, signal: SIGTERM');
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('MCP server exited unexpectedly with code 1');
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('Server process exited with code 1, signal: SIGTERM');
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('MCP server exited unexpectedly with code 1');
       expect(onExitCallback).toHaveBeenCalledWith(1, 'SIGTERM');
     });
 
@@ -181,12 +175,14 @@ describe('ServerService', () => {
       const error = new Error('Test error');
       errorCallback(error);
       
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('Server process error: Test error');
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('Server process error: Test error');
     });
 
     it('should handle missing server process', () => {
-      const service = new ServerService(mockOutputChannel);
-      service.setupServerProcessHandlers();
+  // ensure a fresh instance with no serverProcess
+  (ServerService as any).instance = undefined;
+  const service = ServerService.getInstance();
+  service.setupServerProcessHandlers();
       
       // サーバプロセスがない場合は何もしない
       expect(mockChildProcess.stdout.on).not.toHaveBeenCalled();
@@ -207,14 +203,14 @@ describe('ServerService', () => {
       
       serverService.stopServerProcess();
       
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('Stopping MCP server...');
+      expect(Logger.getInstance().log).toHaveBeenCalledWith('Stopping MCP server...');
       expect(mockChildProcess.kill).toHaveBeenCalled();
     });
 
     it('should do nothing if no server process exists', () => {
       serverService.stopServerProcess();
       
-      expect(mockOutputChannel.appendLine).not.toHaveBeenCalled();
+      expect(Logger.getInstance().log).not.toHaveBeenCalled();
       expect(mockChildProcess.kill).not.toHaveBeenCalled();
     });
   });

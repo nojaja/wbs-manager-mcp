@@ -1,6 +1,7 @@
 import { MCPBaseClient } from '../../src/extension/repositories/mcp/baseClient';
+import { Logger } from '../../src/extension/Logger';
 
-const fakeOutput = { appendLine: jest.fn() } as any;
+const loggerMock = { log: jest.fn(), show: jest.fn() } as any;
 
 class ConcreteClient extends MCPBaseClient {
     // expose protected members for testing convenience
@@ -26,7 +27,8 @@ describe('MCPBaseClient', () => {
 
     beforeEach(() => {
         jest.useFakeTimers();
-        client = new ConcreteClient(fakeOutput);
+        jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+        client = new ConcreteClient();
     });
 
     afterEach(() => {

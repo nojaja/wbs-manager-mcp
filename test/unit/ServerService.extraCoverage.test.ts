@@ -1,6 +1,7 @@
 import { ServerService } from '../../src/extension/server/ServerService';
 import * as fs from 'fs';
 import * as child_process from 'child_process';
+import { Logger } from '../../src/extension/Logger';
 
 jest.mock('fs');
 jest.mock('child_process');
@@ -10,13 +11,16 @@ const mockedChildProcess = child_process as jest.Mocked<typeof child_process>;
 
 describe('ServerService extra coverage', () => {
   let serverService: ServerService;
-  let mockOutputChannel: { appendLine: jest.Mock; show: jest.Mock };
+  let loggerMock: { log: jest.Mock; show: jest.Mock };
   let mockChildProcess: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockOutputChannel = { appendLine: jest.fn(), show: jest.fn() };
-    serverService = new ServerService(mockOutputChannel as any);
+    loggerMock = { log: jest.fn(), show: jest.fn() };
+    jest.spyOn(Logger, 'getInstance').mockReturnValue(loggerMock as any);
+    // reset singleton to ensure mocked Logger is used
+    (ServerService as any).instance = undefined;
+    serverService = ServerService.getInstance();
 
     mockChildProcess = {
       stdout: { on: jest.fn() },
@@ -59,7 +63,7 @@ describe('ServerService extra coverage', () => {
     stdoutCb(Buffer.from('raw line\n'));
 
     expect(client.handleResponseFromServer).toHaveBeenCalledWith('raw line');
-    expect(mockOutputChannel.appendLine).not.toHaveBeenCalledWith('raw line');
+    expect(Logger.getInstance().log).not.toHaveBeenCalledWith('raw line');
   });
 
   it('registerClient provides writer that writes to stdin', () => {
@@ -83,6 +87,6 @@ describe('ServerService extra coverage', () => {
 
     expect(mockedChildProcess.spawn).not.toHaveBeenCalled();
     expect(client.start).not.toHaveBeenCalled();
-    expect(mockOutputChannel.appendLine).toHaveBeenCalledWith('Error: Server file not found at /bad/path/server.js');
+    expect(Logger.getInstance().log).toHaveBeenCalledWith('Error: Server file not found at /bad/path/server.js');
   });
 });

@@ -1,15 +1,11 @@
-// Refactored TaskDetailPanel (single export) — uses WebviewPanelBase implementation.
-// Keep this file focused on the derived class; common helpers are in WebviewPanelBase.
 import * as vscode from 'vscode';
 import type { ArtifactClientLike, TaskClientLike } from '../../services/clientContracts';
 import { buildUpdateTaskPayload, type UpdateTaskParams } from '../../tasks/taskPayload';
 import { WebviewPanelBase } from './WebviewPanelBase';
 import type { Task, TaskArtifactAssignment, TaskCompletionCondition, Artifact } from '../../types';
 
-type TaskDetailDependencies = {
-    taskClient: Pick<TaskClientLike, 'getTask' | 'updateTask'>;
-    artifactClient?: Pick<ArtifactClientLike, 'listArtifacts'>;
-};
+import { MCPTaskClient } from '../../repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../repositories/mcp/artifactClient';
 
 
 /**
@@ -19,16 +15,15 @@ export class TaskDetailPanel extends WebviewPanelBase {
     public static currentPanel: TaskDetailPanel | undefined;
     private _taskId: string;
     private _task: Task | null = null;
-    private readonly taskClient: Pick<TaskClientLike, 'getTask' | 'updateTask'>;
-    private readonly artifactClient?: Pick<ArtifactClientLike, 'listArtifacts'>;
+    private readonly taskClient: MCPTaskClient;
+    private readonly artifactClient?: MCPArtifactClient;
 
     /**
      * Create or show the task detail panel
      * @param extensionUri - extension root URI
      * @param taskId - task id to display
-     * @param deps - dependencies (clients)
      */
-    public static createOrShow(extensionUri: vscode.Uri, taskId: string, deps: TaskDetailDependencies) {
+    public static createOrShow(extensionUri: vscode.Uri, taskId: string) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -60,7 +55,7 @@ export class TaskDetailPanel extends WebviewPanelBase {
             }
         );
 
-        TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId, deps);
+        TaskDetailPanel.currentPanel = new TaskDetailPanel(panel, extensionUri, taskId);
     }
 
     /**
@@ -68,13 +63,12 @@ export class TaskDetailPanel extends WebviewPanelBase {
      * @param panel - vscode WebviewPanel
      * @param extensionUri - extension root URI
      * @param taskId - task id
-     * @param deps - dependencies
      */
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string, deps: TaskDetailDependencies) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, taskId: string) {
         super(panel, extensionUri);
         this._taskId = taskId;
-        this.taskClient = deps.taskClient;
-        this.artifactClient = deps.artifactClient;
+        this.taskClient = (MCPTaskClient as any).getInstance();
+        this.artifactClient = (MCPArtifactClient as any).getInstance();
 
         this.loadTask();
     }
@@ -193,11 +187,7 @@ export class TaskDetailPanel extends WebviewPanelBase {
         }
     }
 
-    /**
-     * Backwards-compatible wrapper: allow calling getHtmlForWebview(task)
-     * @param arg - task object or full payload
-     * @returns HTML string for the webview
-     */
+
     /**
      * Backwards-compatible wrapper: allow calling getHtmlForWebview(task) or getHtmlForWebview(task, artifacts)
      * @param arg - task object or full payload

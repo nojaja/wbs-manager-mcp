@@ -1,4 +1,6 @@
 import { TaskDetailPanel } from '../../src/extension/views/panels/taskDetailPanel';
+import { MCPTaskClient } from '../../src/extension/repositories/mcp/taskClient';
+import { MCPArtifactClient } from '../../src/extension/repositories/mcp/artifactClient';
 
 // We will mock task and artifact client methods to simulate saveTask flows
 
@@ -12,54 +14,39 @@ describe('TaskDetailPanel save flows', () => {
   };
 
   test('saveTask success path triggers load and info message', async () => {
-    const deps = {
-      taskClient: {
-        getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-        updateTask: jest.fn().mockResolvedValue({ success: true })
-      },
-      artifactClient: {
-        listArtifacts: jest.fn().mockResolvedValue([])
-      }
-    };
+    const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: true }) };
+    const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     // call private saveTask
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 
   test('saveTask conflict path triggers reload option', async () => {
-    const deps = {
-      taskClient: {
-        getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-        updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true })
-      },
-      artifactClient: {
-        listArtifacts: jest.fn().mockResolvedValue([])
-      }
-    };
+    const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: false, conflict: true }) };
+    const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 
   test('saveTask failure shows error', async () => {
-    const deps = {
-      taskClient: {
-        getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }),
-        updateTask: jest.fn().mockResolvedValue({ success: false, error: 'fail' })
-      },
-      artifactClient: {
-        listArtifacts: jest.fn().mockResolvedValue([])
-      }
-    };
+    const taskClientMock = { getTask: jest.fn().mockResolvedValue({ id: 't1', title: 'T1', version: 1 }), updateTask: jest.fn().mockResolvedValue({ success: false, error: 'fail' }) };
+    const artifactClientMock = { listArtifacts: jest.fn().mockResolvedValue([]) };
+    jest.spyOn(MCPTaskClient as any, 'getInstance').mockReturnValue(taskClientMock as any);
+    jest.spyOn(MCPArtifactClient as any, 'getInstance').mockReturnValue(artifactClientMock as any);
 
-    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1', deps);
+    const panel = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't1');
     await (panel as any).saveTask({ title: 'New' });
 
-  expect(deps.taskClient.updateTask).toHaveBeenCalled();
+  expect(taskClientMock.updateTask).toHaveBeenCalled();
   });
 });

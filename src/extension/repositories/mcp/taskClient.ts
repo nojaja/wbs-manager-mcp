@@ -1,6 +1,7 @@
 import { MCPBaseClient } from './baseClient';
 import type { ArtifactReferenceInput, CompletionConditionInput } from './types';
 
+
 /**
  * タスク関連のJSON-RPC呼び出しを集約するクラス。
  */
@@ -16,17 +17,29 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.listTasks', args);
             const parsed = this.parseToolResponse(result);
-            if (Array.isArray(parsed.parsed)) {
-                return parsed.parsed;
-            }
-            if (parsed.error) {
-                this.outputChannel.appendLine(`[MCP Client] Failed to parse task list: ${parsed.error}`);
-            }
-            return [];
+            return this.extractTaskList(parsed);
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`);
+            this.outputChannel.log(`[MCP Client] Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`);
             return [];
         }
+    }
+
+    /**
+     * Extract task list array from parsed response, logging on error.
+     * @param parsed normalized parse result from parseToolResponse
+     * @param parsed.parsed the parsed payload (may be array)
+     * @param parsed.error error string if present
+     * @param parsed.rawText raw text fallback
+     * @returns an array of tasks when parse succeeded, otherwise empty array
+     */
+    private extractTaskList(parsed: { parsed?: any; error?: string; rawText?: string }): any[] {
+        if (Array.isArray(parsed.parsed)) {
+            return parsed.parsed;
+        }
+        if (parsed.error) {
+            this.outputChannel.log(`[MCP Client] Failed to parse task list: ${parsed.error}`);
+        }
+        return [];
     }
 
     /**
@@ -43,11 +56,11 @@ export class MCPTaskClient extends MCPBaseClient {
                 return parsed.parsed;
             }
             if (parsed.error) {
-                this.outputChannel.appendLine(`[MCP Client] Failed to get task: ${parsed.error}`);
+                this.outputChannel.log(`[MCP Client] Failed to get task: ${parsed.error}`);
             }
             return null;
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to get task: ${error instanceof Error ? error.message : String(error)}`);
+            this.outputChannel.log(`[MCP Client] Failed to get task: ${error instanceof Error ? error.message : String(error)}`);
             return null;
         }
     }
@@ -105,7 +118,7 @@ export class MCPTaskClient extends MCPBaseClient {
             const result = await this.callTool('wbs.planMode.createTask', params);
             const parsed = this.parseToolResponse(result);
             if (parsed.parsed) {
-                const createdId = typeof parsed.parsed === 'object' ? parsed.parsed.id : undefined;
+                const createdId = typeof parsed.parsed === 'object' ? parsed.parsed.task.id : undefined;
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: createdId, message };
             }

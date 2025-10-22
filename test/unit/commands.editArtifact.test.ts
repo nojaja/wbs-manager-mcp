@@ -1,21 +1,29 @@
+import { jest } from '@jest/globals';
+
+// Mock the artifactDetailPanel module so dynamic import used by the handler picks up this mock
+jest.mock('../../src/extension/views/panels/artifactDetailPanel', () => {
+  const createOrShow = jest.fn();
+  return {
+    ArtifactDetailPanel: { createOrShow },
+    // also provide default interop shape used by some transpilation modes
+    default: { ArtifactDetailPanel: { createOrShow } }
+  };
+});
+
 describe('editArtifactCommandHandler', () => {
   it('calls ArtifactDetailPanel.createOrShow when target exists', async () => {
     const artifactTreeView: any = { selection: [{ artifact: { id: 'a1' } }] };
-    const artifactProvider: any = {};
     const context: any = { extensionUri: {} };
-    const artifactClient: any = {};
 
-    // dynamic import path inside handler refers to ../views/panels/artifactDetailPanel
-    // the real module exists; we spy by importing and wrapping
-    const modPanel = await import('../../src/extension/views/panels/artifactDetailPanel');
-    const orig = modPanel.ArtifactDetailPanel;
-    modPanel.ArtifactDetailPanel = { createOrShow: jest.fn() } as any;
+    const modPanel = require('../../src/extension/views/panels/artifactDetailPanel');
 
-    const mod = await import('../../src/extension/commands/editArtifact');
-    await mod.editArtifactCommandHandler(artifactTreeView, artifactProvider, context, artifactClient);
+  const { EditArtifactHandler } = require('../../src/extension/commands/editArtifact');
+  const handler = new EditArtifactHandler();
+  // handler signature: handle(context, artifactTreeView, item?)
+  await handler.handle(context, artifactTreeView, artifactTreeView.selection[0]);
 
-    expect((modPanel.ArtifactDetailPanel as any).createOrShow).toHaveBeenCalledWith(context.extensionUri, 'a1', { artifactClient });
-
-    modPanel.ArtifactDetailPanel = orig;
+  const fn = (modPanel as any).ArtifactDetailPanel?.createOrShow || (modPanel as any).default?.ArtifactDetailPanel?.createOrShow;
+  expect(fn).toBeDefined();
+  expect(fn).toHaveBeenCalledWith(context.extensionUri, 'a1');
   });
 });

@@ -18,11 +18,11 @@ export class MCPArtifactClient extends MCPBaseClient {
                 return parsed.parsed as Artifact[];
             }
             if (parsed.error) {
-                this.outputChannel.appendLine(`[MCP Client] Failed to list artifacts: ${parsed.error}`);
+                this.outputChannel.log(`[MCP Client] Failed to list artifacts: ${parsed.error}`);
             }
             return [];
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to list artifacts: ${error instanceof Error ? error.message : String(error)}`);
+            this.outputChannel.log(`[MCP Client] Failed to list artifacts: ${error instanceof Error ? error.message : String(error)}`);
             return [];
         }
     }
@@ -112,11 +112,11 @@ export class MCPArtifactClient extends MCPBaseClient {
                 return parsed.parsed as Artifact;
             }
             if (parsed.error) {
-                this.outputChannel.appendLine(`[MCP Client] Failed to get artifact: ${parsed.error}`);
+                this.outputChannel.log(`[MCP Client] Failed to get artifact: ${parsed.error}`);
             }
             return null;
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to get artifact: ${error instanceof Error ? error.message : String(error)}`);
+            this.outputChannel.log(`[MCP Client] Failed to get artifact: ${error instanceof Error ? error.message : String(error)}`);
             return null;
         }
     }
