@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+//Logger
+import { Logger } from '../../Logger';
 
 export interface JsonRpcRequest {
     jsonrpc: string;
@@ -27,6 +28,9 @@ type PendingRequest = {
  * 送信キューとレスポンスのマッチング、通知送信、エラー処理を一元化する。
  */
 export class MCPBaseClient {
+
+    protected static instance?: MCPBaseClient;
+
     private static globalRequestId = 0;
     protected readonly pendingRequests = new Map<number, PendingRequest>();
     protected writer: ((payload: string) => void) | null = null;
@@ -39,12 +43,13 @@ export class MCPBaseClient {
     // configuration
     protected readonly requestTimeoutMs: number;
 
+    protected readonly outputChannel: Logger = Logger.getInstance();
+
     /**
-     * @param outputChannel ログ出力先となるVSCodeのOutputChannel
     * @param opts オプション: requestTimeoutMs (ms)
     * @param opts.requestTimeoutMs リクエストタイムアウト（ミリ秒）。未指定時は10000
      */
-    constructor(protected readonly outputChannel: vscode.OutputChannel, opts?: { requestTimeoutMs?: number }) {
+    constructor(opts?: { requestTimeoutMs?: number }) {
         this.requestTimeoutMs = opts?.requestTimeoutMs ?? 10000;
         // create deferred
         let resolveFn!: () => void;
@@ -56,6 +61,22 @@ export class MCPBaseClient {
         this.writerReady = { promise: p, resolve: resolveFn, reject: rejectFn };
     }
 
+    // サブクラス呼び出し時にそのサブクラスのインスタンス（シングルトン）を返す汎用実装
+    /**
+     * サブクラスのシングルトンインスタンスを返します。サブクラス側で初回呼び出し時にインスタンスが生成されます。
+     *
+     * @template T サブクラスの型
+     * @param {...any} args コンストラクタに渡す任意の引数
+     * @returns {T} サブクラスのシングルトンインスタンス
+     */
+    public static getInstance<T extends MCPBaseClient>(this: (new (...args: any[]) => T) & { instance?: T }, ...args: any[]): T {
+        const ctor = this;
+        if (!ctor.instance) {
+            ctor.instance = new ctor(...args);
+        }
+        return ctor.instance;
+    }
+
     /**
      * ServerService から受け取った書き込み関数を登録する。
      *
@@ -63,7 +84,7 @@ export class MCPBaseClient {
      */
     public setWriter(writer: (payload: string) => void): void {
         this.writer = writer;
-        this.outputChannel.appendLine(`[MCP Client] writer set`);
+        this.outputChannel.log(`[MCP Client] writer set`);
         // resolve writerReady if exists
         try {
             this.writerReady?.resolve();
@@ -117,7 +138,7 @@ export class MCPBaseClient {
             const parsed = JSON.parse(rawLine) as JsonRpcResponse;
             this.handleResponseInternal(parsed);
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] Failed to parse response: ${error instanceof Error ? error.message : String(error)}`);
+            this.outputChannel.log(`[MCP Client] Failed to parse response: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -130,7 +151,7 @@ export class MCPBaseClient {
         try {
             this.handleResponseInternal(parsed as JsonRpcResponse);
         } catch (error) {
-            this.outputChannel.appendLine(`[MCP Client] handleResponse error: ${error instanceof Error ? error.message : String(error)}`);
+            this.outputChannel.log(`[MCP Client] handleResponse error: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
@@ -141,7 +162,7 @@ export class MCPBaseClient {
      * @param signal 終了シグナル
      */
     public onServerExit(code: number | null, signal: NodeJS.Signals | null): void {
-        this.outputChannel.appendLine(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
+        this.outputChannel.log(`[MCP Client] Server process exited with code ${code}, signal: ${signal}`);
         for (const [, pending] of this.pendingRequests.entries()) {
             pending.reject(new Error('Server process exited'));
         }
@@ -157,7 +178,7 @@ export class MCPBaseClient {
      * MCPクライアントの停止処理。writerを解除し保留中リクエストを破棄する。
      */
     public stop(): void {
-        this.outputChannel.appendLine('[MCP Client] Detaching from server (clearing writer and pending requests)');
+        this.outputChannel.log('[MCP Client] Detaching from server (clearing writer and pending requests)');
         this.writer = null;
         for (const [, pending] of this.pendingRequests.entries()) {
             pending.reject(new Error('MCP client stopped'));
@@ -194,32 +215,28 @@ export class MCPBaseClient {
      * @param result ツール実行結果
      * @returns 正規化済みの解析結果
      */
-    protected parseToolResponse(result: unknown): { parsed?: any; hintSummary: string; rawText?: string; error?: string } {
+    protected parseToolResponse(result: unknown): { hintSummary?: string; parsed?: any; rawText?: string; error?: string } {
         const content = (result as any)?.content?.[0]?.text;
         const rawText = typeof content === 'string' ? content : undefined;
-        const hint = (result as any)?.llmHints ?? null;
-        const hintSummary = Array.isArray(hint?.nextActions)
-            ? hint.nextActions.map((action: any) => `- ${action?.detail ?? ''}`).join('\n')
-            : '';
 
-        if (!content) {
-            return {
-                hintSummary,
-                rawText,
-                error: typeof result === 'string' ? result : JSON.stringify(result)
-            };
-        }
+        // If we have a string content try to parse it as JSON first.
+        if (typeof content === 'string' && content.trim().length > 0) {
+            try {
+                const parsed = JSON.parse(content);
+                const hint = parsed.llmHints ?? null;
+                const hintSummary = Array.isArray(hint?.nextActions)
+                    ? hint.nextActions.map((action: any) => `- ${action?.detail ?? ''}`).join('\n')
+                    : undefined;
 
-        try {
-            const parsed = JSON.parse(content);
-            return { parsed, hintSummary, rawText };
-        } catch (error) {
-            // JSON でなければ後続のプレーンテキスト解析へフォールバック
+                return { parsed, hintSummary, rawText };
+            } catch (error) {
+                // JSON でなければ後続のプレーンテキスト解析へフォールバック
+            }
         }
 
         const analysis = this.analyzePlainContent(content);
         const fallbackError = typeof content === 'string' ? content : JSON.stringify(content);
-        return this.mapAnalysisToResult(analysis, hintSummary, rawText, fallbackError);
+        return this.mapAnalysisToResult(analysis, rawText, fallbackError);
     }
 
     /**
@@ -254,18 +271,17 @@ export class MCPBaseClient {
      */
     protected mapAnalysisToResult(
         analysis: { type: 'conflict' | 'error' | 'success' | null; id?: string } | null,
-        hintSummary: string,
         rawText: string | undefined,
         fallbackError: string
-    ): { parsed?: any; hintSummary: string; rawText?: string; error?: string } {
+    ): { parsed?: any; rawText?: string; error?: string } {
         if (!analysis || analysis.type === null) {
-            return { hintSummary, rawText, error: fallbackError };
+            return { rawText, error: fallbackError };
         }
         if (analysis.type === 'conflict' || analysis.type === 'error') {
-            return { hintSummary, rawText, error: fallbackError };
+            return { rawText, error: fallbackError };
         }
         const payload = analysis.id ? { id: analysis.id } : true;
-        return { parsed: payload, hintSummary, rawText };
+        return { parsed: payload, rawText };
     }
 
     /**
@@ -343,7 +359,7 @@ export class MCPBaseClient {
      */
     protected log(message: string, meta?: Record<string, unknown>): void {
         const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
-        this.outputChannel.appendLine(`${message}${metaStr}`);
+        this.outputChannel.log(`${message}${metaStr}`);
     }
 
     /**

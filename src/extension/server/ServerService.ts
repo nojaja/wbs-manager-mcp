@@ -3,6 +3,8 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+//Logger
+import { Logger } from '../Logger';
 
 type ClientRegistration = {
   handleResponseFromServer?: (resp: string) => void;
@@ -15,22 +17,33 @@ type ClientRegistration = {
  * サーバプロセス管理専用サービス
  */
 export class ServerService {
+
+  protected static instance?: ServerService;
   /** サーバプロセス */
   private serverProcess: child_process.ChildProcess | null = null;
   /** 登録されたクライアント群 */
   private readonly registeredClients = new Set<ClientRegistration>();
   /** 出力チャネル */
-  private outputChannel: { appendLine: (msg: string) => void; show?: () => void };
+  protected readonly outputChannel: Logger = Logger.getInstance();
 
   /**
    * コンストラクタ
-   * @param outputChannel ログ出力用チャネル
-   * @param outputChannel.appendLine
-   * @param outputChannel.show
    */
-  constructor(outputChannel: { appendLine: (msg: string) => void; show?: () => void }) {
-    this.outputChannel = outputChannel;
+  constructor() {
   }
+
+
+  /**
+   * ServerServiceクラスのシングルトンインスタンスを取得します
+   * @returns {ServerService} ServerServiceインスタンス
+   */
+  public static getInstance(): ServerService {
+    if (!ServerService.instance) {
+      ServerService.instance = new ServerService();
+    }
+    return ServerService.instance;
+  }
+
 
   /**
    * サーバ実行ファイルの存在を検証
@@ -42,7 +55,7 @@ export class ServerService {
     // 処理概要: 与えられたパスにサーバ実行ファイルが存在するかを検証する
     // 実装理由: 起動処理を行う前に必須ファイルの有無を確認し、無駄な処理や例外を防ぐため
     if (!fs.existsSync(serverPath)) {
-      this.outputChannel.appendLine(`Error: Server file not found at ${serverPath}`);
+      this.outputChannel.log(`Error: Server file not found at ${serverPath}`);
       return false;
     }
     return true;
@@ -60,7 +73,7 @@ export class ServerService {
     // 処理名: サーバプロセス起動
     // 処理概要: Node 実行パスで指定スクリプトを spawn し、環境変数と作業ディレクトリを設定して起動する
     // 実装理由: サーバを独立プロセスとして動作させ、拡張機能本体とプロセス分離を行うため
-    this.outputChannel.appendLine(`Starting MCP server from: ${serverPath}`);
+    this.outputChannel.log(`Starting MCP server from: ${serverPath}`);
 
     // サーバ用環境変数を設定
     const serverEnv = {
@@ -102,7 +115,7 @@ export class ServerService {
     });
     // 起動エラー時の処理
     this.serverProcess.on('error', (err) => {
-      this.outputChannel.appendLine(`Server process error: ${err.message}`);
+      this.outputChannel.log(`Server process error: ${err.message}`);
       this.serverProcess = null;
     });
   }
@@ -152,8 +165,8 @@ export class ServerService {
     if (!error) {
       return;
     }
-    this.outputChannel.appendLine(`${error}`);
-    this.outputChannel.show?.();
+    this.outputChannel.log(`${error}`);
+    this.outputChannel.show();
   }
 
   /**
@@ -162,9 +175,9 @@ export class ServerService {
    * @param signal シグナル
    */
   private handleServerExit(code: number | null, signal: NodeJS.Signals | null): void {
-    this.outputChannel.appendLine(`Server process exited with code ${code}, signal: ${signal}`);
+    this.outputChannel.log(`Server process exited with code ${code}, signal: ${signal}`);
     if (code !== 0) {
-      this.outputChannel.appendLine(`MCP server exited unexpectedly with code ${code}`);
+      this.outputChannel.log(`MCP server exited unexpectedly with code ${code}`);
     }
     this.serverProcess = null;
     this.notifyClientsOfExit(code, signal);
@@ -213,7 +226,7 @@ export class ServerService {
    */
   private logClientError(prefix: string, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    this.outputChannel.appendLine(`${prefix}: ${message}`);
+    this.outputChannel.log(`${prefix}: ${message}`);
   }
 
   /**
@@ -224,7 +237,7 @@ export class ServerService {
     // 処理概要: プロセスが存在する場合は kill して参照をクリアする
     // 実装理由: 拡張機能の終了や再起動時にサーバが残らないようにするため
     if (this.serverProcess) {
-      this.outputChannel.appendLine('Stopping MCP server...');
+      this.outputChannel.log('Stopping MCP server...');
       this.serverProcess.kill();
       this.serverProcess = null;
     }
@@ -295,7 +308,7 @@ export class ServerService {
 
     // 設定ファイルを書き出し
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
-    this.outputChannel.appendLine(`Created MCP configuration at: ${mcpConfigPath}`);
+    this.outputChannel.log(`Created MCP configuration at: ${mcpConfigPath}`);
   }
 
   /**
@@ -332,7 +345,7 @@ export class ServerService {
       await this.startAndAttachClient(clients ?? [], serverPath, workspaceRoot);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.outputChannel.appendLine(`Failed to start server: ${message}`);
+      this.outputChannel.log(`Failed to start server: ${message}`);
       vscode.window.showErrorMessage(`Failed to start MCP server: ${message}`);
     }
   }
@@ -369,7 +382,7 @@ export class ServerService {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.outputChannel.appendLine(`Failed to start and attach MCP client: ${message}`);
+      this.outputChannel.log(`Failed to start and attach MCP client: ${message}`);
     }
   }
 

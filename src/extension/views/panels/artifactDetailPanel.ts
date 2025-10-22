@@ -3,9 +3,7 @@ import type { ArtifactClientLike } from '../../services/clientContracts';
 import { WebviewPanelBase } from './WebviewPanelBase';
 import type { Artifact as ArtifactType } from '../../types';
 
-type ArtifactDetailDependencies = {
-  artifactClient: Pick<ArtifactClientLike, 'getArtifact' | 'updateArtifact' | 'listArtifacts'>;
-};
+import { MCPArtifactClient } from '../../repositories/mcp/artifactClient';
 
 // Removed local Artifact interface in favor of centralized import
 type Artifact = ArtifactType;
@@ -23,9 +21,8 @@ export class ArtifactDetailPanel extends WebviewPanelBase {
    * Create or show the artifact detail panel
    * @param extensionUri - extension root URI
    * @param artifactId - artifact identifier to show
-   * @param deps - dependencies (clients)
    */
-  public static createOrShow(extensionUri: vscode.Uri, artifactId: string, deps: ArtifactDetailDependencies) {
+  public static createOrShow(extensionUri: vscode.Uri, artifactId: string) {
     const column = vscode.window.activeTextEditor
       ? vscode.window.activeTextEditor.viewColumn
       : undefined;
@@ -57,7 +54,7 @@ export class ArtifactDetailPanel extends WebviewPanelBase {
       }
     );
 
-    ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId, deps);
+    ArtifactDetailPanel.currentPanel = new ArtifactDetailPanel(panel, extensionUri, artifactId);
   }
 
   /**
@@ -65,13 +62,11 @@ export class ArtifactDetailPanel extends WebviewPanelBase {
    * @param panel - vscode WebviewPanel instance
    * @param extensionUri - extension root URI
    * @param artifactId - artifact id to display
-   * @param deps - dependencies object
    */
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string, deps: any) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, artifactId: string) {
     super(panel, extensionUri);
     this._artifactId = artifactId;
-    // Tests sometimes pass the client directly instead of deps object
-    this.artifactClient = deps?.artifactClient ?? deps;
+    this.artifactClient = (MCPArtifactClient as any).getInstance();
 
     this.loadArtifact();
   }

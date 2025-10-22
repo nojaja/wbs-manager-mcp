@@ -2,11 +2,15 @@ import * as vscode from 'vscode';
 import type { Artifact } from '../../repositories/mcp/types';
 import type { ArtifactClientLike } from '../../services/clientContracts';
 
+import { MCPArtifactClient } from '../../repositories/mcp/artifactClient';
 /**
  * プロジェクト成果物ツリープロバイダ
  * 成果物一覧の読み込み・操作を提供する
  */
 export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTreeItem> {
+    
+    private static instance: ArtifactTreeProvider;
+
     private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<ArtifactTreeItem | undefined | null | void>();
     readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -19,10 +23,20 @@ export class ArtifactTreeProvider implements vscode.TreeDataProvider<ArtifactTre
 
     /**
      * コンストラクタ
-     * @param client 成果物APIを提供するクライアント
      */
-    constructor(client: ArtifactClientLike) {
-        this.artifactClient = client;
+    constructor() {
+        this.artifactClient = (MCPArtifactClient as any).getInstance();
+    }
+
+    /**
+     * ArtifactTreeProviderクラスのシングルトンインスタンスを取得します
+     * @returns {ArtifactTreeProvider} ArtifactTreeProviderインスタンス
+     */
+    public static getInstance(): ArtifactTreeProvider {
+        if (!ArtifactTreeProvider.instance) {
+            ArtifactTreeProvider.instance = new ArtifactTreeProvider();
+        }
+        return ArtifactTreeProvider.instance;
     }
 
     /**
