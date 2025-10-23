@@ -34,7 +34,6 @@ and to execute tasks or audit deliverables step by step through MCP integration.
 Since `.vscode/mcp.json` is auto-generated, the tool is automatically detected by MCP clients such as Copilot.
 Responses are returned in `result.content[0].text` as JSON or text with ✅/❌ indicators.
 
-## Here is the English translation (leaving backquoted content untranslated as requested):
 
 **Example 1: Identifying Tasks**
 
