@@ -5,11 +5,11 @@ VS Code拡張＋ローカルMCPサーバ（stdio/JSON-RPC）によるWBS（Work 
 
 ## 概要
 
-この拡張は、VS Code上でタスク階層・成果物・依存関係を直感的に管理できるWBSツールです。
-拡張がローカルMCPサーバ（Node.js/SQLite）を子プロセスとしてspawnし、標準入出力（stdio）経由でJSON-RPC通信を行います。
-UIはTreeView（WBS Projects/Artifacts）とWebview（タスク詳細編集）で構成され、楽観ロックやドラッグ&ドロップ、成果物管理もサポートします。
+このVS Code拡張は、VS Code上でタスク階層・成果物・依存関係を直感的に管理できるWBSツールです。
+ローカル起動型のMCPサーバとしても動作し、Github-Copilotなどのagentにて大きな作業の分解とプランニングを行ったり
+Github-Copilotなどのagentにステップごとにタスクの実行と成果物の監査を行うことが出来ます。
 
-## 主な機能
+-## 主な機能
 
 - VS Code拡張＋ローカルMCPサーバ（stdio/JSON-RPC）
 - タスク階層（親子関係）の作成・編集・ドラッグ&ドロップ移動
@@ -66,28 +66,31 @@ UIはTreeView（WBS Projects/Artifacts）とWebview（タスク詳細編集）�
 - 初回起動時にスキーマは自動初期化されます。
 - テーブル: tasks, artifacts, task_artifacts, task_completion_conditions, dependencies, task_history
 
-バックアップ例（PowerShell）:
-```powershell
-Copy-Item -Path .\data\wbs.db -Destination .\data\wbs.db.backup -Force
-```
-初期化例:
-```powershell
-Remove-Item -Path .\data\wbs.db -Force
-```
-
 ## 開発・テスト
 ### 前提
 
 - Node.js 18.x 以上（開発時は Node.js v18.20.7 を想定しています）
 - VS Code 1.85.0 以上
 
-### ソースからのビルド
+### ソースからのビルドと主なスクリプト
+以下はルートの `package.json` に定義されている主要なスクリプトです。PowerShell 環境で実行する際は、複数コマンドを連結する場合に `;` を使用してください。
+
 - `npm install` — 依存関係をインストール
-- `npm test` — Jest＋lintによるテスト（カバレッジ出力あり）
-- `npm run build` — TypeScriptビルド
-- `npm run watch` — ウォッチビルド
-- `npm run start-server-dev` — サーバ単体起動（開発用、stdio/JSON-RPC）
-- `npm run start-extension-dev` — 拡張のみ再起動
+- `npm test` — ユニットテスト（Jest）を実行。実際は `npm run test:unit` にマッピングされています。
+- `npm run build` — ビルド（TypeScript コンパイル、webview バンドル、ドキュメント出力、依存グラフ生成）
+- `npm run build:ts` — TypeScript のビルド (`tsc -p ./`)
+- `npm run build:webview` — Webview の webpack ビルド（`webpack.webview.config.js` を使用）
+- `npm run watch:webview` — Webview の開発ウォッチビルド
+- `npm run start-server-dev` — ローカル MCP サーバを単体で起動（出力ディレクトリの `out/mcpServer/index.js` を実行）
+- `npm run start-extension-dev` — VS Code を拡張開発モードで起動
+- `npm run lint` — eslint と dependency-cruiser による静的解析
+- `npm run docs` — typedoc による API ドキュメント生成
+
+例: 依存インストールしてユニットテストを実行する（PowerShell）:
+
+```powershell
+npm install ; npm run test
+```
 
 ## ディレクトリ構成（主要ファイル）
 ```
@@ -96,28 +99,29 @@ wbs-mcp/
 │   ├── architecture.md
 │   └── copilot_examples.md
 ├── src/
-│   ├── extension.ts                # VS Code extension entry point (spawn server, register views/commands)
-│   ├── mcpClient.ts                # VS Code extension JSON-RPC client (stdio) + tool wrappers
-│   ├── panels/
-│   │   ├── taskDetailPanel.ts      # Task detail webview (edit/save)
-│   │   └── artifactDetailPanel.ts  # Artifact detail webview
-│   ├── server/
-│   │   ├── index.ts                # Stdio JSON-RPC MCP server (initialize/tools.list/tools.call)
-│   │   └── db-simple.ts            # SQLite repository and schema
-│   └── views/
-│       ├── wbsTree.ts              # WBS tree view (drag&drop move)
-│       └── artifactTree.ts         # Artifact list view
-├── test/                           # Jest tests (unit/integration)
+│   ├── extension/
+│   │   ├── index.ts                # VS Code extension entry point (spawn server, register views/commands)
+│   │   ├── CommandRegistry.ts
+│   │   ├── ExtensionController.ts
+│   │   └── panels/                 # webview パネル関連
+│   ├── mcpServer/                  # 子プロセスとして起動するローカル MCP サーバ実装
+│   │   ├── index.ts
+│   │   └── db/
+│   ├── views/                      # TreeView / UI ロジック
+│   │   ├── wbsTree.ts
+│   │   └── artifactTree.ts
+├── test/                           # Jest テスト（unit / e2e / integration）
 ├── __mocks__/vscode.ts             # VS Code API mock for tests
 ├── coverage/                       # Jest coverage reports
 ├── jest.config.js
+├── jest.e2e.config.js
 ├── package.json
 ├── tsconfig.json
 └── README.md / QUICKSTART.md
 
 ## 貢献
 
-貢献歓迎です。Issue や Pull Request を送ってください。
+貢献歓迎します。Issue や Pull Request を送ってください。開発にあたっては、まず `npm install` → `npm run lint` → `npm run test` を実行してローカルで検証してください。
 
 ## ライセンス
 

@@ -23,7 +23,26 @@ export default class WbsAgentTaskCompletionRequestTool extends Tool {
   constructor() {
     super({
       name: 'wbs.agentmode.taskCompletionRequest',
-      description: 'Request to mark a running task as completed. Requires audits for all completionConditions. If audits are missing or any are not approved, the call is rejected and completionConditions are returned.'
+      description: 'Request to mark a running task as completed. Requires audits for all completionConditions. If audits are missing or any are not approved, the call is rejected and completionConditions are returned.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string', description: 'Task ID' },
+          audits: {
+            type: 'array',
+            description: 'Array of audit results for completion conditions',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: 'Completion condition id' },
+                ok: { type: 'boolean', description: 'Audit passed/approved flag' }
+              },
+              required: ['id', 'ok']
+            }
+          }
+        },
+        required: ['taskId']
+      }
     });
     this.repo = new TaskRepository();
   }
@@ -44,23 +63,23 @@ export default class WbsAgentTaskCompletionRequestTool extends Tool {
       const task = await this.repo.getTask(taskId);
       if (!task) throw new Error(`Task not found: ${taskId}`);
 
-  const completionConditions = task.completionConditions ?? [];
-  // 処理概要: 各完了条件に対して監査結果が存在し ok===true であることを検証
-  // 実装理由: 完了条件が満たされていない状態でタスクを完了扱いにすると一貫性が壊れるため
-  const missing = completionConditions.filter((c: any) => !audits.find(a => a.id === c.id && a.ok === true));
+      const completionConditions = task.completionConditions ?? [];
+      // 処理概要: 各完了条件に対して監査結果が存在し ok===true であることを検証
+      // 実装理由: 完了条件が満たされていない状態でタスクを完了扱いにすると一貫性が壊れるため
+      const missing = completionConditions.filter((c: any) => !audits.find(a => a.id === c.id && a.ok === true));
       if (missing.length > 0) {
         // reject and return completionConditions for the client to inspect
         const llmHints = { nextActions: [], notes: ['Completion conditions missing or not approved'] };
         return { content: [{ type: 'text', text: JSON.stringify({ accepted: false, completionConditions }, null, 2) }], llmHints };
       }
 
-  // All audits OK -> set task to completed
-  // 処理概要: タスクを completed に遷移させる
-  // 実装理由: updateTask のシグネチャ変更に伴い、ステータス更新は updateTaskStatus を使用する
-  await this.repo.updateTaskStatus(taskId, 'completed', true);
-  const updated = await this.repo.getTask(taskId);
-  const llmHints = { nextActions: [], notes: ['Task marked as completed'] };
-  return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }], llmHints };
+      // All audits OK -> set task to completed
+      // 処理概要: タスクを completed に遷移させる
+      // 実装理由: updateTask のシグネチャ変更に伴い、ステータス更新は updateTaskStatus を使用する
+      await this.repo.updateTaskStatus(taskId, 'completed', true);
+      const updated = await this.repo.getTask(taskId);
+      const llmHints = { nextActions: [], notes: ['Task marked as completed'] };
+      return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }], llmHints };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const llmHints = { nextActions: [{ action: 'wbs.agentmode.taskCompletionRequest', detail: 'Retry' }], notes: [`Exception message: ${message}`] };
