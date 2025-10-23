@@ -1,98 +1,132 @@
+# wbs-manager-mcp
 
-# wbs-mcp
+A WBS (Work Breakdown Structure) management tool combining a VS Code extension and a local MCP server (stdio/JSON-RPC).
 
-VS Code拡張＋ローカルMCPサーバ（stdio/JSON-RPC）によるWBS（Work Breakdown Structure）管理ツール
+## Overview
 
-## 概要
+This VS Code extension is a WBS tool that allows intuitive management of task hierarchies, deliverables, and dependencies directly within VS Code.
+It also functions as a locally launched MCP server, enabling agents such as GitHub Copilot to perform large-scale task decomposition and planning,
+and to execute tasks or audit deliverables step by step through MCP integration.
 
-このVS Code拡張は、VS Code上でタスク階層・成果物・依存関係を直感的に管理できるWBSツールです。
-ローカル起動型のMCPサーバとしても動作し、Github-Copilotなどのagentにて大きな作業の分解とプランニングを行ったり
-Github-Copilotなどのagentにステップごとにタスクの実行と成果物の監査を行うことが出来ます。
+## Main Features
 
--## 主な機能
+* VS Code extension + local MCP server (stdio/JSON-RPC)
+* Create, edit, and drag & drop task hierarchies (parent-child relationships)
+* Register, edit, and delete deliverables (artifacts)
+* Link tasks and deliverables (deliverable/prerequisite)
+* Manage task dependencies (cycle prevention)
+* Edit task details via Webview (Ctrl+S to save, optimistic locking supported)
+* TreeView UI (“WBS Projects” and “Artifacts” in Explorer sidebar)
+* Persistent storage using SQLite database
+* MCP tool invocation (operable via natural language from Copilot, etc.)
 
-- VS Code拡張＋ローカルMCPサーバ（stdio/JSON-RPC）
-- タスク階層（親子関係）の作成・編集・ドラッグ&ドロップ移動
-- 成果物（Artifacts）の登録・編集・削除
-- タスクと成果物の関連付け（deliverable/prerequisite）
-- タスクの依存関係管理（サイクル防止）
-- Webviewによるタスク詳細編集（Ctrl+Sで保存、楽観ロック対応）
-- TreeView UI（Explorerサイドバーに「WBS Projects」「Artifacts」）
-- SQLiteデータベースによる永続化
-- MCPツール呼び出し（Copilot等から自然言語で操作可能）
+## Usage (UI Operations)
 
+* Display and edit the task hierarchy in the “WBS Projects” view
 
-## 使い方（UI操作）
+  * Right-click or use the inline menu for “Open”, “Delete”, “Add Child Task”
+  * Change hierarchy via drag & drop
+* Add, edit, or delete deliverables in the “Artifacts” view
+* Click a task to open its detail Webview (Ctrl+S to save; version mismatches are notified with ❌)
 
-- 「WBS Projects」ビューでタスク階層を表示・編集
-  - 右クリックやインラインメニューで「開く」「削除」「子タスク追加」
-  - ノードのドラッグ&ドロップで親子関係を変更
-- 「Artifacts」ビューで成果物の追加・編集・削除
-- タスクをクリックで詳細Webview（Ctrl+Sで保存、バージョン不一致は❌で通知）
+## Copilot / MCP Integration Examples
 
-## Copilot/MCP連携例
+Since `.vscode/mcp.json` is auto-generated, the tool is automatically detected by MCP clients such as Copilot.
+Responses are returned in `result.content[0].text` as JSON or text with ✅/❌ indicators.
 
-`.vscode/mcp.json`が自動生成されるため、Copilot等のMCPクライアントからツールが自動検出されます。
-応答は `result.content[0].text` にJSONまたは✅/❌付きテキストで返ります。
+## Here is the English translation (leaving backquoted content untranslated as requested):
 
-例:
-- 「ルートに『設計』タスクを作成して」→ `wbs.createTask { title }`
-- 「子タスク『画面設計』を『設計』の下に追加して」→ `wbs.createTask { title, parentId }`
-- 「成果物『仕様書.md』を登録して」→ `artifacts.createArtifact { title: "仕様書.md" }`
+**Example 1: Identifying Tasks**
 
-詳細例は `docs/copilot_examples.md` を参照。
+```
+You are a Project Manager.  
+From now on, you need to create a project work plan based on the following instructions.  
+Use the mcp tool 'wbs.planMode.createTask' to identify all necessary tasks.  
+Tasks should be divided into up to three levels, and you must register them step by step starting from the first level.  
+After registering up to the third level, confirm the results with the user.  
+Developers will refer only to the task descriptions during implementation, so you need to transcribe all information required for the work from the instruction document into the descriptions.  
 
-## MCPツール一覧（代表例）
+Below is the specification document:  
+＊＊＊＊
+```
 
-- `wbs.createTask` — タスク作成（{ title, description?, parentId?, assignee?, estimate?, deliverables?, prerequisites?, completionConditions? }）
-- `wbs.getTask` — タスク詳細取得（{ taskId }）
-- `wbs.updateTask` — タスク更新（{ taskId, ...updates, ifVersion }）
-- `wbs.listTasks` — タスク一覧取得（{ parentId? }）
-- `wbs.deleteTask` — タスク削除（{ taskId }）
-- `wbs.moveTask` — タスク移動（{ taskId, newParentId }）
-- `wbs.impotTask` — 複数タスク一括登録（{ tasks: [...] }）
-- `artifacts.listArtifacts` — 成果物一覧取得
-- `artifacts.getArtifact` — 成果物詳細取得（{ artifactId }）
-- `artifacts.createArtifact` — 成果物作成（{ title, uri?, description? }）
-- `artifacts.updateArtifact` — 成果物更新（{ artifactId, ...updates, ifVersion }）
-- `artifacts.deleteArtifact` — 成果物削除（{ artifactId }）
+**Example 2: Task Breakdown and Information Completion**
 
-（ツールの詳細・引数例は `docs/architecture.md` も参照）
+```
+Execute `wbs.planmode.listDraftTasks` to find incomplete tasks, and use `wbs.planMode.updateTask` to update the required fields (title/description/estimate/completionConditions/artifacts/dependency).  
+Once all required fields are set via `wbs.planMode.updateTask`, the task status will be updated and it will be removed from the `wbs.planmode.listDraftTasks` list.  
+You need to continue updating tasks until the result of `wbs.planmode.listDraftTasks` becomes empty.  
+Artifacts should be registered using `wbs.planMode.createArtifact`, and an ID will be generated at the time of registration.  
+You must pre-register artifacts that are expected deliverables based on the task contents.
+```
 
-## データ保存
+**Example 3: Task Execution**
 
-- SQLiteデータベース `./data/wbs.db` に永続化
-- 保存先は `WBS_MCP_DATA_DIR` 環境変数で指定（拡張からはワークスペースルート）
-- 初回起動時にスキーマは自動初期化されます。
-- テーブル: tasks, artifacts, task_artifacts, task_completion_conditions, dependencies, task_history
+```
+You are a developer — please start your work.  
+The next task to perform can be retrieved using `wbs.agentmode.getNextTask`,  
+and completion should be reported using `wbs.agentmode.taskCompletionRequest`, with the arguments being the taskId obtained from getNextTask and the completion conditions (audits).  
+If you cannot complete the task, it may be due to missing completion conditions.  
+Repeat this process until `wbs.agentmode.getNextTask` no longer returns a task.
+```
 
-## 開発・テスト
-### 前提
+See `docs/copilot_examples.md` for detailed examples.
 
-- Node.js 18.x 以上（開発時は Node.js v18.20.7 を想定しています）
-- VS Code 1.85.0 以上
+## MCP Tool List
 
-### ソースからのビルドと主なスクリプト
-以下はルートの `package.json` に定義されている主要なスクリプトです。PowerShell 環境で実行する際は、複数コマンドを連結する場合に `;` を使用してください。
+* `wbs.createTask` — Create a task ({ title, description?, parentId?, assignee?, estimate?, deliverables?, prerequisites?, completionConditions? })
+* `wbs.getTask` — Get task details ({ taskId })
+* `wbs.updateTask` — Update task ({ taskId, ...updates, ifVersion })
+* `wbs.listTasks` — List tasks ({ parentId? })
+* `wbs.deleteTask` — Delete a task ({ taskId })
+* `wbs.moveTask` — Move a task ({ taskId, newParentId })
+* `wbs.importTask` — Bulk import multiple tasks ({ tasks: [...] })
+* `artifacts.listArtifacts` — List all artifacts
+* `artifacts.getArtifact` — Get artifact details ({ artifactId })
+* `artifacts.createArtifact` — Create an artifact ({ title, uri?, description? })
+* `artifacts.updateArtifact` — Update an artifact ({ artifactId, ...updates, ifVersion })
+* `artifacts.deleteArtifact` — Delete an artifact ({ artifactId })
 
-- `npm install` — 依存関係をインストール
-- `npm test` — ユニットテスト（Jest）を実行。実際は `npm run test:unit` にマッピングされています。
-- `npm run build` — ビルド（TypeScript コンパイル、webview バンドル、ドキュメント出力、依存グラフ生成）
-- `npm run build:ts` — TypeScript のビルド (`tsc -p ./`)
-- `npm run build:webview` — Webview の webpack ビルド（`webpack.webview.config.js` を使用）
-- `npm run watch:webview` — Webview の開発ウォッチビルド
-- `npm run start-server-dev` — ローカル MCP サーバを単体で起動（出力ディレクトリの `out/mcpServer/index.js` を実行）
-- `npm run start-extension-dev` — VS Code を拡張開発モードで起動
-- `npm run lint` — eslint と dependency-cruiser による静的解析
-- `npm run docs` — typedoc による API ドキュメント生成
+(See `docs/architecture.md` for detailed specifications and parameter examples.)
 
-例: 依存インストールしてユニットテストを実行する（PowerShell）:
+## Data Storage
+
+* Persisted in a SQLite database at `./data/wbs.db`
+* The location can be specified via the `WBS_MCP_DATA_DIR` environment variable (workspace root by default)
+* Schema is automatically initialized at first launch
+* Tables: tasks, artifacts, task_artifacts, task_completion_conditions, dependencies, task_history
+
+## Development & Testing
+
+### Requirements
+
+* Node.js 18.x or later (tested with Node.js v18.20.7)
+* VS Code 1.85.0 or later
+
+### Building from Source and Key Scripts
+
+The root `package.json` defines the following main scripts.
+When running on PowerShell, use `;` to separate multiple commands.
+
+* `npm install` — Install dependencies
+* `npm test` — Run unit tests with Jest (mapped to `npm run test:unit`)
+* `npm run build` — Build (TypeScript compilation, Webview bundling, docs generation, dependency graph creation)
+* `npm run build:ts` — Build TypeScript (`tsc -p ./`)
+* `npm run build:webview` — Build Webview with webpack (`webpack.webview.config.js`)
+* `npm run watch:webview` — Watch build for Webview development
+* `npm run start-server-dev` — Launch local MCP server standalone (executes `out/mcpServer/index.js`)
+* `npm run start-extension-dev` — Launch VS Code in extension development mode
+* `npm run lint` — Run static analysis via eslint and dependency-cruiser
+* `npm run docs` — Generate API documentation via typedoc
+
+Example: install dependencies and run unit tests (PowerShell)
 
 ```powershell
 npm install ; npm run test
 ```
 
-## ディレクトリ構成（主要ファイル）
+## Directory Structure (Key Files)
+
 ```
 wbs-mcp/
 ├── docs/
@@ -103,14 +137,14 @@ wbs-mcp/
 │   │   ├── index.ts                # VS Code extension entry point (spawn server, register views/commands)
 │   │   ├── CommandRegistry.ts
 │   │   ├── ExtensionController.ts
-│   │   └── panels/                 # webview パネル関連
-│   ├── mcpServer/                  # 子プロセスとして起動するローカル MCP サーバ実装
+│   │   └── panels/                 # Webview panel-related code
+│   ├── mcpServer/                  # Local MCP server implementation (runs as subprocess)
 │   │   ├── index.ts
 │   │   └── db/
-│   ├── views/                      # TreeView / UI ロジック
+│   ├── views/                      # TreeView / UI logic
 │   │   ├── wbsTree.ts
 │   │   └── artifactTree.ts
-├── test/                           # Jest テスト（unit / e2e / integration）
+├── test/                           # Jest tests (unit / e2e / integration)
 ├── __mocks__/vscode.ts             # VS Code API mock for tests
 ├── coverage/                       # Jest coverage reports
 ├── jest.config.js
@@ -118,11 +152,14 @@ wbs-mcp/
 ├── package.json
 ├── tsconfig.json
 └── README.md / QUICKSTART.md
+```
 
-## 貢献
+## Contribution
 
-貢献歓迎します。Issue や Pull Request を送ってください。開発にあたっては、まず `npm install` → `npm run lint` → `npm run test` を実行してローカルで検証してください。
+Contributions are welcome!
+Please submit issues or pull requests.
+Before contributing, run `npm install`, `npm run lint`, and `npm run test` locally to verify your environment.
 
-## ライセンス
+## License
 
-MIT License - `LICENSE` を参照
+MIT License — see `LICENSE`.
