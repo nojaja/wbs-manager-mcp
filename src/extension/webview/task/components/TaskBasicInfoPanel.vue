@@ -36,16 +36,20 @@
 
     <div class="form-group">
       <label for="status">ステータス</label>
-      <select 
-        id="status" 
-        v-model="localTask.status" 
-        @change="onUpdate"
-      >
-        <option value="pending">Pending</option>
-        <option value="in-progress">In Progress</option>
-        <option value="completed">Completed</option>
-        <option value="blocked">Blocked</option>
-      </select>
+      <div class="status-toggle-group" role="tablist" aria-label="ステータス">
+        <button
+          v-for="s in statuses"
+          :key="s.value"
+          type="button"
+          class="status-toggle"
+          :class="{ active: localTask.status === s.value }"
+          @click="setStatus(s.value)"
+          role="tab"
+          :aria-selected="localTask.status === s.value"
+        >
+          {{ s.label }}
+        </button>
+      </div>
     </div>
 
     <div class="form-group">
@@ -101,6 +105,17 @@ export default {
       }
     };
   },
+  computed: {
+    statuses() {
+      return [
+        { value: 'draft', label: 'Draft' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'in-progress', label: 'In Progress' },
+        { value: 'completed', label: 'Completed' },
+        { value: 'blocked', label: 'Blocked' }
+      ];
+    }
+  },
   watch: {
     task: {
       immediate: true,
@@ -130,6 +145,12 @@ export default {
         status: this.localTask.status,
         estimate: this.localTask.estimate
       });
+    }
+    ,
+    setStatus(value) {
+      if (this.localTask.status === value) return;
+      this.localTask.status = value;
+      this.onUpdate();
     }
   }
 };
@@ -204,4 +225,35 @@ export default {
   font-size: 0.85em;
   font-style: italic;
 }
+
+/* Status toggle group styles (Segmented control / Tag Toggle Group) */
+.status-toggle-group {
+  display: inline-flex;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 8px;
+  padding: 4px;
+}
+.status-toggle {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--vscode-input-foreground);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.status-toggle:not(:last-child) {
+  margin-right: 4px;
+}
+.status-toggle:hover {
+  background: rgba(0,0,0,0.03);
+}
+.status-toggle.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
 </style>
