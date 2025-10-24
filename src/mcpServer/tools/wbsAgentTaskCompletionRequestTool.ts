@@ -70,16 +70,16 @@ export default class WbsAgentTaskCompletionRequestTool extends Tool {
       if (missing.length > 0) {
         // reject and return completionConditions for the client to inspect
         const llmHints = { nextActions: [], notes: ['Completion conditions missing or not approved'] };
-        return { content: [{ type: 'text', text: JSON.stringify({ accepted: false, completionConditions }, null, 2) }], llmHints };
+        return { content: [{ type: 'text', text: JSON.stringify({ accepted: false, completionConditions, llmHints }, null, 2) }] };
       }
 
       // All audits OK -> set task to completed
       // 処理概要: タスクを completed に遷移させる
       // 実装理由: updateTask のシグネチャ変更に伴い、ステータス更新は updateTaskStatus を使用する
       await this.repo.updateTaskStatus(taskId, 'completed', true);
-      const updated = await this.repo.getTask(taskId);
+      const updatedTask = await this.repo.getTask(taskId);
       const llmHints = { nextActions: [], notes: ['Task marked as completed'] };
-      return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }], llmHints };
+      return { content: [{ type: 'text', text: JSON.stringify({ updatedTask, llmHints }, null, 2) }] };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const llmHints = { nextActions: [{ action: 'wbs.agentmode.taskCompletionRequest', detail: 'Retry' }], notes: [`Exception message: ${message}`] };

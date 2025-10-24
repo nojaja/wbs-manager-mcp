@@ -18,7 +18,7 @@ export class MCPDependenciesClient extends MCPBaseClient {
     try {
       const result = await this.callTool('wbs.planmode.createDependency', params);
       const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) return { success: true, payload: parsed.parsed };
+      if (parsed.parsed.createDependency) return { success: true, payload: parsed.parsed.createDependency };
       return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -38,7 +38,7 @@ export class MCPDependenciesClient extends MCPBaseClient {
     try {
       const result = await this.callTool('wbs.planmode.updateDependency', params);
       const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) return { success: true, payload: parsed.parsed };
+      if (parsed.parsed.updatedDependency) return { success: true, payload: parsed.parsed.updatedDependency };
       return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -55,7 +55,7 @@ export class MCPDependenciesClient extends MCPBaseClient {
     try {
       const result = await this.callTool('wbs.planmode.deleteDependency', params);
       const parsed = this.parseToolResponse(result);
-      if (parsed.parsed) return { success: true, payload: parsed.parsed };
+      if (parsed.parsed.deleteDependency) return { success: true, payload: parsed.parsed.deleteDependency };
       return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };

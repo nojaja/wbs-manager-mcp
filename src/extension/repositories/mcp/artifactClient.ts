@@ -14,8 +14,8 @@ export class MCPArtifactClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.listArtifacts', {});
             const parsed = this.parseToolResponse(result);
-            if (Array.isArray(parsed.parsed)) {
-                return parsed.parsed as Artifact[];
+            if (Array.isArray(parsed.parsed.artifacts)) {
+                return parsed.parsed.artifacts as Artifact[];
             }
             if (parsed.error) {
                 this.outputChannel.log(`[MCP Client] Failed to list artifacts: ${parsed.error}`);
@@ -48,8 +48,8 @@ export class MCPArtifactClient extends MCPBaseClient {
                 description: params.description ?? null
             });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed && typeof parsed.parsed === 'object') {
-                return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary || parsed.rawText };
+            if (parsed.parsed.artifact && typeof parsed.parsed.artifact === 'object') {
+                return { success: true, artifact: parsed.parsed.artifact as Artifact, message: parsed.hintSummary || parsed.rawText };
             }
             return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
         } catch (error) {
@@ -85,8 +85,8 @@ export class MCPArtifactClient extends MCPBaseClient {
                 ifVersion: params.version
             });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed && typeof parsed.parsed === 'object') {
-                return { success: true, artifact: parsed.parsed as Artifact, message: parsed.hintSummary || parsed.rawText };
+            if (parsed.parsed.updateArtifact && typeof parsed.parsed.updateArtifact === 'object') {
+                return { success: true, artifact: parsed.parsed.updateArtifact as Artifact, message: parsed.hintSummary || parsed.rawText };
             }
             if (parsed.error && parsed.error.includes('modified by another user')) {
                 return { success: false, conflict: true, error: parsed.error, message: parsed.hintSummary || parsed.rawText };
@@ -108,8 +108,8 @@ export class MCPArtifactClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.getArtifact', { artifactId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed && typeof parsed.parsed === 'object') {
-                return parsed.parsed as Artifact;
+            if (parsed.parsed.artifact && typeof parsed.parsed.artifact === 'object') {
+                return parsed.parsed.artifact as Artifact;
             }
             if (parsed.error) {
                 this.outputChannel.log(`[MCP Client] Failed to get artifact: ${parsed.error}`);
@@ -131,7 +131,7 @@ export class MCPArtifactClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.deleteArtifact', { artifactId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed) {
+            if (parsed.parsed.deleteArtifact) {
                 return { success: true, message: parsed.hintSummary || parsed.rawText };
             }
             return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };

@@ -39,20 +39,19 @@ export default class ArtifactsDeleteArtifactTool extends Tool {
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
 
-            const deleted = await repo.deleteArtifact(args.artifactId);
+            const deleteArtifact = await repo.deleteArtifact(args.artifactId);
 
             const llmHints = {
                 nextActions: [
                     { action: 'refreshArtifactList', detail: '最新の成果物一覧を取得してください' }
                 ],
-                notes: [deleted ? '成果物が削除されました。' : '指定された成果物は見つかりませんでした。']
+                notes: [deleteArtifact ? '✅ Artifact deleted successfully!' : '指定された成果物は見つかりませんでした。']
             };
 
-            if (!deleted) {
+            if (!deleteArtifact) {
                 return { content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }], llmHints };
             }
-
-            return { content: [{ type: 'text', text: `✅ Artifact deleted successfully!\n\nID: ${args.artifactId}` }], llmHints };
+            return { content: [{ type: 'text', text: JSON.stringify({ deleteArtifact, llmHints }, null, 2) }] };
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             const llmHints = { nextActions: [{ action: 'checkRepo', detail: 'リポジトリの注入状態を確認してください' }], notes: [`例外メッセージ: ${message}`] };

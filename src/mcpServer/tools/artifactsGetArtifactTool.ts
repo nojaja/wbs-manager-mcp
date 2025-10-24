@@ -45,7 +45,7 @@ export default class ArtifactsGetArtifactTool extends Tool {
                 return { content: [{ type: 'text', text: `❌ Artifact not found: ${args.artifactId}` }], llmHints };
             }
             const llmHints = { nextActions: [{ action: 'linkToTasks', detail: `成果物 ${args.artifactId} を関連タスクにリンクできます` }], notes: ['成果物を取得しました。追加アクション: タスクへのリンク検討'] };
-            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }], llmHints };
+            return { content: [{ type: 'text', text: JSON.stringify({ artifact, llmHints }, null, 2) }] };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = { nextActions: [{ action: 'retryGetArtifact', detail: '再試行してください' }], notes: [`例外メッセージ: ${message}`] };

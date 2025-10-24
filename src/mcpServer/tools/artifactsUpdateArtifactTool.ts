@@ -39,14 +39,14 @@ export default class ArtifactsUpdateArtifactTool extends Tool {
             // リポジトリ確認と更新データの適用
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
-            const artifact = await repo.updateArtifact(args.artifactId, {
+            const updateArtifact = await repo.updateArtifact(args.artifactId, {
                 title: args.title,
                 uri: args.uri ?? null,
                 description: args.description ?? null,
                 ifVersion: args.ifVersion
             });
             const llmHints = { nextActions: [{ action: 'wbs.planMode.updateTask', detail: `成果物 ${args.artifactId} をタスクと紐づける` }], notes: ['成果物が更新されました'] };
-            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }], llmHints };
+            return { content: [{ type: 'text', text: JSON.stringify({updateArtifact,llmHints}, null, 2) }] };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = { nextActions: [{ action: 'wbs.planMode.updateArtifact', detail: '再試行してください' }], notes: [`例外メッセージ: ${message}`] };

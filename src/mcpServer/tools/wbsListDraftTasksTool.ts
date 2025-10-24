@@ -56,7 +56,7 @@ export default class WbsListDraftTasksTool extends Tool {
             if (!repo) throw new Error('Repository not injected');
             const tasks = await this.repo.leafTaskList(args?.parentId, 'draft');
             const llmHints = { nextActions: [], notes: ['Draft task list retrieved successfully.'] };
-            return { content: [{ type: 'text', text: JSON.stringify(tasks, null, 2) }], llmHints };
+            return { content: [{ type: 'text', text: JSON.stringify({tasks, llmHints}, null, 2) }] };
         } catch (error) {
             // エラー時は LLメモとエラーメッセージを返却
             const message = error instanceof Error ? error.message : String(error);

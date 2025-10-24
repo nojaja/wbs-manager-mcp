@@ -40,9 +40,12 @@ export default class WbsDeleteTaskTool extends Tool {
             // リポジトリを検証し、タスク削除処理を呼び出す
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
-            const deleted = await repo.deleteTask(args.taskId);
-            if (!deleted) return { content: [{ type: 'text', text: `❌ Task not found: ${args.taskId}` }] };
-            return { content: [{ type: 'text', text: `✅ Task deleted successfully!\n\nID: ${args.taskId}` }] };
+            const deletedTask = await repo.deleteTask(args.taskId);
+            
+            // 見つからない場合はユーザー向けメッセージを返す
+            if (!deletedTask) throw new Error(`❌ Task not found: ${args.taskId}`);
+
+            return { content: [{ type: 'text', text: JSON.stringify({deletedTask, llmHints: { notes: `✅ Task deleted successfully!` }}, null, 2) }] };
         } catch (error) {
             return { content: [{ type: 'text', text: `❌ Failed to delete task: ${error instanceof Error ? error.message : String(error)}` }] };
         }

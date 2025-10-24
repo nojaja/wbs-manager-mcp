@@ -44,8 +44,8 @@ export default class WbsDeleteDependencyTool extends Tool {
   async run(args: any) {
     try {
       const dependencyId = args.dependencyId;
-      const ok = await this.repo.deleteDependency(dependencyId);
-      return { content: [{ type: 'text', text: JSON.stringify({ deleted: ok }) }] };
+      const deleteDependency = await this.repo.deleteDependency(dependencyId);
+      return { content: [{ type: 'text', text: JSON.stringify({ deleteDependency }) }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: `❌ Failed to delete dependency: ${message}` }] };

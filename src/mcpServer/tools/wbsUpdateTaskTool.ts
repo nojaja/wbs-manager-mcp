@@ -92,7 +92,8 @@ export default class WbsUpdateTaskTool extends Tool {
 
             // 対象タスクを取得し、存在しない場合は notFound を返す
             const currentTask = await repo.getTask(args.taskId);
-            if (!currentTask) return this.notFound(args.taskId);
+            // 見つからない場合はユーザー向けメッセージを返す
+            if (!currentTask) throw new Error(`❌ Task not found: ${args.taskId}`);
 
             // 楽観ロック用バージョン検証を実行（競合検出）
             const versionErr = this.checkVersion(args, currentTask);
@@ -172,14 +173,6 @@ export default class WbsUpdateTaskTool extends Tool {
         ];
 
         return { nextActions, notes };
-    }
-    /**
-     * タスク未検出時レスポンス生成
-     * @param taskId タスクID
-     * @returns レスポンス
-     */
-    private notFound(taskId: string) {
-        return { content: [{ type: 'text', text: `❌ Task not found: ${taskId}` }] };
     }
 
     /**
