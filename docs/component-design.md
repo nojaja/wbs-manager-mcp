@@ -24,7 +24,7 @@ Task Details画面を3ペイン構成で刷新する。
 │               │ │ - 見積もり              │ │                   │
 │               │ └─────────────────────────┘ │                   │
 │               │ ┌─────────────────────────┐ │                   │
-│               │ │ DeliverablesPanel.vue   │ │                   │
+│               │ │ ArtifactsPanel.vue      │ │                   │
 │               │ │ - 成果物1               │ │                   │
 │               │ │ - 成果物2               │ │                   │
 │               │ └─────────────────────────┘ │                   │
@@ -207,7 +207,7 @@ emit('update-task', updates: Partial<Task>)
 onUpdateBasicInfo(updates: Partial<Task>): void
 
 // 成果物パネルからの更新
-onUpdateDeliverables(deliverables: TaskArtifactAssignment[]): void
+onUpdateArtifacts(artifacts: TaskArtifactAssignment[]): void
 
 // 完了条件パネルからの更新
 onUpdateCompletionConditions(conditions: TaskCompletionCondition[]): void
@@ -218,7 +218,7 @@ onSave(): void
 
 **子コンポーネント:**
 - TaskBasicInfoPanel
-- DeliverablesPanel
+- ArtifactsPanel
 - CompletionConditionsPanel
 
 ---
@@ -275,7 +275,7 @@ emit('update', updates: Partial<Task>)
 
 ---
 
-### 5. DeliverablesPanel.vue (中央ペイン - パネル2)
+### 5. ArtifactsPanel.vue (中央ペイン - パネル2)
 
 **責務:**
 - 成果物リストの表示・編集
@@ -297,25 +297,25 @@ emit('update', deliverables: TaskArtifactAssignment[])
 
 **Template構造:**
 ```vue
-<div class="deliverables-panel">
-  <h3>成果物 (Deliverables)</h3>
-  <div v-if="localDeliverables.length === 0" class="empty-state">
+<div class="artifacts-panel">
+  <h3>成果物 (Artifacts)</h3>
+  <div v-if="localArtifacts.length === 0" class="empty-state">
     成果物が設定されていません
   </div>
   <ul v-else>
-    <li v-for="(item, index) in localDeliverables" :key="index">
-      <span class="deliverable-name">{{ getArtifactName(item.artifactId) }}</span>
-      <button @click="removeDeliverable(index)">削除</button>
+    <li v-for="(item, index) in localArtifacts" :key="index">
+      <span class="artifact-name">{{ getArtifactName(item.artifactId) }}</span>
+      <button @click="removeArtifact(index)">削除</button>
     </li>
   </ul>
-  <div class="add-deliverable">
+  <div class="add-artifact">
     <select v-model="selectedArtifactId">
       <option value="">成果物を選択...</option>
       <option v-for="artifact in availableArtifacts" :key="artifact.id" :value="artifact.id">
         {{ artifact.name }}
       </option>
     </select>
-    <button @click="addDeliverable" :disabled="!selectedArtifactId">追加</button>
+    <button @click="addArtifact" :disabled="!selectedArtifactId">追加</button>
   </div>
 </div>
 ```

@@ -1,5 +1,5 @@
 <template>
-  <div class="deliverables-panel">
+  <div class="artifacts-panel">
     <ListEditor
       :title="'Artifact'"
       :titleLabel="'ソース / CRUD操作'"
@@ -7,7 +7,6 @@
       :placeholder="'artifact-id: 名前'"
       @update="onUpdateItems"
     >
-      <!-- Customize item rendering to show left/right labels as in Figma -->
       <template #item="{ item, index }">
           <span class="file-name">{{ getLeftLabel(item) }}</span>
           <span class="task-name">{{ getRightLabel(item) }}</span>
@@ -19,7 +18,7 @@
       <button
         v-for="artifact in suggestedArtifacts"
         :key="artifact.id"
-        @click="addDeliverable(artifact)"
+        @click="addArtifact(artifact)"
         class="btn-secondary"
       >
         追加: {{ artifact.name }}
@@ -32,7 +31,7 @@
 import ListEditor from './ListEditor.vue';
 
 export default {
-  name: 'DeliverablesPanel',
+  name: 'ArtifactsPanel',
   components: { ListEditor },
   props: {
     artifacts: {
@@ -54,7 +53,6 @@ export default {
       immediate: true,
       deep: true,
       handler(newArtifacts) {
-        // JSONオブジェクトのまま受け取る（文字列変換不要）
         this.localItems = Array.isArray(newArtifacts) ? newArtifacts : [];
       }
     }
@@ -64,15 +62,13 @@ export default {
       return item?.artifact_title || '';
     },
     getRightLabel(item) {
-      const crud = item?.crud_operations || '';
-      return crud;
+      return item?.crud_operations || '';
     },
     onUpdateItems(items) {
-      // JSONオブジェクトをそのまま親に渡す
       this.$emit('update', items || []);
       this.localItems = items || [];
     },
-    addDeliverable(artifact) {
+    addArtifact(artifact) {
       const existingIds = this.localItems.map(i => i?.artifact_id).filter(Boolean);
       if (!existingIds.includes(artifact.id)) {
         this.localItems.push(artifact);
@@ -89,7 +85,7 @@ export default {
 </script>
 
 <style scoped>
-.deliverables-panel { padding: 0; }
+.artifacts-panel { padding: 0; }
 .actions { margin-top: 12px; display:flex; gap:8px; }
 .btn-secondary { padding:6px 12px; border-radius:4px; }
 .condition-item { display:flex; align-items:center; gap:8px; padding:0 16px; height:48px; border-top:1px solid #E0E0E0 }

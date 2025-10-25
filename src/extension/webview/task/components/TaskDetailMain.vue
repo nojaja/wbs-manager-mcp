@@ -13,10 +13,10 @@
         @update="onBasicInfoUpdate"
       />
 
-      <DeliverablesPanel 
-        :artifacts="artifacts"
+      <ArtifactsPanel
+        :artifacts="artifactsState"
         :suggestedArtifacts="suggestedArtifacts"
-        @update="onDeliverablesUpdate"
+        @update="onArtifactsUpdate"
       />
 
       <CompletionConditionsPanel 
@@ -29,14 +29,14 @@
 
 <script>
 import TaskBasicInfoPanel from './TaskBasicInfoPanel.vue';
-import DeliverablesPanel from './DeliverablesPanel.vue';
+import ArtifactsPanel from './ArtifactsPanel.vue';
 import CompletionConditionsPanel from './CompletionConditionsPanel.vue';
 
 export default {
   name: 'TaskDetailMain',
   components: {
     TaskBasicInfoPanel,
-    DeliverablesPanel,
+  ArtifactsPanel,
     CompletionConditionsPanel
   },
   props: {
@@ -56,8 +56,7 @@ export default {
   data() {
     return {
       localTask: {},
-      localDeliverables: [],
-      localPrerequisites: [],
+        artifactsState: [],
       localCompletionConditions: [],
       hasChanges: false
     };
@@ -81,10 +80,9 @@ export default {
     artifacts: {
       immediate: true,
       deep: true,
-      handler(newArtifacts) {
-        // JSONオブジェクトのまま受け取る（フィルタリング不要）
-        this.localDeliverables = Array.isArray(newArtifacts) ? newArtifacts : [];
-        this.localPrerequisites = [];
+        handler(newArtifacts) {
+          // JSONオブジェクトのまま受け取る（フィルタリング不要）
+          this.artifactsState = Array.isArray(newArtifacts) ? newArtifacts : [];
       }
     }
   },
@@ -107,8 +105,8 @@ export default {
     /**
      * 成果物更新
      */
-    onDeliverablesUpdate(deliverables) {
-      this.localDeliverables = deliverables;
+    onArtifactsUpdate(artifacts) {
+      this.artifactsState = artifacts;
       this.hasChanges = true;
     },
 
@@ -132,8 +130,7 @@ export default {
         assignee: this.localTask.assignee,
         status: this.localTask.status,
         estimate: this.localTask.estimate,
-        deliverables: this.localDeliverables,
-        prerequisites: this.localPrerequisites,
+          artifacts: this.artifactsState,
         completionConditions: this.localCompletionConditions
       }));
 

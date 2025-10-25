@@ -11,6 +11,17 @@
       emptyMessage="先行タスクがありません"
       @select-task="selectTask"
     />
+    
+    <div class="list-header">
+      <h3>後続タスク (Successors)</h3>
+      <span class="count">{{ dependents.length }}</span>
+    </div>
+    <TaskList
+      :tasks="dependents"
+      :selectedTaskId="selectedTaskId"
+      emptyMessage="後続タスクがありません"
+      @select-task="selectTask"
+    />
   </div>
 </template>
 
@@ -21,6 +32,10 @@ export default {
   components: { TaskList },
   props: {
     dependees: {
+      type: Array,
+      default: () => []
+    },
+    dependents: {
       type: Array,
       default: () => []
     },
@@ -53,6 +68,7 @@ export default {
   padding: 12px 16px;
   background-color: var(--vscode-sideBarSectionHeader-background);
   border-bottom: 1px solid var(--vscode-panel-border);
+  border-top: 1px solid var(--vscode-panel-border);
   flex-shrink: 0;
 }
 
