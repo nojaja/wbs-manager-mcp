@@ -4,6 +4,8 @@ export interface Artifact {
   id: string;
   title: string;
   description?: string | null;
+  // details: 作業内容の詳細を保持するフィールド
+  details?: string | null;
   mimeType?: string | null;
   uri?: string | null;
   version?: number;

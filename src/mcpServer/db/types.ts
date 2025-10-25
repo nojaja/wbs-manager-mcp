@@ -55,6 +55,7 @@ export interface TaskCompletionCondition extends CommonTaskCompletionCondition {
  * 実装理由: クライアント/サーバ間や内部処理で、タスクの階層構造や関連データを一つのオブジェクトとして扱うため
  */
 export interface Task extends CommonTask {
+    details: any;
     children?: Task[];
     dependency?: String[];
     dependee?: String[];

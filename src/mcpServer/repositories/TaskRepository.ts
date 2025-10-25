@@ -54,15 +54,7 @@ export class TaskRepository {
     if (!current) {
       return { status: status ?? 'draft', reasonCode: 'TASK_NOT_FOUND', reasonMessage: `Task not found: ${taskId}` };
     }
-
-    // ルール1: 必須フィールドが揃っているか
-    // 処理概要: タイトル/説明/見積り/完了条件/アーティファクトが揃っているか検証する
-    // 実装理由: これらが揃っていない場合は未完成として 'draft' を返す必要がある
-    if (!this.hasRequiredFieldsForStatus(current)) {
-      return { status: 'draft', reasonCode: 'MISSING_REQUIRED_FIELDS', reasonMessage: 'タイトル/説明/見積り/完了条件/アーティファクトのいずれかが不足しています' };
-    }
-
-    // ルール2: dependees が存在する場合、そのステータスを確認
+    // ルール1: dependees が存在する場合、そのステータスを確認
     // 処理概要: 依存タスクが未完了であれば待機状態('pending')にする
     // 実装理由: 依存タスクが完了していなければ開始できないため
     const depIds: string[] = (current.dependee ?? []).filter(Boolean) as string[];
@@ -71,13 +63,20 @@ export class TaskRepository {
       if (anyNotCompleted) return { status: 'pending', reasonCode: 'WAITING_DEPENDEES', reasonMessage: '依存先のタスクが完了していないため待機中です' };
     }
 
-    // ルール3: children が存在する場合、そのステータスを確認
+    // ルール2: children が存在する場合、そのステータスを確認
     // 処理概要: 子タスクの状態により親の状態を決定する（draft/in-progress/completed など）
     // 実装理由: 親は子タスクの進捗に依存するため、子の状態を参照して整合性を取る
     const childIds: string[] = (current.children ?? []).map((c: any) => c.id).filter(Boolean);
     if (childIds.length > 0) {
       const childEval = await this.evaluateChildrenStatus(childIds, status);
       if (childEval) return childEval;
+    }
+
+    // ルール3: 必須フィールドが揃っているか
+    // 処理概要: タイトル/説明/見積り/完了条件/アーティファクトが揃っているか検証する
+    // 実装理由: これらが揃っていない場合は未完成として 'draft' を返す必要がある
+    if (!this.hasRequiredFieldsForStatus(current)) {
+      return { status: 'draft', reasonCode: 'MISSING_REQUIRED_FIELDS', reasonMessage: 'タイトル/説明/詳細/見積り/完了条件/アーティファクトのいずれかが不足しています' };
     }
 
     // ルール4: 引数 status または pending
@@ -96,10 +95,11 @@ export class TaskRepository {
     // 実装理由: ステータスが 'draft' か 'pending' かを判定する基準として使用するため
     const title = current.title ?? '';
     const description = current.description ?? '';
+    const details = current.details ?? '';
     const estimate = current.estimate ?? '';
     const completionConditions = current.completionConditions ?? [];
     const artifacts = current.artifact ?? [];
-    return this.isNotEmpty(title) && this.isNotEmpty(description) && this.isNotEmpty(estimate) && Array.isArray(completionConditions) && completionConditions.length > 0 && Array.isArray(artifacts) && artifacts.length > 0;
+    return this.isNotEmpty(title) && this.isNotEmpty(description) && this.isNotEmpty(estimate) && this.isNotEmpty(details) && Array.isArray(completionConditions) && completionConditions.length > 0 && Array.isArray(artifacts) && artifacts.length > 0;
   }
 
   /**
@@ -157,6 +157,10 @@ export class TaskRepository {
     const allCompleted = foundChildren.every(c => (c.status ?? '') === 'completed');
     if (!statusArg && allCompleted) return { status: 'completed', reasonCode: 'ALL_CHILDREN_COMPLETED', reasonMessage: '全ての子タスクが completed です' };
 
+    // 子に pending がある場合は親も pending
+    const anyPending = foundChildren.some(c => (c.status ?? '') === 'pending');
+    if (anyPending) return { status: 'pending', reasonCode: 'CHILD_HAS_PENDING', reasonMessage: '子タスクに pending のものが存在します' };
+
     return null;
   }
 
@@ -205,13 +209,18 @@ export class TaskRepository {
     // 実装理由: 排他制御のため version をインクリメントして保存する必要がある
     const now = new Date().toISOString();
     const newVersion = (current.version ?? 0) + 1;
-    await db.run(
-      `UPDATE tasks SET status = ?, updated_at = ?, version = ? WHERE id = ?`,
-      decidedStatus,
-      now,
-      newVersion,
-      taskId
-    );
+    try {
+      await db.run(
+        `UPDATE tasks SET status = ?, updated_at = ?, version = ? WHERE id = ?`,
+        decidedStatus,
+        now,
+        newVersion,
+        taskId
+      );
+    } catch (error) {
+      console.error('[updateTaskStatus] Failed to update task status in DB for task:', taskId, ',decidedStatus:',decidedStatus,',newVersion:',newVersion,',now:',now,'Error:', error);
+      throw error;
+    }
 
     // 親タスクの整合性を保つため、親タスクがあれば updateTaskStatus を再帰的に呼び出す
     const parentId = (current as any).parentId ?? (current as any).parent_id ?? null;
@@ -234,6 +243,7 @@ export class TaskRepository {
    * 実装理由: タスク作成時に関連するアーティファクト割当や完了条件も同時に整合性を保って保存する必要があるため、単一の原子的操作として提供する。
    * @param {string} title Task title
    * @param {string} [description]
+   * @param {string} [details]
    * @param {string|null} [parentId]
    * @param {string|null} [assignee]
    * @param {string|null} [estimate]
@@ -246,6 +256,7 @@ export class TaskRepository {
   async createTask(
     title: string,
     description: string = '',
+    details?: string | null,
     parentId: string | null = null,
     assignee: string | null = null,
     estimate: string | null = null,
@@ -271,13 +282,14 @@ export class TaskRepository {
     try {
       await db.run(
         `INSERT INTO tasks (
-            id, parent_id, title, description, assignee,
+            id, parent_id, title, description, details, assignee,
             status, estimate, created_at, updated_at, version
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         id,
         parentId || null,
         title,
         description || null,
+        details ?? null,
         assignee || null,
         status,
         estimate || null,
@@ -378,10 +390,12 @@ export class TaskRepository {
     const parentId = this.stringField(t, 'parentId') || null;
     const assignee = this.stringField(t, 'assignee') || null;
     const estimate = this.stringField(t, 'estimate') || null;
+    const details = this.stringField(t, 'details') || null;
     const options = {
       dependencies: this.arrayField(t, 'dependencies'),
       artifacts: this.arrayField(t, 'artifacts'),
-      completionConditions: this.arrayField(t, 'completionConditions')
+      completionConditions: this.arrayField(t, 'completionConditions'),
+      details
     };
     return await this.createTask(title, description, parentId, assignee, estimate, options as any);
   }
@@ -434,7 +448,7 @@ export class TaskRepository {
     if (status !== undefined && status !== null) { clauses.push('status = ?'); params.push(status); }
     const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = await db.all<any[]>(
-      `SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status,
+      `SELECT t.id, t.parent_id, t.title, t.description, t.details, t.assignee, t.status,
           t.estimate, t.created_at, t.updated_at, t.version,
           (
               SELECT COUNT(1) FROM tasks c WHERE c.parent_id = t.id
@@ -457,6 +471,7 @@ export class TaskRepository {
         parentId: row.parent_id,
         title: row.title,
         description: row.description,
+        details: row.details ?? null,
         status: row.status,
         estimate: row.estimate,
         version: row.version,
@@ -512,15 +527,15 @@ export class TaskRepository {
     const placeholders = statusList ? statusList.map(() => '?').join(',') : '';
     const sql = `WITH RECURSIVE descendants(id) AS (
         ${cteSeedSql}
-      UNION ALL
-        SELECT t.id FROM tasks t JOIN descendants d ON t.parent_id = d.id
-    )
-    SELECT t.id, t.parent_id, t.title, t.description, t.assignee, t.status, t.estimate, t.created_at, t.updated_at, t.version
-    FROM tasks t
-    WHERE t.id IN (SELECT id FROM descendants)
-      AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = t.id)
-      ${statusList ? `AND LOWER(t.status) IN (${placeholders})` : ''}
-    ORDER BY t.created_at ASC`;
+        UNION ALL
+          SELECT t.id FROM tasks t JOIN descendants d ON t.parent_id = d.id
+        )
+        SELECT t.id, t.parent_id, t.title, t.description, t.details, t.assignee, t.status, t.estimate, t.created_at, t.updated_at, t.version
+        FROM tasks t
+        WHERE t.id IN (SELECT id FROM descendants)
+        AND NOT EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = t.id)
+        ${statusList ? `AND LOWER(t.status) IN (${placeholders})` : ''}
+        ORDER BY t.created_at ASC`;
 
     const rows = await db.all<any[]>(sql, ...params, ...(statusList ?? []));
 
@@ -537,6 +552,7 @@ export class TaskRepository {
         parentId: row.parent_id,
         title: row.title,
         description: row.description,
+        details: row.details ?? null,
         status: row.status,
         estimate: row.estimate,
         version: row.version,
@@ -601,16 +617,23 @@ export class TaskRepository {
   */
   async getTasks(taskIds: string[]): Promise<Task[]> {
     const db = await this.db();
-    const tasks = await db.all<Task[]>(
-      `SELECT id, parent_id, title, description, assignee, status,
-              estimate, created_at, updated_at, version
-       FROM tasks
-       WHERE id IN (?)`,
-      taskIds
-    );
-    if (!tasks || tasks.length === 0) return [];
-
-    return tasks as unknown as Task[];
+    // 空配列ならすぐ抜ける
+    if (!taskIds || taskIds.length === 0) return [];
+    try {
+      // SQLite は `IN (?)` に配列を直接渡すとプレースホルダ数が合わずエラーになるため
+      // taskIds の長さに応じたプレースホルダを生成して展開する
+      const placeholders = taskIds.map(() => '?').join(',');
+      const sql = `SELECT id, parent_id, title, description, details, assignee, status,
+                  estimate, created_at, updated_at, version
+        FROM tasks
+        WHERE id IN (${placeholders})`;
+      const tasks = await db.all<Task[]>(sql, ...taskIds);
+      if (!tasks || tasks.length === 0) return [];
+      return tasks as unknown as Task[];
+    } catch (error) {
+      console.error('[getTasks] Failed to fetch tasks from DB for IDs:', taskIds, 'Error:', error);
+      throw error;
+    }
   }
 
   /**
@@ -623,7 +646,7 @@ export class TaskRepository {
   async getTask(taskId: string): Promise<Task | null> {
     const db = await this.db();
     const task = await db.get<Task>(
-      `SELECT id, parent_id, title, description, assignee, status,
+      `SELECT id, parent_id, title, description, details, assignee, status,
               estimate, created_at, updated_at, version
        FROM tasks
        WHERE id = ?`,
@@ -632,7 +655,7 @@ export class TaskRepository {
     if (!task) return null;
     // ターゲットとその直下の子のみを取得してツリーを構築する（効率化）
     const childRows = await db.all<any[]>(
-      `SELECT id, parent_id, title, description, assignee, status, estimate, created_at, updated_at, version
+      `SELECT id, parent_id, title, description, details, assignee, status, estimate, created_at, updated_at, version
        FROM tasks
        WHERE parent_id = ?
        ORDER BY created_at ASC`,
@@ -645,7 +668,10 @@ export class TaskRepository {
     const dependeeIds = await this.dependenciesRepo.getDependeeByTaskId(task.id); // 依存関係情報を限定取得
 
 
-    const artifactIds = await this.taskArtifactRepo.getArtifactIdsByTaskIds(task.id);
+    // 既存は ID 一覧を返していたが、collectTaskArtifacts を使って詳細を取得する
+    // 返却は artifact_id, crud_operations, artifact_title を含む形に整形する
+    const collectedArtifacts = await this.taskArtifactRepo.collectTaskArtifacts([task.id]);
+    const bucket = collectedArtifacts.get(task.id) ?? { deliverables: [], prerequisites: [] };
     const dependencyDetails = await this.getTasks(dependencyIds);
     const dependeeDetails = await this.getTasks(dependeeIds);
 
@@ -656,23 +682,36 @@ export class TaskRepository {
           id: row.id,
           title: row.title,
           description: row.description,
+          details: row.details ?? null,
           status: row.status,
-          estimate: row.estimate,
-          version: row.version
+          estimate: row.estimate
         } as Task;
       }),
-      artifact: artifactIds,
+      // artifact: 以前は ID のみの配列を返していたが、collectTaskArtifacts の結果を整形して返す
+      artifact: (() => {
+        try {
+          const assignments = [...(bucket.deliverables ?? []), ...(bucket.prerequisites ?? [])];
+          return assignments.map(a => ({
+            artifact_id: a.artifactId ?? a.artifact?.id,
+            crud_operations: a.crudOperations ?? undefined,
+            artifact_title: a.artifact?.title ?? undefined
+          }));
+        } catch (err) {
+          // 何らかの理由で整形できない場合は安全のため空配列を返す
+          return [];
+        }
+      })(),
       dependees: dependeeDetails.map(dependeeDetail => ({
         id: dependeeDetail.id,
+        title: dependeeDetail.title,
         description: dependeeDetail.description,
-        status: dependeeDetail.status,
-        estimate: dependeeDetail.estimate
+        status: dependeeDetail.status
       })),
       dependents: dependencyDetails.map(dependencyDetail => ({
         id: dependencyDetail.id,
+        title: dependencyDetail.title,
         description: dependencyDetail.description,
-        status: dependencyDetail.status,
-        estimate: dependencyDetail.estimate
+        status: dependencyDetail.status
       })),
       completionConditions: completionConditions.map(completionCondition => ({
         id: completionCondition.id,
@@ -747,6 +786,7 @@ export class TaskRepository {
   * @param {string} taskId
   * @param {string} [title]
   * @param {string} [description]
+  * @param {string} [details]
   * @param {string|null} [parentId]
   * @param {string|null} [assignee]
   * @param {string|null} [estimate]
@@ -761,6 +801,7 @@ export class TaskRepository {
     taskId: string,
     title?: string,
     description: string = '',
+    details: string = '',
     parentId: string | null = null,
     assignee: string | null = null,
     estimate: string | null = null,
@@ -787,6 +828,7 @@ export class TaskRepository {
         `UPDATE tasks
          SET title = ?,
              description = ?,
+             details = ?,
              assignee = ?,
              estimate = ?,
              parent_id = ?,
@@ -795,6 +837,8 @@ export class TaskRepository {
          WHERE id = ?`,
         title ?? (current as any).title,
         (description ?? (current as any).description) ?? null,
+        // details may be provided in options.details
+        details ?? (current as any).details ?? null,
         assignee ?? (current as any).assignee ?? null,
         estimate ?? (current as any).estimate ?? null,
         parentId ?? (current as any).parentId ?? (current as any).parent_id ?? null,
@@ -908,7 +952,7 @@ export class TaskRepository {
    */
   private async fetchTaskRow(taskId: string): Promise<Task | null> {
     const db = await this.db();
-    const row = await db.get<Task>(`SELECT id, parent_id, title, description, assignee, status, estimate, created_at, updated_at, version FROM tasks WHERE id = ?`, taskId);
+    const row = await db.get<Task>(`SELECT id, parent_id, title, description, details, assignee, status, estimate, created_at, updated_at, version FROM tasks WHERE id = ?`, taskId);
     return row ?? null;
   }
 
@@ -927,12 +971,6 @@ export class TaskRepository {
     return (result.changes ?? 0) > 0;
   }
 
-  /**
-   * 親タスクのステータス更新ヘルパ
-   * @param {string|null} parentId
-   * @param {string} status
-   */
-  // (削除された: 親タスク更新は updateTaskStatus を使うため不要)
 }
 
 export default TaskRepository;

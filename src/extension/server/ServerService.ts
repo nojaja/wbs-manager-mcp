@@ -170,7 +170,7 @@ export class ServerService {
       return;
     }
     this.outputChannel.log(`${error}`);
-    this.outputChannel.show();
+    //this.outputChannel.show();
   }
 
   /**
