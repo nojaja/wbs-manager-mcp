@@ -35,8 +35,16 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.getTask', { taskId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed && typeof parsed.parsed === 'object' && parsed.parsed.task) {
-                return parsed.parsed.task;
+            // Newer tool shape: { task: { ... } }
+            // Older/alternate shape: parsed.parsed is the task object itself
+            if (parsed.parsed && typeof parsed.parsed === 'object') {
+                if (parsed.parsed.task && typeof parsed.parsed.task === 'object') {
+                    return parsed.parsed.task;
+                }
+                // If the parsed payload already looks like a task (has id/title/status), return it
+                if (parsed.parsed.id || parsed.parsed.title || parsed.parsed.status) {
+                    return parsed.parsed;
+                }
             }
             if (parsed.error) {
                 this.outputChannel.log(`[MCP Client] Failed to get task: ${parsed.error}`);
@@ -60,7 +68,17 @@ export class MCPTaskClient extends MCPBaseClient {
             const result = await this.callTool('wbs.planMode.updateTask', { taskId, ...updates });
             const parsed = this.parseToolResponse(result);
             if (parsed.parsed) {
-                const parsedId = typeof parsed.parsed === 'object' && parsed.parsed !== null ? parsed.parsed.id : undefined;
+                // parsed.parsed may be { updatedTask: {...} } or { task: {...} } or the task object itself
+                let parsedId: string | undefined;
+                if (typeof parsed.parsed === 'object') {
+                    if ((parsed.parsed as any).updatedTask && (parsed.parsed as any).updatedTask.id) {
+                        parsedId = (parsed.parsed as any).updatedTask.id;
+                    } else if ((parsed.parsed as any).task && (parsed.parsed as any).task.id) {
+                        parsedId = (parsed.parsed as any).task.id;
+                    } else if ((parsed.parsed as any).id) {
+                        parsedId = (parsed.parsed as any).id;
+                    }
+                }
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: parsedId ?? taskId, message };
             }
@@ -101,7 +119,17 @@ export class MCPTaskClient extends MCPBaseClient {
             const result = await this.callTool('wbs.planMode.createTask', params);
             const parsed = this.parseToolResponse(result);
             if (parsed.parsed) {
-                const createdId = typeof parsed.parsed === 'object' ? parsed.parsed.task.id : undefined;
+                // parsed.parsed may be { task: { id: ... } } or { id: ... } or { createdTask: { id: ... } }
+                let createdId: string | undefined;
+                if (typeof parsed.parsed === 'object') {
+                    if ((parsed.parsed as any).task && (parsed.parsed as any).task.id) {
+                        createdId = (parsed.parsed as any).task.id;
+                    } else if ((parsed.parsed as any).createdTask && (parsed.parsed as any).createdTask.id) {
+                        createdId = (parsed.parsed as any).createdTask.id;
+                    } else if ((parsed.parsed as any).id) {
+                        createdId = (parsed.parsed as any).id;
+                    }
+                }
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: createdId, message };
             }
@@ -122,8 +150,16 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.deleteTask', { taskId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed.deletedTask) {
-                const parsedId = typeof parsed.parsed === 'object' ? parsed.parsed.deletedTask.id : undefined;
+            // parsed.parsed may be { deletedTask: { id: ... } } or { id: ... } or true
+            if (parsed.parsed) {
+                let parsedId: string | undefined;
+                if (typeof parsed.parsed === 'object') {
+                    if ((parsed.parsed as any).deletedTask && (parsed.parsed as any).deletedTask.id) {
+                        parsedId = (parsed.parsed as any).deletedTask.id;
+                    } else if ((parsed.parsed as any).id) {
+                        parsedId = (parsed.parsed as any).id;
+                    }
+                }
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: parsedId ?? taskId, message };
             }
@@ -144,8 +180,17 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed.updatedTask) {
-                const parsedId = typeof parsed.parsed.updatedTask === 'object' ? parsed.parsed.updatedTask.id : undefined;
+            if (parsed.parsed) {
+                let parsedId: string | undefined;
+                if (typeof parsed.parsed === 'object') {
+                    if ((parsed.parsed as any).updatedTask && (parsed.parsed as any).updatedTask.id) {
+                        parsedId = (parsed.parsed as any).updatedTask.id;
+                    } else if ((parsed.parsed as any).task && (parsed.parsed as any).task.id) {
+                        parsedId = (parsed.parsed as any).task.id;
+                    } else if ((parsed.parsed as any).id) {
+                        parsedId = (parsed.parsed as any).id;
+                    }
+                }
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: parsedId ?? taskId, message };
             }

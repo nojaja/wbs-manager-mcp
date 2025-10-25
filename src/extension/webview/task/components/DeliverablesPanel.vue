@@ -1,8 +1,8 @@
 <template>
   <div class="deliverables-panel">
     <ListEditor
-      :title="'前提Artifact'"
-      :titleLabel="'ソース / 先行タスク'"
+      :title="'Artifact'"
+      :titleLabel="'ソース / CRUD操作'"
       :items="localItems"
       :placeholder="'artifact-id: 名前'"
       @update="onUpdateItems"
@@ -54,53 +54,28 @@ export default {
       immediate: true,
       deep: true,
       handler(newArtifacts) {
-        const deliverables = Array.isArray(newArtifacts)
-          ? newArtifacts.filter(a => a.artifact_type === 'deliverable')
-          : [];
-        this.localItems = deliverables.map(a => ({ description: `${a.artifact_id}: ${a.artifact_name || ''}` }));
+        // JSONオブジェクトのまま受け取る（文字列変換不要）
+        this.localItems = Array.isArray(newArtifacts) ? newArtifacts : [];
       }
     }
   },
   methods: {
     getLeftLabel(item) {
-      const text = typeof item === 'string' ? item : item.description || '';
-      const parts = text.split(':');
-      return parts[0] ? parts[0].trim() : '';
+      return item?.artifact_title || '';
     },
     getRightLabel(item) {
-      const text = typeof item === 'string' ? item : item.description || '';
-      const parts = text.split(':');
-      return parts.slice(1).join(':').trim();
+      const crud = item?.crud_operations || '';
+      return crud;
     },
     onUpdateItems(items) {
-      // parse items to artifact objects like previous implementation
-      const parsed = (items || []).map(i => {
-        const text = typeof i === 'string' ? i : i.description || '';
-        const parts = text.split(':');
-        const artifactId = parts[0] ? parts[0].trim() : '';
-        const rest = parts.slice(1).join(':').trim();
-        // detect CRUD tail
-        const lastPart = rest.split(/\s+/).pop();
-        const crudPattern = /^[CRUD]+$/i;
-        if (lastPart && crudPattern.test(lastPart)) {
-          return { artifactId, crudOperations: lastPart.toUpperCase() };
-        }
-        return { artifactId };
-      });
-      // emit to parent
-      this.$emit('update', parsed);
-      // sync localItems in case parent doesn't update artifacts prop immediately
-      this.localItems = (items || []).map(i => (typeof i === 'string' ? { description: i } : i));
+      // JSONオブジェクトをそのまま親に渡す
+      this.$emit('update', items || []);
+      this.localItems = items || [];
     },
     addDeliverable(artifact) {
-      const existingIds = this.localItems
-        .map(i => {
-          const text = i.description || '';
-          return text.split(':')[0].trim();
-        })
-        .filter(Boolean);
+      const existingIds = this.localItems.map(i => i?.artifact_id).filter(Boolean);
       if (!existingIds.includes(artifact.id)) {
-        this.localItems.push({ description: `${artifact.id}: ${artifact.name}` });
+        this.localItems.push(artifact);
         this.onUpdateItems(this.localItems);
       }
     },

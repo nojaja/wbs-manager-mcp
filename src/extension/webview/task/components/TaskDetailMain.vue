@@ -82,14 +82,9 @@ export default {
       immediate: true,
       deep: true,
       handler(newArtifacts) {
-        if (newArtifacts) {
-          this.localDeliverables = newArtifacts
-            .filter(a => a.artifact_type === 'deliverable')
-            .map(a => ({ ...a }));
-          this.localPrerequisites = newArtifacts
-            .filter(a => a.artifact_type === 'prerequisite')
-            .map(a => ({ ...a }));
-        }
+        // JSONオブジェクトのまま受け取る（フィルタリング不要）
+        this.localDeliverables = Array.isArray(newArtifacts) ? newArtifacts : [];
+        this.localPrerequisites = [];
       }
     }
   },

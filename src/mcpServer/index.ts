@@ -270,8 +270,30 @@ class StdioMCPServer {
     private sendResponse(method: string, response: JsonRpcResponse) {
         const responseStr = JSON.stringify(response);
         const debuggingStr = JSON.stringify(response, null, 2); // for easier debugging
-        //const content = response.result.content[0]?.text ?? '';
-        console.error(`[MCP Server] Sending: ${debuggingStr}`);
+
+        // Try to extract the text payload from response.result.content[0].text
+        // If it's present and is a JSON string, parse and pretty-print it for easier debugging.
+        try {
+            const contentText = response?.result?.content?.[0]?.text ?? '';
+            if (contentText) {
+                // If the content is a JSON string, try to parse it and pretty-print.
+                try {
+                    const parsed = JSON.parse(contentText);
+                    console.error(`[MCP Server] Response content (parsed): ${JSON.stringify(parsed, null, 2)}`);
+                } catch (err) {
+                    // Not valid JSON — print raw text
+                    console.error(`[MCP Server] Response content (raw): ${contentText}`);
+                }
+            } else {
+                // Fallback: print the whole response for debugging
+                console.error(`[MCP Server] Sending: ${debuggingStr}`);
+            }
+        } catch (err) {
+            // Defensive: if any unexpected error occurs while extracting, log it and fall back
+            console.error('[MCP Server] Failed to extract response content:', err);
+            console.error(`[MCP Server] Sending: ${debuggingStr}`);
+        }
+
         process.stdout.write(responseStr + '\n');
     }
 }
