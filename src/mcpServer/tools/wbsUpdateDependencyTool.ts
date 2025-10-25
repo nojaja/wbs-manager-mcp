@@ -54,8 +54,8 @@ export default class WbsUpdateDependencyTool extends Tool {
       const dependency = args.dependency;
       const artifacts = Array.isArray(args.artifacts) ? args.artifacts : [];
 
-      const updated = await this.repo.updateDependency(dependencyId, dependee, dependency, artifacts);
-      return { content: [{ type: 'text', text: JSON.stringify(updated) }] };
+      const updatedDependency = await this.repo.updateDependency(dependencyId, dependee, dependency, artifacts);
+      return { content: [{ type: 'text', text: JSON.stringify({ updatedDependency }) }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: `❌ Failed to update dependency: ${message}` }] };

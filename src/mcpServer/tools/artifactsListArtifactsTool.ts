@@ -39,9 +39,9 @@ export default class ArtifactsListArtifactsTool extends Tool {
             // リポジトリ確認と一覧取得
             const repo = this.repo;
             if (!repo) throw new Error('Repository not injected');
-            const list = await repo.listArtifacts();
+            const artifacts = await repo.listArtifacts();
             const llmHints = { nextActions: [], notes: ['成果物一覧を取得しました'] };
-            return { content: [{ type: 'json', text: JSON.stringify(list, null, 2) }], llmHints };
+            return { content: [{ type: 'json', text: JSON.stringify({artifacts, llmHints}, null, 2) }] };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = { nextActions: [{ action: 'wbs.planMode.listArtifacts', detail: '再試行してください' }], notes: [`例外メッセージ: ${message}`] };

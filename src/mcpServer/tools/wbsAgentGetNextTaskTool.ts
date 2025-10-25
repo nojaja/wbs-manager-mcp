@@ -31,11 +31,6 @@ export default class WbsAgentGetNextTaskTool extends Tool {
    * 処理概要: MCP 呼び出しのエントリポイント。実行可能なタスクを検索し、選定した場合は in-progress に遷移させて返す
    * 実装理由: MCP の tools/call から呼ばれる単一エントリであり、ここで外部からの引数チェックやエラーハンドリングを行うため
    * @param _args なし
-   * @returns ツール実行結果オブジェクト
-   */
-  /**
-   * 実行エントリ
-   * @param _args 引数は利用しない
    * @returns {Promise<any>} ツール実行結果オブジェクト
    */
   async run(_args: any) {
@@ -50,7 +45,7 @@ export default class WbsAgentGetNextTaskTool extends Tool {
 
       // 3) 見つからない場合は null を返す
       const llmHints = { nextActions: [], notes: ['No runnable task found'] };
-      return { content: [{ type: 'text', text: JSON.stringify(null) }], llmHints };
+      return { content: [{ type: 'text', text: JSON.stringify({ llmHints }) }] };
     } catch (error) {
       // 例外ハンドリング: 呼び出し元へエラーメッセージを返す
       const message = error instanceof Error ? error.message : String(error);
@@ -112,24 +107,24 @@ export default class WbsAgentGetNextTaskTool extends Tool {
        ORDER BY t.created_at ASC`);
 
     // 処理概要: 各候補について依存先が全て completed かを確認し、条件を満たしたものを in-progress に更新して返す
-  for (const row of candidateRows) {
+    for (const row of candidateRows) {
       const taskId = row.id;
       const dependeeIds = await this.depsRepo.getDependeeByTaskId(taskId);
       // 依存先が全て完了しているかを共通ヘルパで判定
       const okToStart = await this.areDependeesCompleted(dependeeIds);
 
-  if (okToStart) {
+      if (okToStart) {
         // 選定されたタスクを in-progress に遷移
-  const current = await this.repo.getTask(taskId);
-  if (!current) continue; // defensive
-  // 処理概要: タスクを in-progress に遷移させる
-  // 実装理由: 以前は updateTask に status を渡していたが、updateTask のシグネチャ変更に伴い
-  //           ステータス更新は専用メソッド updateTaskStatus を使用する
-  await this.repo.updateTaskStatus(taskId, 'in-progress', true);
-  const updated = await this.repo.getTask(taskId);
-  const llmHints = { nextActions: [], notes: ['Selected task transitioned to in-progress'] };
-  return { content: [{ type: 'text', text: JSON.stringify(updated, null, 2) }], llmHints };
-        }
+        const current = await this.repo.getTask(taskId);
+        if (!current) continue; // defensive
+        // 処理概要: タスクを in-progress に遷移させる
+        // 実装理由: 以前は updateTask に status を渡していたが、updateTask のシグネチャ変更に伴い
+        //           ステータス更新は専用メソッド updateTaskStatus を使用する
+        await this.repo.updateTaskStatus(taskId, 'in-progress', true);
+        const currentTask = await this.repo.getTask(taskId);
+        const llmHints = { nextActions: [], notes: ['Selected task transitioned to in-progress'] };
+        return { content: [{ type: 'text', text: JSON.stringify({ updated: currentTask, llmHints }, null, 2) }] };
+      }
     }
 
     return null;

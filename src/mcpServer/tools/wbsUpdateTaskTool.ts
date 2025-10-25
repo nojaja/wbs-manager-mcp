@@ -27,6 +27,7 @@ export default class WbsUpdateTaskTool extends Tool {
                     description: { type: 'string', description: 'Instruction prompt describing what must be done to complete the task. Write concrete steps or acceptance criteria so an LLM or a human can act on it.' },
                     assignee: { type: 'string', description: 'Assignee name or user identifier. If omitted the task will be unassigned.' },
                     estimate: { type: 'string', description: "Estimated time required for the task (examples: '4h', '2d'). If the work exceeds 8 hours it is recommended to split it into subtasks." },
+                    details: { type: 'string', description: 'Set the prompt for the work LLM, including detailed work content, work steps, and background information necessary for the LLM to perform the work accurately.' },
                     completionConditions: {
                         type: 'array',
                         description: 'An array of audit/acceptance prompts used to determine whether the task is complete. Each item should contain a description that can be used as a verification checklist or test prompt.',
@@ -92,7 +93,8 @@ export default class WbsUpdateTaskTool extends Tool {
 
             // 対象タスクを取得し、存在しない場合は notFound を返す
             const currentTask = await repo.getTask(args.taskId);
-            if (!currentTask) return this.notFound(args.taskId);
+            // 見つからない場合はユーザー向けメッセージを返す
+            if (!currentTask) throw new Error(`❌ Task not found: ${args.taskId}`);
 
             // 楽観ロック用バージョン検証を実行（競合検出）
             const versionErr = this.checkVersion(args, currentTask);
@@ -105,16 +107,17 @@ export default class WbsUpdateTaskTool extends Tool {
                 args.taskId,
                 args.title ?? currentTask.title,
                 args.description ?? currentTask.description,
+                args.details ?? currentTask.details ?? null,
                 args.parentId ?? currentTask.parent_id ?? null,
                 args.assignee ?? currentTask.assignee ?? null,
                 args.estimate ?? currentTask.estimate ?? null,
-                { dependencies, artifacts, completionConditions }
+                { dependencies, artifacts, completionConditions, ifVersion: args.ifVersion }
             );
             // LLM ヒントは専用メソッドで生成して run() の複雑さを下げる
             const llmHints = this.buildLlmHintsForTask(updatedTask);
-            return { content: [{ type: 'text', text: JSON.stringify({updatedTask, llmHints}, null, 2) }] };
+            return { content: [{ type: 'text', text: JSON.stringify({ updatedTask, llmHints }, null, 2) }] };
         } catch (error) {
-            return { content: [{ type: 'text', text: `${error instanceof Error ? error.message : String(error)}` }],"isError": true };
+            return { content: [{ type: 'text', text: `${error instanceof Error ? error.message : String(error)}` }], "isError": true };
         }
     }
 
@@ -154,6 +157,11 @@ export default class WbsUpdateTaskTool extends Tool {
      */
     private buildLlmHintsForTask(task: any) {
         const nextActions: any[] = [];
+        
+        //detailsが未指定の場合のnextAction追加
+        if (!task.details || task.details.length === 0) {
+            nextActions.push({ action: 'wbs.planMode.updateTask', detail: '詳細が未指定です。タスクの詳細をdetailsに設定してください' });
+        }
         //dependenciesが未指定の場合のnextAction追加
         if (!task.dependencies || task.dependencies.length === 0) {
             nextActions.push({ action: 'wbs.planMode.updateTask', detail: '依存関係が未指定です。後続タスクがある場合はdependenciesに設定してください' });
@@ -172,14 +180,6 @@ export default class WbsUpdateTaskTool extends Tool {
         ];
 
         return { nextActions, notes };
-    }
-    /**
-     * タスク未検出時レスポンス生成
-     * @param taskId タスクID
-     * @returns レスポンス
-     */
-    private notFound(taskId: string) {
-        return { content: [{ type: 'text', text: `❌ Task not found: ${taskId}` }] };
     }
 
     /**
@@ -209,6 +209,7 @@ export default class WbsUpdateTaskTool extends Tool {
         return {
             title: args.title !== undefined ? args.title : currentTask.title,
             description: args.description !== undefined ? args.description : currentTask.description,
+            details: args.details !== undefined ? args.details : currentTask.details,
             assignee: args.assignee !== undefined ? args.assignee : currentTask.assignee,
             status: args.status !== undefined ? args.status : currentTask.status,
             estimate: args.estimate !== undefined ? args.estimate : currentTask.estimate,

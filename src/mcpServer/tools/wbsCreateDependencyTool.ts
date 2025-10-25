@@ -57,14 +57,14 @@ export default class WbsCreateDependencyTool extends Tool {
    */
   async run(args: any) {
     try {
-  const dependee = args.dependee;
-  const dependency = args.dependency;
+      const dependee = args.dependee;
+      const dependency = args.dependency;
       const artifacts = Array.isArray(args.artifacts) ? args.artifacts : [];
 
-  // Note: args.dependee は依存先タスクID、args.dependency は依存元タスクIDという仕様
-  // New DB naming: dependency_task_id (依存元), dependee_task_id (依存先)
-  const created = await this.repo.createDependency(dependency, dependee, artifacts);
-      return { content: [{ type: 'text', text: JSON.stringify(created) }] };
+      // Note: args.dependee は依存先タスクID、args.dependency は依存元タスクIDという仕様
+      // New DB naming: dependency_task_id (依存元), dependee_task_id (依存先)
+      const createDependency = await this.repo.createDependency(dependency, dependee, artifacts);
+      return { content: [{ type: 'text', text: JSON.stringify({ createDependency }) }] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { content: [{ type: 'text', text: `❌ Failed to create dependency: ${message}` }] };

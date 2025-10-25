@@ -44,7 +44,7 @@ export default class WbsListTasksTool extends Tool {
             // 指定 parentId のタスク一覧を取得して文字列化して返す
             const tasks = await repo.listTasks(args.parentId);
             const llmHints = { nextActions: [], notes: ['Task list retrieved successfully.'] };
-            return { content: [{ type: 'text', text: JSON.stringify(tasks, null, 2) }], llmHints };
+            return { content: [{ type: 'text', text: JSON.stringify({tasks, llmHints}, null, 2) }] };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = { nextActions: [{ action: 'wbs.planMode.listTasks', detail: 'Retry the request' }], notes: [`Exception message: ${message}`] };

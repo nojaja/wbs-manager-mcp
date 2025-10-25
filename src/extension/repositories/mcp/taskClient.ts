@@ -17,30 +17,13 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.listTasks', args);
             const parsed = this.parseToolResponse(result);
-            return this.extractTaskList(parsed);
+            return parsed.parsed.tasks;
         } catch (error) {
             this.outputChannel.log(`[MCP Client] Failed to list tasks: ${error instanceof Error ? error.message : String(error)}`);
             return [];
         }
     }
 
-    /**
-     * Extract task list array from parsed response, logging on error.
-     * @param parsed normalized parse result from parseToolResponse
-     * @param parsed.parsed the parsed payload (may be array)
-     * @param parsed.error error string if present
-     * @param parsed.rawText raw text fallback
-     * @returns an array of tasks when parse succeeded, otherwise empty array
-     */
-    private extractTaskList(parsed: { parsed?: any; error?: string; rawText?: string }): any[] {
-        if (Array.isArray(parsed.parsed)) {
-            return parsed.parsed;
-        }
-        if (parsed.error) {
-            this.outputChannel.log(`[MCP Client] Failed to parse task list: ${parsed.error}`);
-        }
-        return [];
-    }
 
     /**
      * タスクIDから詳細情報を取得する。
@@ -52,8 +35,8 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.getTask', { taskId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed && typeof parsed.parsed === 'object') {
-                return parsed.parsed;
+            if (parsed.parsed && typeof parsed.parsed === 'object' && parsed.parsed.task) {
+                return parsed.parsed.task;
             }
             if (parsed.error) {
                 this.outputChannel.log(`[MCP Client] Failed to get task: ${parsed.error}`);
@@ -139,8 +122,8 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.deleteTask', { taskId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed) {
-                const parsedId = typeof parsed.parsed === 'object' ? parsed.parsed.id : undefined;
+            if (parsed.parsed.deletedTask) {
+                const parsedId = typeof parsed.parsed === 'object' ? parsed.parsed.deletedTask.id : undefined;
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: parsedId ?? taskId, message };
             }
@@ -161,8 +144,8 @@ export class MCPTaskClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.moveTask', { taskId, newParentId: newParentId ?? null });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed) {
-                const parsedId = typeof parsed.parsed === 'object' ? parsed.parsed.id : undefined;
+            if (parsed.parsed.updatedTask) {
+                const parsedId = typeof parsed.parsed.updatedTask === 'object' ? parsed.parsed.updatedTask.id : undefined;
                 const message = parsed.hintSummary || parsed.rawText;
                 return { success: true, taskId: parsedId ?? taskId, message };
             }

@@ -19,7 +19,7 @@ export default class WbsCreateTaskTool extends Tool {
     constructor() {
         super({
             name: 'wbs.planMode.createTask',
-            description: 'Tool to create a WBS task. If `parentId` is provided the new task will be created as a child of that parent; if omitted the task is registered at the root level. When creation succeeds a task ID is issued and the created task can be retrieved in lists via `wbs.planMode.listTasks`. For LLM-driven automation, provide a clear "description" prompt with execution instructions, use `completionConditions.description` for audit/acceptance prompts, and list any affected artifacts in `artifacts` for traceability.',
+            description: 'Tool to create a WBS task. If `parentId` is provided the new task will be created as a child of that parent; if omitted the task is registered at the root level. When creation succeeds a task ID is issued and the created task can be retrieved in lists via `wbs.planMode.listTasks`. For LLM-driven automation, provide a clear "details" prompt with execution instructions, use `completionConditions.description` for audit/acceptance prompts, and list any affected artifacts in `artifacts` for traceability.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -28,6 +28,7 @@ export default class WbsCreateTaskTool extends Tool {
                     description: { type: 'string', description: 'Instruction prompt describing what must be done to complete the task. Write concrete steps or acceptance criteria so an LLM or a human can act on it.' },
                     assignee: { type: 'string', description: 'Assignee name or user identifier. If omitted the task will be unassigned.' },
                     estimate: { type: 'string', description: "Estimated time required for the task (examples: '4h', '2d'). If the work exceeds 8 hours it is recommended to split it into subtasks." },
+                    details: { type: 'string', description: 'Set the prompt for the work LLM, including detailed work content, work steps, and background information necessary for the LLM to perform the work accurately.' },
                     completionConditions: {
                         type: 'array',
                         description: 'An array of audit/acceptance prompts used to determine whether the task is complete. Each item should contain a description that can be used as a verification checklist or test prompt.',
@@ -85,11 +86,14 @@ export default class WbsCreateTaskTool extends Tool {
             const task = await repo.createTask(
                 args.title,
                 args.description ?? '',
+                args.details ?? '',
                 args.parentId ?? null,
                 args.assignee ?? null,
                 args.estimate ?? null,
                 { dependencies, artifacts, completionConditions }
             );
+                // pass details through options so repository can persist it
+                // (keep backwards compatible signature)
 
             // Create dependencies (if any) in a separated helper to keep complexity low
             const dependencyResults = await this.createDependenciesForTask(task, inputArgs.dependencies);
@@ -128,6 +132,10 @@ export default class WbsCreateTaskTool extends Tool {
      */
     private buildLlmHintsForTask(task: any) {
         const nextActions: any[] = [];
+        //detailsが未指定の場合のnextAction追加
+        if (!task.details || task.details.length === 0) {
+            nextActions.push({ action: 'wbs.planMode.updateTask', detail: '詳細が未指定です。タスクの詳細をdetailsに設定してください' });
+        }
         //dependenciesが未指定の場合のnextAction追加
         if (!task.dependencies || task.dependencies.length === 0) {
             nextActions.push({ action: 'addDependencies', detail: '依存関係が未指定です。後続タスクがある場合はdependenciesに設定してください' });

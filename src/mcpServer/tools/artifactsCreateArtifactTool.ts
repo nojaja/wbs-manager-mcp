@@ -52,7 +52,7 @@ export default class ArtifactsCreateArtifactTool extends Tool {
                 ],
                 notes: ['成果物はDBに保存されています。必要に応じてタスクへ割当ててください。']
             };
-            return { content: [{ type: 'text', text: JSON.stringify(artifact, null, 2) }], llmHints };
+            return { content: [{ type: 'text', text: JSON.stringify({ artifact, llmHints }, null, 2) }] };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             const llmHints = {

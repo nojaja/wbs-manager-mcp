@@ -87,10 +87,10 @@ export class DependenciesRepository {
     if (!existing) throw new Error(`Dependency not found: ${dependencyId}`);
 
     // Validate tasks exist
-  const dependencyTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependencyTaskId);
-  if (!dependencyTask) throw new Error(`Task not found (dependencyTaskId): ${dependencyTaskId}`);
-  const dependeeTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependeeTaskId);
-  if (!dependeeTask) throw new Error(`Task not found (dependeeTaskId): ${dependeeTaskId}`);
+    const dependencyTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependencyTaskId);
+    if (!dependencyTask) throw new Error(`Task not found (dependencyTaskId): ${dependencyTaskId}`);
+    const dependeeTask = await db.get(`SELECT id FROM tasks WHERE id = ?`, dependeeTaskId);
+    if (!dependeeTask) throw new Error(`Task not found (dependeeTaskId): ${dependeeTaskId}`);
 
     // Validate artifacts exist
     await this.validateArtifactsExist(db, artifacts);
@@ -174,14 +174,14 @@ export class DependenciesRepository {
     const dependencyIds: string[] = rows.map(row => row.dependee_task_id);
     return dependencyIds;
   }
-  
-    /**
-   * 処理名: タスクに関連する依存先タスクID取得
-   * 処理概要: 指定タスクIDに関連する dependencies レコードを取得して返す
-   * 実装理由: タスク詳細表示時に、そのタスクが持つ依存関係で取得できるようにするため
-   * @param dependeeTaskId 取得対象のタスクID
-   * @returns 依存関係オブジェクト
-   */
+
+  /**
+ * 処理名: タスクに関連する依存先タスクID取得
+ * 処理概要: 指定タスクIDに関連する dependencies レコードを取得して返す
+ * 実装理由: タスク詳細表示時に、そのタスクが持つ依存関係で取得できるようにするため
+ * @param dependeeTaskId 取得対象のタスクID
+ * @returns 依存関係オブジェクト
+ */
   async getDependeeByTaskId(dependeeTaskId: string) {
     const db = await getDatabase();
     const rows = await db.all<any[]>(`SELECT dependency_task_id FROM dependencies WHERE dependee_task_id = ? `, dependeeTaskId);
@@ -189,7 +189,7 @@ export class DependenciesRepository {
     const dependencyIds: string[] = rows.map(row => row.dependency_task_id);
     return dependencyIds;
   }
-  
+
 
   /**
    * 処理名: タスクに関連する依存関係収集
@@ -236,8 +236,8 @@ export class DependenciesRepository {
    */
   private processDependencyRow(row: any, taskIds: string[], result: Map<string, { dependents: any[]; dependees: any[] }>) {
     const depId = row.dependency_id;
-  const fromId = row.dependency_task_id;
-  const toId = row.dependee_task_id;
+    const fromId = row.dependency_task_id;
+    const toId = row.dependee_task_id;
     const artifact = row.da_id ? { id: row.da_id, artifactId: row.artifact_id, order: typeof row.order_index === 'number' ? row.order_index : Number(row.order_index ?? 0) } : null;
 
     this.handleFromRow(depId, fromId, toId, artifact, taskIds, result);
