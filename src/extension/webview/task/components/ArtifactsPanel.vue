@@ -60,23 +60,9 @@ export default {
     };
   },
   computed: {
-    // collect crud_operations from suggestedArtifacts or artifacts
     crudOptions() {
-      const src = Array.isArray(this.suggestedArtifacts) && this.suggestedArtifacts.length ? this.suggestedArtifacts : this.artifacts || [];
-      const ops = [];
-      src.forEach(a => {
-        if (!a) return;
-        const v = a.crud_operations;
-        if (!v) return;
-        if (Array.isArray(v)) v.forEach(x => ops.push(x));
-        else if (typeof v === 'string') {
-          // if comma separated, split
-          if (v.indexOf(',') !== -1) v.split(',').map(s => s.trim()).forEach(x => ops.push(x));
-          else ops.push(v);
-        }
-      });
-      // unique
-      return Array.from(new Set(ops));
+      // 固定: C, U, R, D
+      return ['C', 'U', 'R', 'D'];
     }
   },
   watch: {
