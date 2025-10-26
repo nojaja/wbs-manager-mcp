@@ -13,7 +13,7 @@
           <button class="remove" @click="removeItem(index)" title="削除">✕</button>
       </template>
       <template #add-row="{ show, focusAdd, onAdd }">
-        <ConditionAddRowFigma
+        <ArtifactsAddRow
           v-if="show"
           ref="addRow"
           :placeholder="'artifact-id: 名前'"
@@ -39,11 +39,11 @@
 
 <script>
 import ListEditor from './ListEditor.vue';
-import ConditionAddRowFigma from './ConditionAddRowFigma.vue';
+import ArtifactsAddRow from './ArtifactsAddRow.vue';
 
 export default {
   name: 'ArtifactsPanel',
-  components: { ListEditor, ConditionAddRowFigma },
+  components: { ListEditor, ArtifactsAddRow },
   props: {
     artifacts: {
       type: Array,

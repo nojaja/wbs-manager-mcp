@@ -33,7 +33,7 @@
 
 <script>
 export default {
-  name: 'ConditionAddRowFigma',
+  name: 'ArtifactsAddRow',
   props: {
     placeholder: {
       type: String,
