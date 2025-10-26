@@ -75,6 +75,7 @@ describe('MCP repository clients', () => {
   });
 
   test('task client parsing success path for getTask', async () => {
+    // Tool returns JSON whose top-level represents the task object
     jest.spyOn(taskClient as any, 'callTool').mockResolvedValue({ content: [{ text: JSON.stringify({ id: 't1', title: 'Task' }) }] });
     const task = await taskClient.getTask('t1');
     expect(task).toEqual({ id: 't1', title: 'Task' });
@@ -106,6 +107,7 @@ describe('MCP repository clients', () => {
   test('task client create/delete/move propagate parameters', async () => {
     const spy = jest.spyOn(taskClient as any, 'callTool');
   // Return structured JSON containing task.id so createTask can read parsed.parsed.task.id
+  // createTask: tool returns object with task field
   spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ task: { id: 'new-id' } }) }] });
   const created = await taskClient.createTask({ parentId: 'root', title: 'Task' });
   expect(spy).toHaveBeenCalledWith('wbs.planMode.createTask', { parentId: 'root', title: 'Task' });
@@ -127,21 +129,24 @@ describe('MCP repository clients', () => {
 
   test('artifact client list/create/update/delete behaviour mirrors task client', async () => {
     const spy = jest.spyOn(artifactClient as any, 'callTool');
-    spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify([{ id: 'a1' }]) }] });
-    const artifacts = await artifactClient.listArtifacts();
-    expect(artifacts).toEqual([{ id: 'a1' }]);
+  // listArtifacts expects top-level artifacts array in tool JSON
+  spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ artifacts: [{ id: 'a1' }] }) }] });
+  const artifacts = await artifactClient.listArtifacts();
+  expect(artifacts).toEqual([{ id: 'a1' }]);
 
-    spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 'a1' }) }] });
+  // createArtifact: tool returns artifact object
+  spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ artifact: { id: 'a1' } }) }] });
     const created = await artifactClient.createArtifact({ title: 'A' });
     expect(created.success).toBe(true);
 
-    spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ id: 'a1' }) }] });
+  // updateArtifact: tool returns updateArtifact object
+  spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ updateArtifact: { id: 'a1' } }) }] });
     const updated = await artifactClient.updateArtifact({ artifactId: 'a1' });
     expect(updated.success).toBe(true);
 
-    spy.mockResolvedValueOnce({ content: [{ text: '✅ deleted' }] });
-    const deleted = await artifactClient.deleteArtifact('a1');
-    expect(deleted.success).toBe(true);
+  spy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ deleteArtifact: true, rawText: '✅ deleted' }) }] });
+  const deleted = await artifactClient.deleteArtifact('a1');
+  expect(deleted.success).toBe(true);
 
     spy.mockRestore();
   });

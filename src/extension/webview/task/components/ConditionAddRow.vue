@@ -62,15 +62,17 @@ export default {
   align-items: center;
   padding: 0 16px;
   height: 40px;
-  background: #FFFFFF;
-  border: 1px solid #E0E0E0;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  
 }
 
 .add-input {
   flex: 1 1 auto;
   padding: 0;
   background: transparent;
-  color: #000000;
+  color: var(--vscode-input-foreground);
   border: none;
   outline: none;
   font-size: 0.9em;
@@ -88,7 +90,7 @@ export default {
   justify-content: center;
   padding: 8px;
   background: transparent;
-  color: #000000;
+  color: var(--vscode-icon-foreground);
   border: none;
   cursor: pointer;
   opacity: 0.9;

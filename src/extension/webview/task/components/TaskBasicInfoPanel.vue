@@ -1,38 +1,5 @@
 <template>
   <div class="task-basic-info-panel">
-    <h3>基本情報</h3>
-    
-    <div class="form-group">
-      <label for="title">タイトル *</label>
-      <input 
-        id="title" 
-        v-model="localTask.title" 
-        @input="onUpdate"
-        required 
-        placeholder="タスクのタイトルを入力..."
-      />
-    </div>
-
-    <div class="form-group">
-      <label for="description">説明</label>
-      <textarea 
-        id="description" 
-        v-model="localTask.description" 
-        @input="onUpdate"
-        placeholder="タスクの詳細説明を入力..."
-        rows="4"
-      ></textarea>
-    </div>
-
-    <div class="form-group">
-      <label for="assignee">担当者</label>
-      <input 
-        id="assignee" 
-        v-model="localTask.assignee" 
-        @input="onUpdate"
-        placeholder="担当者名を入力..."
-      />
-    </div>
 
     <div class="form-group">
       <label for="status">ステータス</label>
@@ -51,6 +18,49 @@
         </button>
       </div>
     </div>
+    
+    <div class="form-group">
+      <label for="title">タイトル *</label>
+      <input 
+        id="title" 
+        v-model="localTask.title" 
+        @input="onUpdate"
+        required 
+        placeholder="タスクのタイトルを入力..."
+      />
+    </div>
+
+    <div class="form-group">
+      <label for="description">概要</label>
+      <textarea 
+        id="description" 
+        v-model="localTask.description" 
+        @input="onUpdate"
+        placeholder="タスクの概要を入力..."
+        rows="4"
+      ></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="details">詳細</label>
+      <textarea 
+        id="details" 
+        v-model="localTask.details" 
+        @input="onUpdate"
+        placeholder="タスクの詳細を入力..."
+        rows="4"
+      ></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="assignee">担当者</label>
+      <input 
+        id="assignee" 
+        v-model="localTask.assignee" 
+        @input="onUpdate"
+        placeholder="担当者名を入力..."
+      />
+    </div>
 
     <div class="form-group">
       <label for="estimate">見積もり</label>
@@ -68,10 +78,6 @@
       <input type="text" :value="localTask.id" readonly />
     </div>
 
-    <div class="form-group readonly">
-      <label>Version</label>
-      <input type="text" :value="localTask.version" readonly />
-    </div>
   </div>
 </template>
 
@@ -176,6 +182,7 @@ export default {
 
 .form-group {
   margin-bottom: 12px;
+  padding-right: 16px;
 }
 
 .form-group label {

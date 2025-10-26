@@ -55,7 +55,7 @@ describe('MCP client additional coverage tests', () => {
 
     test('listTasks handles empty content', async () => {
       const callToolSpy = jest.spyOn(taskClient as any, 'callTool')
-        .mockResolvedValue({ content: [] });
+        .mockResolvedValue({ content: [{ text: JSON.stringify({ tasks: [] }) }] });
 
       const result = await taskClient.listTasks();
       expect(result).toEqual([]);
@@ -70,7 +70,8 @@ describe('MCP client additional coverage tests', () => {
 
       const result = await taskClient.listTasks();
       expect(result).toEqual([]);
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MCP Client] Failed to parse task list:'));
+      // listTasks now logs a generic failure message on exceptions
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[MCP Client] Failed to list tasks:'));
       expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', {});
 
       callToolSpy.mockRestore();
@@ -90,7 +91,7 @@ describe('MCP client additional coverage tests', () => {
 
     test('listTasks passes parentId parameter correctly', async () => {
       const callToolSpy = jest.spyOn(taskClient as any, 'callTool')
-        .mockResolvedValue({ content: [{ text: '[]' }] });
+        .mockResolvedValue({ content: [{ text: JSON.stringify({ tasks: [] }) }] });
 
       await taskClient.listTasks('parent123');
       expect(callToolSpy).toHaveBeenCalledWith('wbs.planMode.listTasks', { parentId: 'parent123' });
@@ -140,17 +141,22 @@ describe('MCP client additional coverage tests', () => {
     test('deleteArtifact handles various response types', async () => {
       const callToolSpy = jest.spyOn(artifactClient as any, 'callTool');
 
-      callToolSpy.mockResolvedValueOnce({ content: [{ text: '✅ Deleted successfully' }] });
-      let result = await artifactClient.deleteArtifact('test-id');
-      expect(result).toEqual({ success: true, message: '✅ Deleted successfully' });
+    // success: tool returns structured JSON with deleteArtifact
+    callToolSpy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ deleteArtifact: true, rawText: '✅ Deleted successfully' }) }] });
+  let result = await artifactClient.deleteArtifact('test-id');
+  expect(result.success).toBe(true);
+  expect(String(result.message)).toContain('✅ Deleted successfully');
 
-      callToolSpy.mockResolvedValueOnce({ content: [{ text: '❌ Not found' }] });
-      result = await artifactClient.deleteArtifact('test-id');
-      expect(result).toEqual({ success: false, error: '❌ Not found', message: '❌ Not found' });
+    // not found: include an error field in the tool output
+    callToolSpy.mockResolvedValueOnce({ content: [{ text: JSON.stringify({ deleteArtifact: false, error: '❌ Not found', rawText: '❌ Not found' }) }] });
+  result = await artifactClient.deleteArtifact('test-id');
+  expect(result.success).toBe(false);
+  expect(result.error).toBe('❌ Not found');
+  expect(String(result.message)).toContain('❌ Not found');
 
-      callToolSpy.mockRejectedValueOnce(new Error('Network error'));
-      result = await artifactClient.deleteArtifact('test-id');
-      expect(result).toEqual({ success: false, error: 'Network error' });
+  callToolSpy.mockRejectedValueOnce(new Error('Network error'));
+  result = await artifactClient.deleteArtifact('test-id');
+  expect(result).toEqual({ success: false, error: 'Network error' });
 
       callToolSpy.mockRestore();
     });

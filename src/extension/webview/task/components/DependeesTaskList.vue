@@ -1,7 +1,7 @@
 <template>
   <div class="dependees-task-list">
     <div class="list-header">
-      <h3>先行タスク (Prerequisites)</h3>
+      <h3>先行タスク </h3>
       <span class="count">{{ dependees.length }}</span>
     </div>
 
@@ -9,6 +9,17 @@
       :tasks="dependees"
       :selectedTaskId="selectedTaskId"
       emptyMessage="先行タスクがありません"
+      @select-task="selectTask"
+    />
+    
+    <div class="list-header">
+      <h3>後続タスク (Successors)</h3>
+      <span class="count">{{ dependents.length }}</span>
+    </div>
+    <TaskList
+      :tasks="dependents"
+      :selectedTaskId="selectedTaskId"
+      emptyMessage="後続タスクがありません"
       @select-task="selectTask"
     />
   </div>
@@ -21,6 +32,10 @@ export default {
   components: { TaskList },
   props: {
     dependees: {
+      type: Array,
+      default: () => []
+    },
+    dependents: {
       type: Array,
       default: () => []
     },
@@ -42,7 +57,7 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--vscode-sideBar-background);
+  background-color: var(--vscode-editor-background);
   border-right: 1px solid var(--vscode-panel-border);
 }
 
@@ -53,6 +68,7 @@ export default {
   padding: 12px 16px;
   background-color: var(--vscode-sideBarSectionHeader-background);
   border-bottom: 1px solid var(--vscode-panel-border);
+  border-top: 1px solid var(--vscode-panel-border);
   flex-shrink: 0;
 }
 

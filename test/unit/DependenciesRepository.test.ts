@@ -35,7 +35,8 @@ describe('DependenciesRepository', () => {
 
     const t1 = await taskRepo.createTask('From');
     const t2 = await taskRepo.createTask('To');
-    const art = await artRepo.createArtifact('Art', 'body');
+  const uniqueTitle = 'Art-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const art = await artRepo.createArtifact(uniqueTitle, 'body');
 
     const dep = await repo.createDependency(t1.id, t2.id, [art.id]);
     expect(dep).toBeDefined();

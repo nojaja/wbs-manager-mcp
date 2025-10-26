@@ -91,24 +91,23 @@ export class TaskDetailPanel extends WebviewPanelBase {
             this._task = await this.taskClient.getTask(this._taskId);
             if (this._task) {
                 this._panel.title = `Task: ${this._task.title}`;
-                let artifacts: Artifact[] = [];
+                // task.artifact フィールドから直接取得（JSONオブジェクトのまま渡す）
+                const artifacts: any[] = Array.isArray((this._task as any)?.artifact) 
+                    ? (this._task as any).artifact 
+                    : [];
 
-                try {
-                    if (this.artifactClient) {
-                        artifacts = await this.artifactClient.listArtifacts();
-                    }
-                } catch (e) {
-                    // ignore
-                }
-
-                // getTaskの結果に既にdependeesとdependentsが含まれている
+                // dependees と dependents をそのまま取得
                 const dependees = (this._task as any).dependees || [];
                 const dependents = (this._task as any).dependents || [];
+
+                // completionConditions をそのまま取得（completion_conditions キーで webview に渡す）
+                const completionConditions = (this._task as any)?.completionConditions || [];
+                const taskForPayload = { ...(this._task as any), completion_conditions: completionConditions };
 
                 this._panel.webview.html = this.buildHtmlForWebview(
                     '__TASK_PAYLOAD__',
                     {
-                        task: this._task,
+                        task: taskForPayload,
                         artifacts,
                         dependees,
                         dependents,
@@ -135,8 +134,7 @@ export class TaskDetailPanel extends WebviewPanelBase {
         if (data.assignee !== undefined) updates.assignee = data.assignee;
         if (data.status !== undefined) updates.status = data.status;
         if (data.estimate !== undefined) updates.estimate = data.estimate;
-        if (Array.isArray(data.deliverables)) updates.deliverables = data.deliverables;
-        if (Array.isArray(data.prerequisites)) updates.prerequisites = data.prerequisites;
+        if (Array.isArray(data.artifacts)) updates.artifacts = data.artifacts;
         if (Array.isArray(data.completionConditions)) updates.completionConditions = data.completionConditions;
         updates.ifVersion = this._task?.version;
         return updates;

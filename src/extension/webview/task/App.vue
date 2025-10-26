@@ -3,6 +3,7 @@
     <!-- 左ペイン: 先行タスク一覧 -->
     <DependeesTaskList
       :dependees="dependees"
+      :dependents="dependents"
       :selectedTaskId="currentTask.id"
       @select-task="onSelectTask"
     />
@@ -15,12 +16,6 @@
       @save="onSave"
     />
 
-    <!-- 右ペイン: 後続タスク一覧 -->
-    <DependentsTaskList
-      :dependents="dependents"
-      :selectedTaskId="currentTask.id"
-      @select-task="onSelectTask"
-    />
   </div>
 </template>
 
