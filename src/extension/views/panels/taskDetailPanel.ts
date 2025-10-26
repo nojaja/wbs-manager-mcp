@@ -134,7 +134,14 @@ export class TaskDetailPanel extends WebviewPanelBase {
         if (data.assignee !== undefined) updates.assignee = data.assignee;
         if (data.status !== undefined) updates.status = data.status;
         if (data.estimate !== undefined) updates.estimate = data.estimate;
-        if (Array.isArray(data.artifacts)) updates.artifacts = data.artifacts;
+        if (Array.isArray(data.deliverables)) {
+            updates.deliverables = data.deliverables;
+        } else if (Array.isArray(data.artifacts)) {
+            updates.deliverables = data.artifacts;
+        }
+        if (Array.isArray(data.prerequisites)) {
+            updates.prerequisites = data.prerequisites;
+        }
         if (Array.isArray(data.completionConditions)) updates.completionConditions = data.completionConditions;
         updates.ifVersion = this._task?.version;
         return updates;

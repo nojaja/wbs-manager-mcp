@@ -7,6 +7,8 @@ export interface CreateTaskParams {
     parentId?: string | null;
     assignee?: string | null;
     estimate?: string | null;
+    deliverables?: ArtifactReferenceInput[];
+    prerequisites?: ArtifactReferenceInput[];
     artifacts?: ArtifactReferenceInput[];
     completionConditions?: CompletionConditionInput[];
 }
@@ -22,13 +24,15 @@ export interface CreateTaskPayload {
     parentId: string | null;
     assignee: string | null;
     estimate: string | null;
-    artifacts?: ArtifactReferenceInput[];
+    deliverables?: ArtifactReferenceInput[];
+    prerequisites?: ArtifactReferenceInput[];
     completionConditions?: CompletionConditionInput[];
 }
 
 export interface UpdateTaskPayload {
     [key: string]: unknown;
-    artifacts?: ArtifactReferenceInput[];
+    deliverables?: ArtifactReferenceInput[];
+    prerequisites?: ArtifactReferenceInput[];
     completionConditions?: CompletionConditionInput[];
 }
 
@@ -107,7 +111,9 @@ export function sanitizeCompletionConditions(inputs?: CompletionConditionInput[]
  * @returns CreateTaskPayload (サーバ送信用の完全なオブジェクト)
  */
 export function buildCreateTaskPayload(params: CreateTaskParams): CreateTaskPayload {
-    const artifacts = sanitizeArtifactReferences(params.artifacts);
+    const deliverablesSource = params.deliverables ?? params.artifacts;
+    const deliverables = sanitizeArtifactReferences(deliverablesSource);
+    const prerequisites = sanitizeArtifactReferences(params.prerequisites);
     const completionConditions = sanitizeCompletionConditions(params.completionConditions);
 
     const payload: CreateTaskPayload = {
@@ -118,8 +124,12 @@ export function buildCreateTaskPayload(params: CreateTaskParams): CreateTaskPayl
         estimate: params.estimate ?? null
     };
 
-    if (artifacts !== undefined) {
-        payload.artifacts = artifacts;
+    if (deliverables !== undefined) {
+        payload.deliverables = deliverables;
+    }
+
+    if (prerequisites !== undefined) {
+        payload.prerequisites = prerequisites;
     }
     
     if (completionConditions !== undefined) {
@@ -137,16 +147,26 @@ export function buildCreateTaskPayload(params: CreateTaskParams): CreateTaskPayl
  * @returns UpdateTaskPayload サーバ送信用の差分オブジェクト
  */
 export function buildUpdateTaskPayload(updates: UpdateTaskParams): UpdateTaskPayload {
-    const artifacts = sanitizeArtifactReferences(updates.artifacts);
+    const deliverablesSource = updates.deliverables ?? updates.artifacts;
+    const deliverables = sanitizeArtifactReferences(deliverablesSource);
+    const prerequisites = sanitizeArtifactReferences(updates.prerequisites);
     const completionConditions = sanitizeCompletionConditions(updates.completionConditions);
 
     const normalized: UpdateTaskPayload = { ...updates };
     delete normalized.taskId;
 
-    if (artifacts !== undefined) {
-        normalized.artifacts = artifacts;
+    if (deliverables !== undefined) {
+        normalized.deliverables = deliverables;
+        delete (normalized as any).artifacts;
     } else {
-        delete normalized.artifacts;
+        delete normalized.deliverables;
+        delete (normalized as any).artifacts;
+    }
+
+    if (prerequisites !== undefined) {
+        normalized.prerequisites = prerequisites;
+    } else {
+        delete normalized.prerequisites;
     }
 
     if (completionConditions !== undefined) {
