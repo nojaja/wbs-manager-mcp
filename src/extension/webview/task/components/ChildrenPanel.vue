@@ -92,6 +92,7 @@ export default {
 .actions { margin-top: 12px; display:flex; gap:8px; }
 .btn-secondary { padding:6px 12px; border-radius:4px; }
 .condition-item { display:flex; align-items:center; gap:8px; padding:0 16px; height:48px; border-top:1px solid #E0E0E0 }
+.condition-item .remove { background:transparent; color: var(--vscode-icon-foreground);border:none; cursor:pointer }
 .task-title { flex: 1; font-weight:500 }
 .task-meta { width: 200px; text-align:right }
 </style>

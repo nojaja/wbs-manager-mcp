@@ -57,7 +57,7 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--vscode-sideBar-background);
+  background-color: var(--vscode-editor-background);
   border-right: 1px solid var(--vscode-panel-border);
 }
 

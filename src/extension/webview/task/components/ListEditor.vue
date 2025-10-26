@@ -111,9 +111,9 @@ export default {
 <style scoped>
 .list-editor {
   padding: 16px;
-  background-color: #FFFFFF;
-  border: 1px solid #E0E0E0;
-  border-radius: 8px;
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
 }
 .panel-header { display:flex; align-items:center; justify-content:space-between; }
 .panel-header h3 { margin:0; font-size:16px; font-weight:600 }
@@ -127,7 +127,17 @@ export default {
 .condition-item { display:flex; align-items:center; gap:12px; padding:0 16px; height:40px; border-top:1px solid #E0E0E0 }
 .condition-item .logo { width:24px; height:24px; background:#D9D9D9; border-radius:50% }
 .condition-item .desc { flex:1 }
-.condition-item .remove { background:transparent; border:none; cursor:pointer }
+.condition-item .remove { background:transparent; color: var(--vscode-icon-foreground);border:none; cursor:pointer }
+.actions .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
+  border: none;
+  cursor: pointer;
+}
 .count {
   background-color: var(--vscode-badge-background);
   color: var(--vscode-badge-foreground);

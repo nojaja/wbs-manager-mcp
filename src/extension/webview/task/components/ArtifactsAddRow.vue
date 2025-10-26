@@ -103,15 +103,16 @@ export default {
   align-items: center;
   padding: 0 16px;
   height: 40px;
-  background: #FFFFFF; /* fill_A3IDXO */
-  border: 1px solid #E0E0E0; /* stroke_XB3YRY */
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
 }
 
 .add-input {
   flex: 1 1 auto;
   padding: 0;
   background: transparent;
-  color: #000000;
+  color: var(--vscode-input-foreground);
   border: none;
   outline: none;
   font-size: 0.9em;
@@ -127,8 +128,8 @@ export default {
   display: inline-flex;
   align-items: center;
   width: 40px; /* as in Figma layout_VAHLYV */
-  background: #FFFFFF;
-  border: 1px solid #D9D9D9; /* stroke_H70TWY */
+  background: transparent;
+  color: var(--vscode-input-foreground);
   cursor: pointer;
   box-sizing: border-box;
   position: relative;
@@ -137,7 +138,7 @@ export default {
 .select-value {
   flex: 1 1 auto;
   font-size: 16px; /* Single Line/Body Base */
-  color: #1E1E1E; /* fill_9EBSWO */
+  color: var(--vscode-input-foreground);
 }
 
 .chevron {
@@ -151,8 +152,8 @@ export default {
   align-items: center;
   justify-content: center;
   padding: 8px;
-  background: transparent; /* Subtle */
-  color: #000000;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
   border: none;
   cursor: pointer;
   opacity: 0.9; /* matches Figma opacity */
@@ -165,8 +166,8 @@ export default {
   top: calc(100% + 6px);
   left: 0;
   min-width: 160px;
-  background: #fff;
-  border: 1px solid #D9D9D9;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
   box-shadow: 0 6px 12px rgba(0,0,0,0.08);
   border-radius: 6px;
   z-index: 100;
@@ -181,5 +182,7 @@ export default {
   text-align:left;
   cursor:pointer;
 }
-.select-field .dropdown button:hover{ background:#F5F5F5 }
+.select-field .dropdown button:hover{
+   background: var(--vscode-icon-foreground);
+}
 </style>

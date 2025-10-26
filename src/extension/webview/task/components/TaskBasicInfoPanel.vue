@@ -182,6 +182,7 @@ export default {
 
 .form-group {
   margin-bottom: 12px;
+  padding-right: 16px;
 }
 
 .form-group label {
