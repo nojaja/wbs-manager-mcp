@@ -9,14 +9,11 @@ describe('taskPayload helpers', () => {
         parentId: 'root',
         assignee: undefined,
         estimate: undefined,
-        deliverables: [
+        artifacts: [
           { artifactId: ' art-1 ', crudOperations: ' create ' },
           { artifactId: '   ' },
-          { artifactId: 'art-2', crudOperations: '' }
-        ],
-        prerequisites: [
-          { artifactId: ' pre-1 ' },
-          { artifactId: '   ', crudOperations: ' update ' }
+          { artifactId: 'art-2', crudOperations: '' },
+          { artifactId: ' pre-1 ', crudOperations: ' update ' }
         ],
         completionConditions: [
           { description: '  done  ' },
@@ -30,12 +27,10 @@ describe('taskPayload helpers', () => {
         parentId: 'root',
         assignee: null,
         estimate: null,
-        deliverables: [
+        artifacts: [
           { artifactId: 'art-1', crudOperations: 'create' },
-          { artifactId: 'art-2' }
-        ],
-        prerequisites: [
-          { artifactId: 'pre-1' }
+          { artifactId: 'art-2' },
+          { artifactId: 'pre-1', crudOperations: 'update' }
         ],
         completionConditions: [
           { description: 'done' }
@@ -48,11 +43,9 @@ describe('taskPayload helpers', () => {
     it('更新ペイロードからtaskIdを除外し配列を正規化する', () => {
       const payload = buildUpdateTaskPayload({
         taskId: 'ignore-me',
-        deliverables: [
+        artifacts: [
           { artifactId: ' art-1 ', crudOperations: ' read ' },
-          { artifactId: '   ' }
-        ],
-        prerequisites: [
+          { artifactId: '   ' },
           { artifactId: ' pre-1 ', crudOperations: '  write  ' }
         ],
         completionConditions: [
@@ -63,10 +56,8 @@ describe('taskPayload helpers', () => {
       });
 
       expect(payload).toEqual({
-        deliverables: [
-          { artifactId: 'art-1', crudOperations: 'read' }
-        ],
-        prerequisites: [
+        artifacts: [
+          { artifactId: 'art-1', crudOperations: 'read' },
           { artifactId: 'pre-1', crudOperations: 'write' }
         ],
         completionConditions: [
@@ -79,7 +70,7 @@ describe('taskPayload helpers', () => {
     it('無効な配列は除去され既存フィールドは保持される', () => {
       const payload = buildUpdateTaskPayload({
         taskId: 'ignore-me',
-        deliverables: undefined,
+        artifacts: undefined,
         completionConditions: [{ description: '   ' }],
         note: 'memo'
       });
