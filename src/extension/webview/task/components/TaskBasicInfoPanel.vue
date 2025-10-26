@@ -31,25 +31,25 @@
     </div>
 
     <div class="form-group">
-      <label for="description">概要</label>
-      <textarea 
-        id="description" 
-        v-model="localTask.description" 
-        @input="onUpdate"
+      <MarkdownEditableField
+        label="概要"
+        :modelValue="localTask.description"
         placeholder="タスクの概要を入力..."
-        rows="4"
-      ></textarea>
+        :rows="4"
+        hint="クリックで編集（Markdown対応）"
+        @update:modelValue="val => { localTask.description = val; onUpdate(); }"
+      />
     </div>
 
     <div class="form-group">
-      <label for="details">詳細</label>
-      <textarea 
-        id="details" 
-        v-model="localTask.details" 
-        @input="onUpdate"
+      <MarkdownEditableField
+        label="詳細"
+        :modelValue="localTask.details"
         placeholder="タスクの詳細を入力..."
-        rows="4"
-      ></textarea>
+        :rows="4"
+        hint="クリックで編集（Markdown対応）"
+        @update:modelValue="val => { localTask.details = val; onUpdate(); }"
+      />
     </div>
 
     <div class="form-group">
@@ -141,18 +141,21 @@ export default {
       }
     }
   },
+  components: {
+    MarkdownEditableField: require('./MarkdownEditableField.vue').default
+  },
   methods: {
     onUpdate() {
       // 親コンポーネントに変更を通知
       this.$emit('update', {
         title: this.localTask.title,
         description: this.localTask.description,
+        details: this.localTask.details,
         assignee: this.localTask.assignee,
         status: this.localTask.status,
         estimate: this.localTask.estimate
       });
-    }
-    ,
+    },
     setStatus(value) {
       if (this.localTask.status === value) return;
       this.localTask.status = value;
