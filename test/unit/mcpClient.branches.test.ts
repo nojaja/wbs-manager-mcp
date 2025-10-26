@@ -50,7 +50,8 @@ describe('MCP client branch coverage', () => {
   });
 
   test('listTasks returns parsed array on success', async () => {
-    const payload = JSON.stringify([{ id: 't1', title: 'T1' }]);
+    // Tool returns JSON whose top-level contains tasks array
+    const payload = JSON.stringify({ tasks: [{ id: 't1', title: 'T1' }] });
     const res = { content: [{ text: payload }] };
     const callToolSpy = jest.spyOn(taskClient as any, 'callTool').mockResolvedValue(res);
     const r = await taskClient.listTasks('p1');

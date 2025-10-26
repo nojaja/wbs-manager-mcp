@@ -14,7 +14,7 @@ export class MCPArtifactClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.listArtifacts', {});
             const parsed = this.parseToolResponse(result);
-            if (Array.isArray(parsed.parsed.artifacts)) {
+            if (Array.isArray(parsed.parsed?.artifacts)) {
                 return parsed.parsed.artifacts as Artifact[];
             }
             if (parsed.error) {
@@ -48,7 +48,7 @@ export class MCPArtifactClient extends MCPBaseClient {
                 description: params.description ?? null
             });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed.artifact && typeof parsed.parsed.artifact === 'object') {
+            if (parsed.parsed?.artifact && typeof parsed.parsed.artifact === 'object') {
                 return { success: true, artifact: parsed.parsed.artifact as Artifact, message: parsed.hintSummary || parsed.rawText };
             }
             return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
@@ -85,7 +85,7 @@ export class MCPArtifactClient extends MCPBaseClient {
                 ifVersion: params.version
             });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed.updateArtifact && typeof parsed.parsed.updateArtifact === 'object') {
+            if (parsed.parsed?.updateArtifact && typeof parsed.parsed.updateArtifact === 'object') {
                 return { success: true, artifact: parsed.parsed.updateArtifact as Artifact, message: parsed.hintSummary || parsed.rawText };
             }
             if (parsed.error && parsed.error.includes('modified by another user')) {
@@ -108,7 +108,7 @@ export class MCPArtifactClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.getArtifact', { artifactId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed.artifact && typeof parsed.parsed.artifact === 'object') {
+            if (parsed.parsed?.artifact && typeof parsed.parsed.artifact === 'object') {
                 return parsed.parsed.artifact as Artifact;
             }
             if (parsed.error) {
@@ -131,10 +131,12 @@ export class MCPArtifactClient extends MCPBaseClient {
         try {
             const result = await this.callTool('wbs.planMode.deleteArtifact', { artifactId });
             const parsed = this.parseToolResponse(result);
-            if (parsed.parsed.deleteArtifact) {
+            if (parsed.parsed?.deleteArtifact) {
                 return { success: true, message: parsed.hintSummary || parsed.rawText };
             }
-            return { success: false, error: parsed.error ?? 'Unknown error', message: parsed.hintSummary || parsed.rawText };
+            const err = parsed.parsed?.error ?? parsed.error ?? 'Unknown error';
+            const message = parsed.hintSummary || parsed.rawText || (parsed.parsed && String(parsed.parsed)) || undefined;
+            return { success: false, error: err, message };
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) };
         }

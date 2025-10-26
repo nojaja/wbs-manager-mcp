@@ -36,24 +36,28 @@ describe('db-simple', () => {
       getTask: (...args: any[]) => (taskRepo.getTask as any).apply(taskRepo, args),
       updateTask: (...args: any[]) => {
         // サポート: 旧来の (id, updatesObject) と新シグネチャ (id, title?, description?, parentId?, assignee?, estimate?, options?) の両方を受け付ける
-        if (args.length === 2 && typeof args[1] === 'object' && !Array.isArray(args[1])) {
-          const id = args[0];
-          const upd = args[1] as any;
-          // マッピングを新シグネチャに変換して呼び出す
-          return (taskRepo.updateTask as any).apply(taskRepo, [
-            id,
-            upd.title,
-            upd.description,
-            upd.parentId ?? upd.parent_id ?? null,
-            upd.assignee ?? null,
-            upd.estimate ?? null,
-            {
-              dependencies: upd.dependency ?? upd.dependencies ?? undefined,
-              artifacts: upd.deliverables ?? upd.artifacts ?? undefined,
-              completionConditions: upd.completionConditions ?? undefined,
-              ifVersion: upd.ifVersion ?? upd.ifversion ?? undefined
-            }
-          ]);
+          if (args.length === 2 && typeof args[1] === 'object' && !Array.isArray(args[1])) {
+            const id = args[0];
+            const upd = args[1] as any;
+            // マッピングを新シグネチャに変換して呼び出す
+            // updateTask(taskId, title?, description?, details?, parentId?, assignee?, estimate?, options?)
+            return (taskRepo.updateTask as any).apply(taskRepo, [
+              id,
+              upd.title,
+              upd.description,
+              // details field may be provided as details
+              upd.details ?? null,
+              // parentId comes after details
+              upd.parentId ?? upd.parent_id ?? null,
+              upd.assignee ?? null,
+              upd.estimate ?? null,
+              {
+                dependencies: upd.dependency ?? upd.dependencies ?? undefined,
+                artifacts: upd.deliverables ?? upd.artifacts ?? undefined,
+                completionConditions: upd.completionConditions ?? undefined,
+                ifVersion: upd.ifVersion ?? upd.ifversion ?? undefined
+              }
+            ]);
         }
         return (taskRepo.updateTask as any).apply(taskRepo, args);
       },
@@ -110,7 +114,7 @@ describe('db-simple', () => {
       const assignee = 'Test Assignee';
       const estimate = '2 hours';
 
-  const createdTask = await repository.createTask(title, description, null, assignee, estimate);
+      const createdTask = await repository.createTask(title, description, null, null, assignee, estimate);
       expect(createdTask).toBeDefined();
       expect(createdTask.title).toBe(title);
       expect(createdTask.description).toBe(description);
@@ -157,7 +161,7 @@ describe('db-simple', () => {
     test('should create task with parent_id', async () => {
       const parentTask = await repository.createTask('Parent Task', 'Parent Description');
 
-      const childTask = await repository.createTask('Child Task', 'Child Description', parentTask.id);
+      const childTask = await repository.createTask('Child Task', 'Child Description', null, parentTask.id);
 
       expect(childTask.parent_id).toBe(parentTask.id);
     });
@@ -199,7 +203,7 @@ describe('db-simple', () => {
     test('should move task to root level', async () => {
       const parentTask = await repository.createTask('Parent Task', 'Parent Description');
 
-      const childTask = await repository.createTask('Child Task', 'Child Description', parentTask.id);
+      const childTask = await repository.createTask('Child Task', 'Child Description', null, parentTask.id);
 
       const movedTask = await repository.moveTask(childTask.id, null);
       expect(movedTask.parent_id).toBeNull();
@@ -220,7 +224,7 @@ describe('db-simple', () => {
 
       const listed = await repository.listTasks();
       expect(listed.length).toBeGreaterThanOrEqual(3);
-  const titles = listed.map((t: any) => t.title);
+      const titles = listed.map((t: any) => t.title);
       expect(titles).toEqual(expect.arrayContaining(['Task A', 'Task B', 'Task C']));
     });
 
@@ -236,6 +240,7 @@ describe('db-simple', () => {
       const task = await repository.createTask(
         'Complex Task',
         'Detailed description',
+        null,
         null,
         'John Doe',
         '4 hours'
@@ -263,7 +268,7 @@ describe('db-simple', () => {
 
     test('should get task with nested structure', async () => {
       const parent = await repository.createTask('Parent', 'Parent description');
-      const child = await repository.createTask('Child', 'Child description', parent.id);
+      const child = await repository.createTask('Child', 'Child description', null, parent.id);
       
       const retrieved = await repository.getTask(parent.id);
       expect(retrieved).toBeDefined();
@@ -313,26 +318,26 @@ describe('db-simple', () => {
   describe('listTasks with parentId parameter', () => {
     test('should return top-level tasks when parentId is null', async () => {
       const parentTask = await repository.createTask('Parent Task', 'Parent Description');
-      const childTask = await repository.createTask('Child Task', 'Child Description', parentTask.id);
+      const childTask = await repository.createTask('Child Task', 'Child Description', null, parentTask.id);
 
       const topLevelTasks = await repository.listTasks(null);
       
       expect(Array.isArray(topLevelTasks)).toBe(true);
-  expect(topLevelTasks.some((task: any) => task.id === parentTask.id)).toBe(true);
-  expect(topLevelTasks.some((task: any) => task.id === childTask.id)).toBe(false);
+      expect(topLevelTasks.some((task: any) => task.id === parentTask.id)).toBe(true);
+      expect(topLevelTasks.some((task: any) => task.id === childTask.id)).toBe(false);
     });
 
     test('should return child tasks when parentId is specified', async () => {
       const parentTask = await repository.createTask('Parent Task', 'Parent Description');
-      const childTask1 = await repository.createTask('Child Task 1', 'Child Description 1', parentTask.id);
-      const childTask2 = await repository.createTask('Child Task 2', 'Child Description 2', parentTask.id);
+      const childTask1 = await repository.createTask('Child Task 1', 'Child Description 1', null, parentTask.id);
+      const childTask2 = await repository.createTask('Child Task 2', 'Child Description 2', null, parentTask.id);
 
       const childTasks = await repository.listTasks(parentTask.id);
       
       expect(Array.isArray(childTasks)).toBe(true);
-  expect(childTasks.length).toBe(2);
-  expect(childTasks.some((task: any) => task.id === childTask1.id)).toBe(true);
-  expect(childTasks.some((task: any) => task.id === childTask2.id)).toBe(true);
+      expect(childTasks.length).toBe(2);
+      expect(childTasks.some((task: any) => task.id === childTask1.id)).toBe(true);
+      expect(childTasks.some((task: any) => task.id === childTask2.id)).toBe(true);
     });
 
     test('should return empty array when no child tasks exist', async () => {
@@ -345,17 +350,17 @@ describe('db-simple', () => {
     });
 
     test('should return hierarchical structure when parentId is undefined', async () => {
-  // 仕様変更: parentIdがundefinedの場合はトップレベルのみ返す
-  const parentTask = await repository.createTask('Parent Task', 'Parent Description');
-  const childTask = await repository.createTask('Child Task', 'Child Description', parentTask.id);
+      // 仕様変更: parentIdがundefinedの場合はトップレベルのみ返す
+      const parentTask = await repository.createTask('Parent Task', 'Parent Description');
+      const childTask = await repository.createTask('Child Task', 'Child Description', null, parentTask.id);
 
-  const topLevelTasks = await repository.listTasks(undefined);
+      const topLevelTasks = await repository.listTasks(undefined);
 
-  expect(Array.isArray(topLevelTasks)).toBe(true);
-  // トップレベルに親タスクのみが含まれる
-  expect(topLevelTasks.some((task: any) => task.id === parentTask.id)).toBe(true);
-  // 子タスクはトップレベルには含まれない
-  expect(topLevelTasks.some((task: any) => task.id === childTask.id)).toBe(false);
+      expect(Array.isArray(topLevelTasks)).toBe(true);
+      // トップレベルに親タスクのみが含まれる
+      expect(topLevelTasks.some((task: any) => task.id === parentTask.id)).toBe(true);
+      // 子タスクはトップレベルには含まれない
+      expect(topLevelTasks.some((task: any) => task.id === childTask.id)).toBe(false);
     });
   });
 
