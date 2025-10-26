@@ -1,14 +1,15 @@
 <template>
   <div class="list-editor">
     <div class="panel-header">
-      <h3>{{ title }}</h3>
+      <div class="title-container">
+        <h3>{{ title }}</h3><span class="count" >{{ computedItems.length }}</span>
+      </div>
       <div class="actions">
         <button class="icon-btn" @click="onShowAdd" title="追加">
           <slot name="add-icon">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M19 13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></svg>
           </slot>
         </button>
-        <span class="count" v-if="computedItems.length > 0">{{ computedItems.length }}</span>
       </div>
     </div>
 
@@ -116,9 +117,23 @@ export default {
 }
 .panel-header { display:flex; align-items:center; justify-content:space-between; }
 .panel-header h3 { margin:0; font-size:16px; font-weight:600 }
+.title-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap; /* prevent title + count from wrapping to next line */
+}
 .conditions-list { display:flex; flex-direction:column; gap:8px; }
 .condition-item { display:flex; align-items:center; gap:12px; padding:0 16px; height:40px; border-top:1px solid #E0E0E0 }
 .condition-item .logo { width:24px; height:24px; background:#D9D9D9; border-radius:50% }
 .condition-item .desc { flex:1 }
 .condition-item .remove { background:transparent; border:none; cursor:pointer }
+.count {
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.8em;
+  font-weight: 600;
+}
 </style>

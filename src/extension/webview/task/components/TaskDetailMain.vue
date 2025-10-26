@@ -8,21 +8,14 @@
     </div>
 
     <div class="panels-container">
-      <TaskBasicInfoPanel 
-        :task="task" 
-        @update="onBasicInfoUpdate"
-      />
+      <TaskBasicInfoPanel :task="task" @update="onBasicInfoUpdate" />
 
-      <ArtifactsPanel
-        :artifacts="artifactsState"
-        :suggestedArtifacts="suggestedArtifacts"
-        @update="onArtifactsUpdate"
-      />
+      <ArtifactsPanel :artifacts="artifactsState" :suggestedArtifacts="suggestedArtifacts"
+        @update="onArtifactsUpdate" />
 
-      <CompletionConditionsPanel 
-        :completionConditions="completionConditions"
-        @update="onConditionsUpdate"
-      />
+      <ChildrenPanel :children="childrenState" :suggestedChildren="[]" @update="onChildrenUpdate" />
+
+      <CompletionConditionsPanel :completionConditions="completionConditions" @update="onConditionsUpdate" />
     </div>
   </div>
 </template>
@@ -31,13 +24,15 @@
 import TaskBasicInfoPanel from './TaskBasicInfoPanel.vue';
 import ArtifactsPanel from './ArtifactsPanel.vue';
 import CompletionConditionsPanel from './CompletionConditionsPanel.vue';
+import ChildrenPanel from './ChildrenPanel.vue';
 
 export default {
   name: 'TaskDetailMain',
   components: {
     TaskBasicInfoPanel,
-  ArtifactsPanel,
-    CompletionConditionsPanel
+    ArtifactsPanel,
+    CompletionConditionsPanel,
+    ChildrenPanel
   },
   props: {
     task: {
@@ -56,7 +51,8 @@ export default {
   data() {
     return {
       localTask: {},
-        artifactsState: [],
+      artifactsState: [],
+      childrenState: [],
       localCompletionConditions: [],
       hasChanges: false
     };
@@ -73,6 +69,8 @@ export default {
       handler(newTask) {
         if (newTask) {
           this.localTask = { ...newTask };
+          // initialize children state if present in the task
+          this.childrenState = Array.isArray(newTask.children) ? newTask.children : [];
           this.hasChanges = false;
         }
       }
@@ -80,9 +78,9 @@ export default {
     artifacts: {
       immediate: true,
       deep: true,
-        handler(newArtifacts) {
-          // JSONオブジェクトのまま受け取る（フィルタリング不要）
-          this.artifactsState = Array.isArray(newArtifacts) ? newArtifacts : [];
+      handler(newArtifacts) {
+        // JSONオブジェクトのまま受け取る（フィルタリング不要）
+        this.artifactsState = Array.isArray(newArtifacts) ? newArtifacts : [];
       }
     }
   },
@@ -119,6 +117,14 @@ export default {
     },
 
     /**
+     * 子タスク更新
+     */
+    onChildrenUpdate(children) {
+      this.childrenState = children || [];
+      this.hasChanges = true;
+    },
+
+    /**
      * 保存処理
      */
     onSave() {
@@ -130,8 +136,9 @@ export default {
         assignee: this.localTask.assignee,
         status: this.localTask.status,
         estimate: this.localTask.estimate,
-          artifacts: this.artifactsState,
-        completionConditions: this.localCompletionConditions
+        artifacts: this.artifactsState,
+        completionConditions: this.localCompletionConditions,
+        children: this.childrenState
       }));
 
       // 親コンポーネント（App.vue）に保存イベントを通知

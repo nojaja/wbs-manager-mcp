@@ -1,13 +1,15 @@
 <template>
-  <ListEditor
-    :title="'完了条件'"
-    :titleLabel="'完了条件の編集'"
-    :items="completionConditions"
-    :placeholder="'完了条件を入力してください'"
-    @update="onUpdateItems"
-  >
-    <!-- default item slot uses ListEditor default rendering -->
-  </ListEditor>
+  <div class="completionConditions-panel">
+    <ListEditor
+      :title="'完了条件'"
+      :titleLabel="'完了条件の編集'"
+      :items="completionConditions"
+      :placeholder="'完了条件を入力してください'"
+      @update="onUpdateItems"
+    >
+      <!-- default item slot uses ListEditor default rendering -->
+    </ListEditor>
+  </div>
 </template>
 
 <script>
@@ -32,5 +34,5 @@ export default {
 </script>
 
 <style scoped>
-/* visual styling is handled by ListEditor */
+.completionConditions-panel { padding: 0; margin-bottom: 16px; }
 </style>

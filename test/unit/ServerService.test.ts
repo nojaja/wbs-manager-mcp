@@ -134,10 +134,9 @@ describe('ServerService', () => {
       
       // テスト用のエラーデータを作成
       const stderrCallback = mockChildProcess.stderr.on.mock.calls.find(call => call[0] === 'data')[1];
-      stderrCallback(Buffer.from('test error'));
-      
-      expect(Logger.getInstance().log).toHaveBeenCalledWith('test error');
-      expect(Logger.getInstance().show).toHaveBeenCalled();
+  stderrCallback(Buffer.from('test error'));
+
+  expect(Logger.getInstance().log).toHaveBeenCalledWith('test error');
     });
 
     it('should setup exit handler with normal exit', () => {

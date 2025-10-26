@@ -7,6 +7,10 @@ describe('wbs.planMode.impotTask tool (repository.importTasks)', () => {
     const TEST_DIR = path.resolve(__dirname, '.tmp_impot');
 
     beforeAll(async () => {
+        // ensure clean test dir to avoid stale DB files with old schema
+        if (fs.existsSync(TEST_DIR)) {
+            try { fs.rmSync(TEST_DIR, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        }
         if (!fs.existsSync(TEST_DIR)) fs.mkdirSync(TEST_DIR, { recursive: true });
         process.env.WBS_MCP_DATA_DIR = TEST_DIR;
         await initializeDatabase();

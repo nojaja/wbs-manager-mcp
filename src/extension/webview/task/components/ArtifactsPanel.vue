@@ -12,6 +12,16 @@
           <span class="task-name">{{ getRightLabel(item) }}</span>
           <button class="remove" @click="removeItem(index)" title="削除">✕</button>
       </template>
+      <template #add-row="{ show, focusAdd, onAdd }">
+        <ConditionAddRowFigma
+          v-if="show"
+          ref="addRow"
+          :placeholder="'artifact-id: 名前'"
+          :autofocus="true"
+          :options="crudOptions"
+          @add="addFromRow"
+        />
+      </template>
     </ListEditor>
 
     <div class="actions">
@@ -29,10 +39,11 @@
 
 <script>
 import ListEditor from './ListEditor.vue';
+import ConditionAddRowFigma from './ConditionAddRowFigma.vue';
 
 export default {
   name: 'ArtifactsPanel',
-  components: { ListEditor },
+  components: { ListEditor, ConditionAddRowFigma },
   props: {
     artifacts: {
       type: Array,
@@ -47,6 +58,26 @@ export default {
     return {
       localItems: []
     };
+  },
+  computed: {
+    // collect crud_operations from suggestedArtifacts or artifacts
+    crudOptions() {
+      const src = Array.isArray(this.suggestedArtifacts) && this.suggestedArtifacts.length ? this.suggestedArtifacts : this.artifacts || [];
+      const ops = [];
+      src.forEach(a => {
+        if (!a) return;
+        const v = a.crud_operations;
+        if (!v) return;
+        if (Array.isArray(v)) v.forEach(x => ops.push(x));
+        else if (typeof v === 'string') {
+          // if comma separated, split
+          if (v.indexOf(',') !== -1) v.split(',').map(s => s.trim()).forEach(x => ops.push(x));
+          else ops.push(v);
+        }
+      });
+      // unique
+      return Array.from(new Set(ops));
+    }
   },
   watch: {
     artifacts: {
@@ -68,6 +99,32 @@ export default {
       this.$emit('update', items || []);
       this.localItems = items || [];
     },
+    addFromRow(text) {
+      // text expected in form 'artifact-id: 名前' (based on placeholder)
+      const raw = (text || '').trim();
+      if (!raw) return;
+      let artifact_id = '';
+      let artifact_title = raw;
+      const idx = raw.indexOf(':');
+      if (idx !== -1) {
+        artifact_id = raw.slice(0, idx).trim();
+        artifact_title = raw.slice(idx + 1).trim();
+      }
+      // obtain selected crud from the add-row component (if available)
+      const addRow = this.$refs.addRow;
+      let crud = '';
+      if (addRow) {
+        // ref may be component instance
+        crud = addRow.currentValue || addRow.selectedValue || '';
+      }
+      const item = {
+        artifact_id: artifact_id || artifact_title,
+        artifact_title: artifact_title,
+        crud_operations: crud
+      };
+      this.localItems.push(item);
+      this.onUpdateItems(this.localItems);
+    },
     addArtifact(artifact) {
       const existingIds = this.localItems.map(i => i?.artifact_id).filter(Boolean);
       if (!existingIds.includes(artifact.id)) {
@@ -85,7 +142,7 @@ export default {
 </script>
 
 <style scoped>
-.artifacts-panel { padding: 0; }
+.artifacts-panel { padding: 0; margin-bottom: 16px; }
 .actions { margin-top: 12px; display:flex; gap:8px; }
 .btn-secondary { padding:6px 12px; border-radius:4px; }
 .condition-item { display:flex; align-items:center; gap:8px; padding:0 16px; height:48px; border-top:1px solid #E0E0E0 }

@@ -18,12 +18,6 @@
       </div>
       <div class="task-info">
         <div class="task-title">{{ task.title }}</div>
-        <div class="task-meta">
-          <span class="task-id">{{ task.id }}</span>
-          <span v-if="task.assignee" class="task-assignee">
-            👤 {{ task.assignee }}
-          </span>
-        </div>
       </div>
     </div>
   </div>
