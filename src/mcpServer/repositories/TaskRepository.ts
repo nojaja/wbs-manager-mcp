@@ -208,17 +208,16 @@ export class TaskRepository {
     // 処理概要: version と updated_at を更新して永続化する
     // 実装理由: 排他制御のため version をインクリメントして保存する必要がある
     const now = new Date().toISOString();
-    const newVersion = (current.version ?? 0) + 1;
+    //const newVersion = (current.version ?? 0) + 1;
     try {
       await db.run(
-        `UPDATE tasks SET status = ?, updated_at = ?, version = ? WHERE id = ?`,
+        `UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?`,
         decidedStatus,
         now,
-        newVersion,
         taskId
       );
     } catch (error) {
-      console.error('[updateTaskStatus] Failed to update task status in DB for task:', taskId, ',decidedStatus:',decidedStatus,',newVersion:',newVersion,',now:',now,'Error:', error);
+      console.error('[updateTaskStatus] Failed to update task status in DB for task:', taskId, ',decidedStatus:',decidedStatus,',now:',now,'Error:', error);
       throw error;
     }
 

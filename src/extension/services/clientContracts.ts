@@ -10,8 +10,7 @@ export interface TaskClientLike {
         parentId?: string | null;
         assignee?: string | null;
         estimate?: string | null;
-        deliverables?: ArtifactReferenceInput[];
-        prerequisites?: ArtifactReferenceInput[];
+        artifacts?: ArtifactReferenceInput[];
         completionConditions?: CompletionConditionInput[];
     }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }>;
     updateTask(taskId: string, updates: Record<string, unknown>): Promise<{ success: boolean; conflict?: boolean; error?: string; taskId?: string; message?: string }>;

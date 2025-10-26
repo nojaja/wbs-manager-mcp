@@ -164,8 +164,7 @@ export class MCPTaskClient extends MCPBaseClient {
      * @param params.parentId 親タスクID
      * @param params.assignee 担当者名
      * @param params.estimate 見積り値
-     * @param params.deliverables 成果物割当一覧
-     * @param params.prerequisites 前提成果物割当一覧
+     * @param params.artifacts 成果物割当一覧
      * @param params.completionConditions 完了条件一覧
      * @returns 作成結果と生成されたタスクID
      */
@@ -175,8 +174,7 @@ export class MCPTaskClient extends MCPBaseClient {
         parentId?: string | null;
         assignee?: string | null;
         estimate?: string | null;
-        deliverables?: ArtifactReferenceInput[];
-        prerequisites?: ArtifactReferenceInput[];
+        artifacts?: ArtifactReferenceInput[];
         completionConditions?: CompletionConditionInput[];
     }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }> {
         try {

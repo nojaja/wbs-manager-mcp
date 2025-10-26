@@ -42,8 +42,6 @@ export interface Task {
   version?: number;
   childCount?: number;
   children?: Task[];
-  deliverables?: TaskArtifactAssignment[];
-  prerequisites?: TaskArtifactAssignment[];
   artifacts?: TaskArtifactAssignment[];
   completionConditions?: TaskCompletionCondition[];
   created_at?: string;

@@ -1,7 +1,7 @@
 <template>
   <div class="dependees-task-list">
     <div class="list-header">
-      <h3>先行タスク (Prerequisites)</h3>
+      <h3>先行タスク </h3>
       <span class="count">{{ dependees.length }}</span>
     </div>
 
