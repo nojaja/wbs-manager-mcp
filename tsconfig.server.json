@@ -7,7 +7,9 @@
   },
   "include": [
     "src/mcpServer/**/*",
-    "src/extension/**/*"
+    "src/extension/**/*",
+    // include local ambient type declarations so custom modules like 'node:sqlite' are found
+    "src/types/**/*"
   ],
   "exclude": [
     "node_modules",

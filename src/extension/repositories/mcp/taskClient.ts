@@ -136,7 +136,13 @@ export class MCPTaskClient extends MCPBaseClient {
      */
     public async updateTask(taskId: string, updates: Record<string, unknown>): Promise<{ success: boolean; conflict?: boolean; error?: string; taskId?: string; message?: string }> {
         try {
-            const result = await this.callTool('wbs.planMode.updateTask', { taskId, ...updates });
+            const payload: Record<string, unknown> = { ...updates };
+            const deliverables = Array.isArray((payload as any).deliverables) ? (payload as any).deliverables : undefined;
+            if (!(payload as any).artifacts && deliverables) {
+                (payload as any).artifacts = deliverables;
+            }
+
+            const result = await this.callTool('wbs.planMode.updateTask', { taskId, ...payload });
             const parsed = this.parseToolResponse(result);
             // 処理概要: parsed.parsed が存在する場合、共通ユーティリティで ID とメッセージを抽出して返す
             if (parsed.parsed) {
@@ -164,7 +170,9 @@ export class MCPTaskClient extends MCPBaseClient {
      * @param params.parentId 親タスクID
      * @param params.assignee 担当者名
      * @param params.estimate 見積り値
-     * @param params.artifacts 成果物割当一覧
+    * @param params.deliverables 成果物割当一覧（旧プロパティ。サーバーへ送信する際は artifacts に変換される）
+    * @param params.prerequisites 事前条件として参照する成果物一覧
+    * @param params.artifacts 成果物割当一覧（後方互換用。deliverables と同じ意味で扱う）
      * @param params.completionConditions 完了条件一覧
      * @returns 作成結果と生成されたタスクID
      */
@@ -174,11 +182,23 @@ export class MCPTaskClient extends MCPBaseClient {
         parentId?: string | null;
         assignee?: string | null;
         estimate?: string | null;
+        deliverables?: ArtifactReferenceInput[];
+        prerequisites?: ArtifactReferenceInput[];
         artifacts?: ArtifactReferenceInput[];
         completionConditions?: CompletionConditionInput[];
     }): Promise<{ success: boolean; taskId?: string; error?: string; message?: string }> {
         try {
-            const result = await this.callTool('wbs.planMode.createTask', params);
+            const requestPayload: Record<string, unknown> = { ...params };
+            const deliverables = Array.isArray(params.deliverables) ? params.deliverables : undefined;
+            if (!(requestPayload as any).artifacts) {
+                if (deliverables) {
+                    (requestPayload as any).artifacts = deliverables;
+                } else if (Array.isArray(params.artifacts)) {
+                    (requestPayload as any).artifacts = params.artifacts;
+                }
+            }
+
+            const result = await this.callTool('wbs.planMode.createTask', requestPayload);
             const parsed = this.parseToolResponse(result);
             if (parsed.parsed) {
                 // 処理概要: 作成結果から ID を共通ユーティリティで抽出

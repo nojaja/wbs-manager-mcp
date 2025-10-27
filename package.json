@@ -161,8 +161,7 @@
           "group": "inline@1"
         }
       ]
-    }
-    ,
+    },
     "mcpServerDefinitionProviders": [
       {
         "id": "wbs-mcp",
@@ -179,12 +178,11 @@
     "watch:webview": "webpack --config webpack.webview.config.js --mode development --watch",
     "test": "npm run test:unit",
     "test:unit": "npm run lint && jest --config=jest.config.js --coverage",
-  "test:e2e": "jest --config=jest.e2e.config.js --runInBand",
+    "test:e2e": "jest --config=jest.e2e.config.js --runInBand",
     "lint": "eslint . --ext .ts && npx depcruise src",
     "lint:fix": "eslint . --ext .ts --fix",
     "start-server-dev": "node ./out/mcpServer/index.js",
-    "start-extension-dev": "code --extensionDevelopmentPath=."
-    ,
+    "start-extension-dev": "code --extensionDevelopmentPath=.",
     "docs": "typedoc --options typedoc.json"
   },
   "devDependencies": {
@@ -194,7 +192,6 @@
     "@types/jest": "^29.5.2",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.0",
-    "@types/sqlite3": "^3.1.11",
     "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^8.46.0",
@@ -212,8 +209,8 @@
     "style-loader": "^3.3.3",
     "ts-jest": "^29.1.0",
     "ts-loader": "^9.4.4",
-  "typedoc": "^0.28.14",
-  "typedoc-plugin-markdown": "^4.3.0",
+    "typedoc": "^0.28.14",
+    "typedoc-plugin-markdown": "^4.3.0",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.46.0",
     "vue-loader": "^17.0.0",
@@ -224,8 +221,7 @@
     "@visactor/vtable": "^1.22.0",
     "@visactor/vtable-gantt": "^1.22.0",
     "express": "^4.18.2",
-    "sqlite": "^5.1.1",
-    "sqlite3": "^5.1.7",
+    "markdown-it": "^14.1.0",
     "uuid": "^9.0.1",
     "vue": "^3.3.4"
   }

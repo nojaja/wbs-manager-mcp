@@ -394,9 +394,8 @@ export class TaskRepository {
       dependencies: this.arrayField(t, 'dependencies'),
       artifacts: this.arrayField(t, 'artifacts'),
       completionConditions: this.arrayField(t, 'completionConditions'),
-      details
     };
-    return await this.createTask(title, description, parentId, assignee, estimate, options as any);
+    return await this.createTask(title, description, details, parentId, assignee, estimate, options);
   }
   /**
    * 処理名: 文字列フィールド取得ユーティリティ
