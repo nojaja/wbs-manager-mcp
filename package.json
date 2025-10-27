@@ -47,6 +47,11 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "wbsTree.openGantt",
+        "title": "ガントチャートを開く",
+        "icon": "$(timeline)"
+      },
+      {
         "command": "wbsTree.createTask",
         "title": "新しいタスク",
         "icon": "$(add)"
@@ -109,6 +114,11 @@
           "group": "navigation"
         },
         {
+          "command": "wbsTree.openGantt",
+          "when": "view == wbsTree",
+          "group": "navigation@2"
+        },
+        {
           "command": "artifactTree.refresh",
           "when": "view == artifactTree",
           "group": "navigation"
@@ -136,6 +146,11 @@
           "group": "inline@2"
         },
         {
+          "command": "wbsTree.openGantt",
+          "when": "view == wbsTree && viewItem == task",
+          "group": "inline@3"
+        },
+        {
           "command": "artifactTree.editArtifact",
           "when": "view == artifactTree && viewItem == artifact",
           "group": "inline"
@@ -157,8 +172,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run test && npm run build",
-    "build": "npm run build:ts && npm run build:webview && npm run docs && npx depcruise src --output-type dot > ./docs/dependency-cruiser.dot",
-    "build:ts": "tsc -p ./",
+  "build": "npm run build:server && npm run build:webview && npm run docs && npx depcruise src --output-type dot > ./docs/dependency-cruiser.dot",
+  "build:server": "tsc -p tsconfig.server.json",
+  "build:ts": "tsc -p ./",
     "build:webview": "webpack --config webpack.webview.config.js --mode production",
     "watch:webview": "webpack --config webpack.webview.config.js --mode development --watch",
     "test": "npm run test:unit",
@@ -205,6 +221,8 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
+    "@visactor/vtable": "^1.22.0",
+    "@visactor/vtable-gantt": "^1.22.0",
     "express": "^4.18.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",

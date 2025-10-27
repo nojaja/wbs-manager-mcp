@@ -54,13 +54,12 @@ describe('TaskDetailPanel', () => {
   const panel: any = new (TaskDetailPanel as any)(fakePanel, { path: '' } as any, 't2');
     panel._task = { version: 42 };
     const updates = panel.buildUpdateObject({
-      deliverables: [{ artifactId: 'spec', crudOperations: 'UD' }],
-      prerequisites: [{ artifactId: 'design' }],
+      artifacts: [{ artifactId: 'spec', crudOperations: 'UD' }, { artifactId: 'design' }],
       completionConditions: [{ description: 'レビュー完了' }]
     });
 
-    expect(updates.deliverables).toEqual([{ artifactId: 'spec', crudOperations: 'UD' }]);
-    expect(updates.prerequisites).toEqual([{ artifactId: 'design' }]);
+    // artifacts に統合されたことを検証
+    expect(updates.artifacts).toEqual([{ artifactId: 'spec', crudOperations: 'UD' }, { artifactId: 'design' }]);
     expect(updates.completionConditions).toEqual([{ description: 'レビュー完了' }]);
     expect(updates.ifVersion).toBe(42);
   });

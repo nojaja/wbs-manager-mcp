@@ -19,7 +19,9 @@ export interface ToolDeps {
 export type ToolMeta = {
     name: string;
     description?: string;
+    title?: string;
     inputSchema?: any;
+    outputSchema?: any;
 };
 
 /**

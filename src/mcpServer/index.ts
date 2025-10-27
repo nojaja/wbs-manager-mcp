@@ -324,12 +324,13 @@ if (!process.env.JEST_WORKER_ID) {
                 const depCreate = await import('./tools/wbsCreateDependencyTool');
                 const depUpdate = await import('./tools/wbsUpdateDependencyTool');
                 const depDelete = await import('./tools/wbsDeleteDependencyTool');
+                const wbsGetGantt = await import('./tools/wbsGetGanttTool');
                 const agentGetNext = await import('./tools/wbsAgentGetNextTaskTool');
                 const agentTaskComplete = await import('./tools/wbsAgentTaskCompletionRequestTool');
                 const candidates = [
                     wbsCreate, wbsGet, wbsUpdate, wbsList, wbsDelete, wbsMove, wbsImpot,
                     artList, artGet, artCreate, artUpdate, artDelete
-                    , depCreate, depUpdate, depDelete, wbsListDraft, agentGetNext, agentTaskComplete
+                    , depCreate, depUpdate, depDelete, wbsListDraft, wbsGetGantt, agentGetNext, agentTaskComplete
                 ];
                 for (const mod of candidates) {
                     if (mod && mod.instance) toolRegistry.register(mod.instance);
