@@ -1,4 +1,52 @@
 export type ArtifactReferenceInput = { artifactId: string; crudOperations?: string | null };
+
+/**
+ * 文字列キー群を順に評価し、トリム済み文字列を返します。
+ * @param source 参照元オブジェクト
+ * @param keys 判定対象キー一覧
+ * @returns トリム済み文字列または undefined
+ */
+function pickTrimmedString(source: Record<string, unknown>, keys: string[]): string | undefined {
+    for (const key of keys) {
+        const value = source[key];
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (trimmed.length > 0) {
+                return trimmed;
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * 成果物参照オブジェクトから artifactId を抽出します。
+ * @param source 参照元オブジェクト
+ * @returns 抽出したID。取得できない場合は null
+ */
+function extractArtifactId(source: Record<string, unknown>): string | null {
+    const direct = pickTrimmedString(source, ['artifactId', 'artifact_id']);
+    if (direct) {
+        return direct;
+    }
+
+    const nestedSource = (source as Record<string, unknown>)['artifact'];
+    const nested = typeof nestedSource === 'object' && nestedSource !== null
+        ? pickTrimmedString(nestedSource as Record<string, unknown>, ['id'])
+        : undefined;
+
+    return nested ?? null;
+}
+
+/**
+ * 成果物参照オブジェクトから CRUD 操作文字列を抽出します。
+ * @param source 参照元オブジェクト
+ * @returns トリム済みCRUD文字列。無ければ null
+ */
+function extractCrudOperations(source: Record<string, unknown>): string | null {
+    const crud = pickTrimmedString(source, ['crudOperations', 'crud_operations', 'crud']);
+    return crud ?? null;
+}
 export type CompletionConditionInput = { description: string };
 
 export interface CreateTaskParams {
@@ -40,21 +88,19 @@ export interface UpdateTaskPayload {
  * @param input 入力オブジェクト (artifactId, crudOperations)
  * @returns 正規化されたオブジェクトまたは null
  */
-function normalizeArtifactInput(input: ArtifactReferenceInput | undefined) {
-    if (!input || typeof input.artifactId !== 'string') {
+function normalizeArtifactInput(input: ArtifactReferenceInput | Record<string, unknown> | undefined) {
+    if (!input || typeof input !== 'object') {
         return null;
     }
 
-    const artifactId = input.artifactId.trim();
-    if (artifactId.length === 0) {
+    const artifactId = extractArtifactId(input);
+    if (!artifactId) {
         return null;
     }
 
-    if (typeof input.crudOperations === 'string') {
-        const crud = input.crudOperations.trim();
-        if (crud.length > 0) {
-            return { artifactId, crudOperations: crud } as const;
-        }
+    const crudOperations = extractCrudOperations(input);
+    if (crudOperations) {
+        return { artifactId, crudOperations } as const;
     }
 
     return { artifactId } as const;
@@ -65,7 +111,7 @@ function normalizeArtifactInput(input: ArtifactReferenceInput | undefined) {
  * @param inputs 入力配列 (nullable)
  * @returns サニタイズ済み配列または undefined (入力が配列でない場合)
  */
-export function sanitizeArtifactReferences(inputs?: ArtifactReferenceInput[]) {
+export function sanitizeArtifactReferences(inputs?: (ArtifactReferenceInput | Record<string, any>)[]) {
     if (!Array.isArray(inputs)) {
         return undefined;
     }

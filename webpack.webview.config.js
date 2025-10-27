@@ -26,7 +26,7 @@ module.exports = {
       {
         test: /\.ts$/,
         use: ['ts-loader'],
-        exclude: /node_modules/
+        exclude: [/node_modules/, /src[\\/]test/]
       },
       {
         test: /\.js$/,
@@ -57,6 +57,9 @@ module.exports = {
     extensions: ['.ts', '.vue'],
     alias: {
       vue: 'vue/dist/vue.esm-bundler.js'
+    },
+    fallback: {
+      assert: false
     }
   }
 };
