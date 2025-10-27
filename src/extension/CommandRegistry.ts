@@ -7,6 +7,7 @@ import {CreateArtifactHandler} from './commands/createArtifact';
 import {EditArtifactHandler} from './commands/editArtifact';
 import {DeleteArtifactHandler} from './commands/deleteArtifact';
 import {OpenTaskHandler} from './commands/openTask';
+import {OpenGanttHandler} from './commands/openGantt';
 import {CreateTaskHandler} from './commands/createTask';
 import {AddChildTaskHandler} from './commands/addChildTask';
 import {DeleteTaskHandler} from './commands/deleteTask';
@@ -106,6 +107,12 @@ export class CommandRegistry {
       openTaskHandler.handle(this.context, item);
     });
     disposables.push(openTaskCommand);
+
+    const openGanttHandler = new OpenGanttHandler();
+    const openGanttCommand = vscode.commands.registerCommand('wbsTree.openGantt', (item?: any) => {
+      openGanttHandler.handle(this.context, this.treeView, item);
+    });
+    disposables.push(openGanttCommand);
 
     // create task
     const createTaskCommandHandler = new CreateTaskHandler();

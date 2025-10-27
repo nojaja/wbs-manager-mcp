@@ -6,6 +6,7 @@ import { ServerService } from './server/ServerService';
 import { MCPInitializeClient } from './repositories/mcp/initializeClient';
 import { MCPTaskClient } from './repositories/mcp/taskClient';
 import { MCPArtifactClient } from './repositories/mcp/artifactClient';
+import { MCPGanttClient } from './repositories/mcp/ganttClient';
 
 //Logger
 import { Logger } from './Logger';
@@ -20,6 +21,7 @@ export class ExtensionController {
   private initializeClient: MCPInitializeClient;
   private taskClient: MCPTaskClient;
   private artifactClient: MCPArtifactClient;
+  private ganttClient: MCPGanttClient;
   private serverService: ServerService;
   /** 出力チャネル */
   protected readonly outputChannel: Logger = Logger.getInstance();
@@ -38,6 +40,7 @@ export class ExtensionController {
     this.initializeClient = (MCPInitializeClient as any).getInstance();
     this.taskClient = (MCPTaskClient as any).getInstance();
     this.artifactClient = (MCPArtifactClient as any).getInstance();
+  this.ganttClient = (MCPGanttClient as any).getInstance();
     this.serverService = ServerService.getInstance();
   }
 
@@ -50,7 +53,7 @@ export class ExtensionController {
     const artifactProvider = ArtifactTreeProvider.getInstance();
 
     // start server and clients
-    await this.serverService.startLocalServer(this.context, [this.initializeClient, this.taskClient, this.artifactClient]);
+  await this.serverService.startLocalServer(this.context, [this.initializeClient, this.taskClient, this.artifactClient, this.ganttClient]);
 
     // Register MCP server definition provider so that MCP clients (Copilot, etc.)
     // can discover the local MCP server without relying on a workspace mcp.json file.
@@ -137,6 +140,7 @@ export class ExtensionController {
       this.initializeClient?.stop();
       this.taskClient?.stop();
       this.artifactClient?.stop();
+  this.ganttClient?.stop();
     } catch (err) {
       this.outputChannel.log(`Error stopping clients: ${String(err)}`);
     }

@@ -19,6 +19,8 @@
   ],
   "exclude": [
     "node_modules",
-    ".vscode-test"
+    ".vscode-test",
+    // コンパイル出力にテストコードが混入するのを防ぐため、src/test を除外
+    "src/test"
   ]
 }
