@@ -7,9 +7,49 @@ on:
       - 'release/**'
 
 jobs:
+  check:
+    name: Check package.json version changed
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check_version.outputs.version_changed }}
+    steps:
+      - name: Checkout repository (fetch history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check package.json version changed
+        id: check_version
+        # Use a small shell script to compare version in HEAD and previous commit
+        run: |
+          set -e
+          # If there is no previous commit (first commit), treat as changed
+          if ! git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Try to read previous package.json (if it existed)
+          git show HEAD^:package.json > /tmp/prev_package.json || true
+
+          prev_version=$(jq -r '.version // empty' /tmp/prev_package.json 2>/dev/null || echo "")
+          curr_version=$(jq -r '.version' package.json)
+
+          echo "prev_version=${prev_version}"
+          echo "curr_version=${curr_version}"
+
+          if [ "${prev_version}" != "${curr_version}" ]; then
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+          fi
+
   publish:
     name: Publish package to npm
     runs-on: ubuntu-latest
+    needs: check
+    # Only run publish when version actually changed
+    if: needs.check.outputs.version_changed == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,6 +65,28 @@ jobs:
 
       - name: Build
         run: npm run build
+      
+      - name: Install VSCE (package VS Code extension)
+        run: npm install -g @vscode/vsce
+
+      - name: Package extension
+        run: |
+          # Create a uniquely named .vsix per run
+          vsce package -o wbs-manager-mcp-${{ github.run_number }}.vsix
+
+      - name: Get package version
+        id: get_version
+        run: |
+          echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release and upload VSIX
+        uses: softprops/action-gh-release@v1
+        with:
+          files: wbs-manager-mcp-${{ github.run_number }}.vsix
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
       - name: Run tests
         run: npm test
