@@ -30,6 +30,12 @@
     "Other"
   ],
   "main": "./out/extension/index.js",
+  "bin": {
+    "wbs-manager-mcp": "./out/mcpServer/index.js"
+  },
+  "files": [
+    "out/mcpServer/"
+  ],
   "contributes": {
     "commands": [
       {
@@ -166,15 +172,15 @@
     "mcpServerDefinitionProviders": [
       {
         "id": "wbs-manager-mcp",
-        "label": "WBS MCP"
+        "label": "WBS Manager MCP"
       }
     ]
   },
   "scripts": {
     "vscode:prepublish": "npm run test && npm run build",
-  "build": "npm run build:server && npm run build:webview && npm run docs && npx depcruise src --output-type dot > ./docs/dependency-cruiser.dot",
-  "build:server": "tsc -p tsconfig.server.json",
-  "build:ts": "tsc -p ./",
+    "build": "npm run build:server && npm run build:webview && npm run docs && npx depcruise src --output-type dot > ./docs/dependency-cruiser.dot",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:ts": "tsc -p ./",
     "build:webview": "webpack --config webpack.webview.config.js --mode production",
     "watch:webview": "webpack --config webpack.webview.config.js --mode development --watch",
     "test": "npm run test:unit",
