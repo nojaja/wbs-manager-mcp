@@ -33,9 +33,6 @@
   "bin": {
     "wbs-manager-mcp": "./out/mcpServer/index.js"
   },
-  "files": [
-    "out/mcpServer/"
-  ],
   "contributes": {
     "commands": [
       {

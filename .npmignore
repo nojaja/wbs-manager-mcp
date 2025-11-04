@@ -1,0 +1,15 @@
+# まず全体を除外
+/*
+
+# ただしパッケージのメタデータ・重要ドキュメントは含める
+!/package.json
+!/README.md
+!/README_ja.md
+!/LICENSE
+
+# out 配下は一旦許可（親ディレクトリを残す）
+!/out
+/out/*
+# out 以下では、mcpServer を許可してそれ以外を除外
+!/out/mcpServer
+!/out/mcpServer/**
