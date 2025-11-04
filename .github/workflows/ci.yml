@@ -38,6 +38,7 @@ jobs:
     - name: Check build artifacts
       run: |
         ls -la out/
-        ls -la out/server/
-        test -f out/extension.js
-        test -f out/server/index.js
+        ls -la out/extension/
+        ls -la out/mcpServer/
+        test -f out/extension/index.js
+        test -f out/mcpServer/index.js
