@@ -12,7 +12,9 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x]
+        # Node.js must be >= 22.5 because sqlite support required by this project
+        # Use a semver range so runners pick at least 22.5.
+        node-version: ['>=22.5']
 
     steps:
     - uses: actions/checkout@v3
