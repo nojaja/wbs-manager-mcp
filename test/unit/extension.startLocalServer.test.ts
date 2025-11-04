@@ -50,7 +50,7 @@ describe('startLocalServer integration', () => {
 
         // provide a workspace folder
         (vscode.workspace as any).workspaceFolders = [
-            { uri: { fsPath: 'D:/devs/workspace202111/wbs-mcp' } }
+            { uri: { fsPath: 'D:/devs/workspace202111/wbs-manager-mcp' } }
         ];
     });
 

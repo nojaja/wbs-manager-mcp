@@ -127,7 +127,7 @@ npm install ; npm run test
 ## Directory Structure (Key Files)
 
 ```
-wbs-mcp/
+wbs-manager-mcp/
 ├── docs/
 │   ├── architecture.md
 │   └── copilot_examples.md

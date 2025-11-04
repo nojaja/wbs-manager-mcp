@@ -301,7 +301,7 @@ export class ServerService {
     // MCPサーバ設定オブジェクトを作成
     const mcpConfig = {
       servers: {
-        "wbs-mcp": {
+        "wbs-manager-mcp": {
           command: process.execPath,
           args: [serverPath],
           type: "stdio",

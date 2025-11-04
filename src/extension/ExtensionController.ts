@@ -74,7 +74,7 @@ export class ExtensionController {
          */
         provideMcpServerDefinitions(token) {
           return [new vscode.McpStdioServerDefinition(
-            'wbs-mcp',
+            'wbs-manager-mcp',
             process.execPath,
             [serverPath],
             { WBS_MCP_DATA_DIR: workspaceRoot }
@@ -92,7 +92,7 @@ export class ExtensionController {
           return server;
         }
       };
-      const disposable = vscode.lm.registerMcpServerDefinitionProvider('wbs-mcp', provider as any);
+  const disposable = vscode.lm.registerMcpServerDefinitionProvider('wbs-manager-mcp', provider as any);
       this.context.subscriptions.push(disposable);
       this.outputChannel.log('Registered MCP server definition provider');
     } catch (err) {

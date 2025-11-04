@@ -32,7 +32,7 @@ export class MCPInitializeClient extends MCPBaseClient {
             protocolVersion: '2024-11-05',
             capabilities: {},
             clientInfo: {
-                name: 'wbs-mcp-extension',
+                name: 'wbs-manager-mcp-extension',
                 version: '0.1.0'
             }
         });

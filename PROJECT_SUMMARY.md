@@ -11,7 +11,7 @@ VS Code で WBS（Work Breakdown Structure）を管理する拡張機能です�
 ## Project Structure (excerpt)
 
 ```
-wbs-mcp/
+wbs-manager-mcp/
 ├── docs/
 │   ├── architecture.md
 │   └── copilot_examples.md

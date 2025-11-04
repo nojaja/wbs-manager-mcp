@@ -8,7 +8,7 @@ const INIT_REQUEST = JSON.stringify({
     params: {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'wbs-mcp-extension', version: '0.1.0' },
+            clientInfo: { name: 'wbs-manager-mcp-extension', version: '0.1.0' },
     },
 });
 

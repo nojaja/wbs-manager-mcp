@@ -121,7 +121,7 @@ npm install ; npm run test
 
 ## ディレクトリ構成（主要ファイル）
 ```
-wbs-mcp/
+wbs-manager-mcp/
 ├── docs/
 │   ├── architecture.md
 │   └── copilot_examples.md

@@ -1,5 +1,5 @@
 {
-  "name": "wbs-mcp",
+  "name": "wbs-manager-mcp",
   "displayName": "WBS MCP",
   "description": "MCP-enabled VS Code extension for Work Breakdown Structure management",
   "version": "0.1.0",
@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nojaja/wbs-mcp.git"
+    "url": "https://github.com/nojaja/wbs-manager-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/nojaja/wbs-mcp/issues"
+    "url": "https://github.com/nojaja/wbs-manager-mcp/issues"
   },
-  "homepage": "https://github.com/nojaja/wbs-mcp#readme",
+  "homepage": "https://github.com/nojaja/wbs-manager-mcp#readme",
   "keywords": [
     "wbs",
     "work breakdown structure",
@@ -165,7 +165,7 @@
     },
     "mcpServerDefinitionProviders": [
       {
-        "id": "wbs-mcp",
+        "id": "wbs-manager-mcp",
         "label": "WBS MCP"
       }
     ]

@@ -42,3 +42,17 @@ jobs:
         ls -la out/mcpServer/
         test -f out/extension/index.js
         test -f out/mcpServer/index.js
+
+    - name: Install VSCE (package VS Code extension)
+      run: npm install -g @vscode/vsce
+
+    - name: Package extension
+      run: |
+        # Create a uniquely named .vsix per run
+        vsce package -o wbs-manager-mcp-${{ github.run_number }}.vsix
+
+    - name: Upload extension package
+      uses: actions/upload-artifact@v4
+      with:
+        name: extension-vsix
+        path: wbs-manager-mcp-${{ github.run_number }}.vsix

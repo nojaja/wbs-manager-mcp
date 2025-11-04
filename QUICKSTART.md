@@ -6,7 +6,7 @@
 
   ```powershell
   # リポジトリを取得
-  git clone https://github.com/nojaja/wbs-mcp.git ; cd wbs-mcp
+  git clone https://github.com/nojaja/wbs-manager-mcp.git ; cd wbs-manager-mcp
 
   # 依存をインストール
   npm install
@@ -33,7 +33,7 @@
   ```json
   {
     "servers": {
-      "wbs-mcp": {
+      "wbs-manager-mcp": {
         "command": "${execPath}",
         "args": ["${workspaceFolder}/out/server/index.js"],
         "type": "stdio",

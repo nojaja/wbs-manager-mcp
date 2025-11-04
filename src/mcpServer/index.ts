@@ -161,7 +161,7 @@ class StdioMCPServer {
                             tools: { "listChanged": true }
                         },
                         serverInfo: {
-                            name: 'wbs-mcp-server',
+                            name: 'wbs-manager-mcp-server',
                             title: 'wbs作成ツールVSCode拡張用MCPサーバ',
                             version: '0.1.0.11'
                         }
