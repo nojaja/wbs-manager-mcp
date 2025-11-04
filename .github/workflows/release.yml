@@ -65,6 +65,28 @@ jobs:
 
       - name: Build
         run: npm run build
+      
+      - name: Install VSCE (package VS Code extension)
+        run: npm install -g @vscode/vsce
+
+      - name: Package extension
+        run: |
+          # Create a uniquely named .vsix per run
+          vsce package -o wbs-manager-mcp-${{ github.run_number }}.vsix
+
+      - name: Get package version
+        id: get_version
+        run: |
+          echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release and upload VSIX
+        uses: softprops/action-gh-release@v1
+        with:
+          files: wbs-manager-mcp-${{ github.run_number }}.vsix
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
       - name: Run tests
         run: npm test

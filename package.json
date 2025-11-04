@@ -2,7 +2,7 @@
   "name": "wbs-manager-mcp",
   "displayName": "WBS MCP",
   "description": "MCP-enabled VS Code extension for Work Breakdown Structure management",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "nojaja",
   "license": "MIT",
   "repository": {
