@@ -62,7 +62,12 @@ export class ExtensionController {
       const workspaceRoot = workspaceFolders && workspaceFolders.length > 0
         ? workspaceFolders[0].uri.fsPath
         : this.context.extensionPath;
-      const serverPath = path.join(this.context.extensionPath, 'out', 'mcpServer', 'index.js');
+      const extensionMode = this.context.extensionMode;
+      const isProductionMode = extensionMode === vscode.ExtensionMode.Production;
+      const serverCommand = isProductionMode ? 'npx' : process.execPath;
+      const serverArgs = isProductionMode
+        ? ['wbs-manager-mcp']
+        : [path.join(this.context.extensionPath, 'out', 'mcpServer', 'index.js')];
 
       const provider: vscode.McpServerDefinitionProvider<vscode.McpStdioServerDefinition> = {
         /**
@@ -75,8 +80,8 @@ export class ExtensionController {
         provideMcpServerDefinitions(token) {
           return [new vscode.McpStdioServerDefinition(
             'wbs-manager-mcp',
-            process.execPath,
-            [serverPath],
+            serverCommand,
+            serverArgs,
             { WBS_MCP_DATA_DIR: workspaceRoot }
           )];
         },
