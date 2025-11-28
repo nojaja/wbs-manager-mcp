@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDatabase } from '../db/connection';
 
 /**
@@ -22,7 +22,7 @@ export class DependenciesRepository {
    */
   async createDependency(dependencyTaskId: string, dependeeTaskId: string, artifacts: string[] | undefined) {
     const db = await getDatabase();
-    const id = uuidv4();
+    const id = randomUUID();
     const now = new Date().toISOString();
 
     // Validate tasks exist to avoid foreign key constraint failures
@@ -49,7 +49,7 @@ export class DependenciesRepository {
         for (const aId of artifacts) {
           await db.run(
             `INSERT INTO dependency_artifacts (id, dependency_id, artifact_id, order_index, created_at) VALUES (?, ?, ?, ?, ?)`,
-            uuidv4(),
+            randomUUID(),
             id,
             aId,
             idx,
@@ -111,7 +111,7 @@ export class DependenciesRepository {
         for (const aId of artifacts) {
           await db.run(
             `INSERT INTO dependency_artifacts (id, dependency_id, artifact_id, order_index, created_at) VALUES (?, ?, ?, ?, ?)`,
-            uuidv4(),
+            randomUUID(),
             dependencyId,
             aId,
             idx,

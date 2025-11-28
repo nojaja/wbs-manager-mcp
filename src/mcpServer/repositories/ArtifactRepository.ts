@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Artifact } from '../db/types';
 import { getDatabase } from '../db/connection';
 
@@ -60,7 +61,7 @@ export class ArtifactRepository {
    */
   async createArtifact(title: string, uri?: string, description?: string): Promise<Artifact> {
     const db = await getDatabase();
-    const id = require('uuid').v4();
+    const id = randomUUID();
     const now = new Date().toISOString();
     await db.run(
       `INSERT INTO artifacts (
