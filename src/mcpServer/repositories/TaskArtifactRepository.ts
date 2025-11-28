@@ -1,5 +1,5 @@
 import type { TaskArtifactAssignment, TaskArtifactRole } from '../db/types';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDatabase } from '../db/connection';
 
 /**
@@ -30,7 +30,7 @@ export class TaskArtifactRepository {
     artifactId: string
   ): Promise<TaskArtifactAssignment> {
     const db = await getDatabase();
-    const id = uuidv4();
+    const id = randomUUID();
     const now = new Date().toISOString();
 
     const defaultRole: TaskArtifactRole = 'deliverable';
@@ -122,7 +122,7 @@ export class TaskArtifactRepository {
         `INSERT INTO task_artifacts (
             id, task_id, artifact_id, role, crud_operations, order_index, created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        uuidv4(),
+        randomUUID(),
         taskId,
         assignment.artifactId,
         role,

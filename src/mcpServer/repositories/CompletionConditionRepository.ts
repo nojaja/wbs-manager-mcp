@@ -1,5 +1,5 @@
 import type { TaskCompletionCondition, TaskCompletionConditionInput } from '../db/types';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDatabase } from '../db/connection';
 
 /**
@@ -30,7 +30,7 @@ export class CompletionConditionRepository {
     description: string
   ): Promise<TaskCompletionCondition> {
     const db = await getDatabase();
-    const id = uuidv4();
+    const id = randomUUID();
     const now = new Date().toISOString();
 
     // task_id毎のorderの最大値を取得し、+1するロジックは呼び出し元で実装
@@ -119,7 +119,7 @@ export class CompletionConditionRepository {
         `INSERT INTO task_completion_conditions (
             id, task_id, description, order_index, created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?)`,
-        uuidv4(),
+        randomUUID(),
         taskId,
         description,
         index,

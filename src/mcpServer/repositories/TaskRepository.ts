@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/connection';
 import type {
   Task,
@@ -266,7 +266,7 @@ export class TaskRepository {
     }
   ): Promise<Task> {
     const db = await this.db();
-    const id = uuidv4();
+    const id = randomUUID();
     const now = new Date().toISOString();
     const hasTitle = !!(title && title.toString().trim().length > 0);
     const hasDescription = !!(description && description.toString().trim().length > 0);
