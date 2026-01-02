@@ -52,7 +52,7 @@ jobs:
     if: needs.check.outputs.version_changed == 'true'
     permissions:
       id-token: write  # OIDC認証に必須
-      contents: read
+      contents: write  # GitHub Release作成に必須
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
